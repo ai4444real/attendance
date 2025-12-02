@@ -39,6 +39,14 @@ async def root():
     return FileResponse('static/index.html')
 
 
+@app.get("/oauth-callback")
+async def oauth_callback():
+    """
+    OAuth callback handler - serves the callback page that communicates with parent window
+    """
+    return FileResponse('static/oauth-callback.html')
+
+
 @app.get("/health")
 async def health_check():
     """
