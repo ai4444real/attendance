@@ -1,36 +1,41 @@
 /**
  * Google OAuth Configuration
  *
- * IMPORTANTE: Questo file contiene credenziali OAuth.
- * È incluso in .gitignore per sicurezza.
- *
- * Per usare in altro progetto: copia questo file e sostituisci clientId
+ * Loads OAuth configuration from backend to avoid hardcoding credentials.
+ * The backend provides the client ID and OAuth endpoints.
  */
 
-const GOOGLE_OAUTH_CONFIG = {
-    // Client ID from Google Cloud Console
-    clientId: '572268474022-54j1dba72gm26n00oi42ijrhv3ielep1.apps.googleusercontent.com',
+let GOOGLE_OAUTH_CONFIG = null;
 
-    // Client Secret from Google Cloud Console
-    clientSecret: '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Your',
+/**
+ * Load OAuth configuration from backend
+ * @returns {Promise<Object>} OAuth configuration
+ */
+async function loadOAuthConfig() {
+    if (GOOGLE_OAUTH_CONFIG) {
+        return GOOGLE_OAUTH_CONFIG;
+    }
 
-    // Scopes richiesti (solo lettura calendario)
-    scopes: [
-        'https://www.googleapis.com/auth/calendar.readonly'
-    ],
+    try {
+        const response = await fetch('/api/oauth/config');
+        if (!response.ok) {
+            throw new Error('Failed to load OAuth config from backend');
+        }
 
-    // Redirect URI (deve matchare quello in Google Cloud Console)
-    redirectUri: window.location.origin + '/oauth-callback',
+        const config = await response.json();
 
-    // Google OAuth endpoints
-    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenEndpoint: 'https://oauth2.googleapis.com/token',
+        // Add dynamic redirect URI
+        config.redirectUri = window.location.origin + config.redirectUri;
 
-    // PKCE settings
-    usePKCE: true
-};
+        GOOGLE_OAUTH_CONFIG = config;
+        return config;
+    } catch (error) {
+        console.error('Error loading OAuth config:', error);
+        throw error;
+    }
+}
 
 // Export per uso in altri module
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = GOOGLE_OAUTH_CONFIG;
+    module.exports = { loadOAuthConfig };
 }

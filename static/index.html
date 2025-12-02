@@ -1673,25 +1673,33 @@
             calendar: null,
 
             async init() {
-                // Initialize OAuth
-                this.auth = new GoogleOAuth(GOOGLE_OAUTH_CONFIG);
-                this.calendar = new GoogleCalendarAPI(this.auth);
+                try {
+                    // Load OAuth configuration from backend
+                    const config = await loadOAuthConfig();
 
-                // Listen for auth events
-                this.auth.on('authorized', () => {
-                    this._updateUI(true);
-                });
+                    // Initialize OAuth
+                    this.auth = new GoogleOAuth(config);
+                    this.calendar = new GoogleCalendarAPI(this.auth);
 
-                this.auth.on('unauthorized', () => {
-                    this._updateUI(false);
-                });
+                    // Listen for auth events
+                    this.auth.on('authorized', () => {
+                        this._updateUI(true);
+                    });
 
-                this.auth.on('error', (error) => {
-                    this._showStatus(`Errore: ${error.message}`, 'error');
-                });
+                    this.auth.on('unauthorized', () => {
+                        this._updateUI(false);
+                    });
 
-                // Update UI based on current auth status
-                this._updateUI(this.auth.isAuthorized());
+                    this.auth.on('error', (error) => {
+                        this._showStatus(`Errore: ${error.message}`, 'error');
+                    });
+
+                    // Update UI based on current auth status
+                    this._updateUI(this.auth.isAuthorized());
+                } catch (error) {
+                    console.error('Failed to initialize Calendar Integration:', error);
+                    this._showStatus('Errore caricamento configurazione OAuth', 'error');
+                }
             },
 
             async connect() {

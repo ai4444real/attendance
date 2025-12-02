@@ -57,17 +57,31 @@ async def health_check():
     return {"status": "healthy", "service": "rebekko-attendance"}
 
 
+@app.get("/api/oauth/config")
+async def get_oauth_config():
+    """
+    Get public OAuth configuration (no secrets)
+    Frontend uses this to avoid hardcoding client ID
+    """
+    return {
+        "clientId": GOOGLE_CLIENT_ID,
+        "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
+        "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+        "tokenEndpoint": "https://oauth2.googleapis.com/token",
+        "redirectUri": "/oauth-callback",
+        "usePKCE": True
+    }
+
+
 # Google OAuth Configuration (server-side only)
-# IMPORTANT: Set these as environment variables on Render:
-# - GOOGLE_CLIENT_ID: Your Google OAuth Client ID
-# - GOOGLE_CLIENT_SECRET: Your Google OAuth Client Secret
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+# Client ID is public and can be hardcoded
+GOOGLE_CLIENT_ID = "572268474022-54j1dba72gm26n00oi42ijrhv3ielep1.apps.googleusercontent.com"
+# Client Secret MUST be set as environment variable on Render
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
-if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-    print("WARNING: Google OAuth credentials not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.")
-    print("OAuth endpoints will not work until credentials are configured.")
+if not GOOGLE_CLIENT_SECRET:
+    print("WARNING: GOOGLE_CLIENT_SECRET environment variable not set. OAuth will not work.")
 
 
 # Request models for OAuth endpoints
