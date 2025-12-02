@@ -27,7 +27,11 @@ const COURSES_CONFIG = {
       "totalLessons": null,
       "attendanceThreshold": 0.8,
       "description": "Corso aperto per Assistenti Master 2025",
-      "active": true
+      "active": true,
+      "adjustments": {
+        // Esempio per corso aperto (senza totalLessons)
+        // "Giovanni|Bianchi": 2        // Presenza manuale non registrata
+      }
     },
     "_Assistenti Practitioner 2025": {
       "totalLessons": null,
@@ -39,7 +43,14 @@ const COURSES_CONFIG = {
       "totalLessons": 40,
       "attendanceThreshold": 0.8,
       "description": "Corso di Coaching 2025",
-      "active": true
+      "active": true,
+      "adjustments": {
+        // Esempio di correzioni manuali per presenze non nel sistema
+        // Formato: "Nome|Cognome": valore (positivo=aggiunge, negativo=sottrae)
+        // Decommentare le righe sotto per testare:
+        // "Diana|Valshina": 4,        // Trasferimento da corso precedente
+        // "Mario|Rossi": -1            // Correzione doppia registrazione
+      }
     },
     "_Counseling 25": {
       "totalLessons": 40,
@@ -166,6 +177,7 @@ const COURSES_CONFIG = {
     "totalLessons": null,
     "attendanceThreshold": 0.8,
     "description": "Corso generico",
-    "active": true
+    "active": true,
+    "adjustments": {}
   }
 };

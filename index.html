@@ -252,6 +252,10 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
+        .attendance-summary.course-info {
+            background: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
+        }
+
         .attendance-summary.visible {
             display: block;
         }
@@ -310,6 +314,25 @@
 
         .attendance-summary-badge.info {
             background: #3b82f6;
+        }
+
+        .attendance-badge-sm {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
+        .attendance-badge-sm.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .attendance-badge-sm.warning {
+            background: #fff3cd;
+            color: #856404;
         }
     </style>
 </head>
@@ -668,7 +691,7 @@
                 );
 
                 // Calculate attendance score with weighted values
-                const attended = studentData.reduce((sum, row) => {
+                const attendedRegular = studentData.reduce((sum, row) => {
                     const status = row['Check-in status'].toLowerCase();
 
                     if (status.includes('assente')) {
@@ -688,6 +711,14 @@
                 const totalLessons = courseConfig.totalLessons;
                 const threshold = courseConfig.attendanceThreshold;
 
+                // Check for manual adjustments in config
+                const adjustments = courseConfig.adjustments || {};
+                const studentKey = `${firstName}|${lastName}`;
+                const adjustment = adjustments[studentKey] || 0;
+
+                // Apply adjustment to attended count
+                const attended = attendedRegular + adjustment;
+
                 // Calculate percentage
                 let percentage = null;
                 let meetsThreshold = null;
@@ -699,6 +730,8 @@
 
                 return {
                     attended,
+                    attendedRegular,
+                    adjustment,
                     totalRecorded,
                     totalLessons,
                     percentage,
@@ -763,21 +796,30 @@
                                 <th>Data</th>
                                 <th>Studente</th>
                                 <th>Stato Presenza</th>
+                                <th>% Presenza</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${data.map(row => `
-                                <tr>
-                                    <td>${this._escapeHtml(row['Class name'])}</td>
-                                    <td>${this.formatDate(row['Date'])}</td>
-                                    <td>${this.formatStudent(row['First name'], row['Last name'])}</td>
-                                    <td>
-                                        <span class="status ${this._getStatusClass(row['Check-in status'])}">
-                                            ${this._escapeHtml(row['Check-in status'])}
-                                        </span>
-                                    </td>
-                                </tr>
-                            `).join('')}
+                            ${data.map(row => {
+                                const attendanceInfo = this._formatAttendancePercentage(
+                                    row['Class name'],
+                                    row['First name'],
+                                    row['Last name']
+                                );
+                                return `
+                                    <tr>
+                                        <td>${this._escapeHtml(row['Class name'])}</td>
+                                        <td>${this.formatDate(row['Date'])}</td>
+                                        <td>${this.formatStudent(row['First name'], row['Last name'])}</td>
+                                        <td>
+                                            <span class="status ${this._getStatusClass(row['Check-in status'])}">
+                                                ${this._escapeHtml(row['Check-in status'])}
+                                            </span>
+                                        </td>
+                                        <td>${attendanceInfo}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 `;
@@ -888,6 +930,47 @@
             },
 
             /**
+             * Format attendance percentage for table display
+             * @param {string} courseName - Course name
+             * @param {string} firstName - Student first name
+             * @param {string} lastName - Student last name
+             * @returns {string} Formatted HTML for percentage column
+             * @private
+             */
+            _formatAttendancePercentage(courseName, firstName, lastName) {
+                const stats = App._getAttendanceStats(courseName, firstName, lastName);
+
+                if (!stats) {
+                    return '<span style="color: #999;">-</span>';
+                }
+
+                // Adjustment indicator (if present)
+                const adjustmentIcon = stats.adjustment !== 0
+                    ? `<span style="margin-left: 4px; font-size: 13px;" title="Con correzione manuale: ${stats.adjustment > 0 ? '+' : ''}${stats.adjustment}">⚙️</span>`
+                    : '';
+
+                // For courses with total lessons (fixed courses)
+                if (stats.totalLessons && stats.percentage !== null) {
+                    const percentageDisplay = stats.percentage.toFixed(1);
+                    const badgeClass = stats.canTakeExam ? 'success' : 'warning';
+                    const icon = stats.canTakeExam ? '✓' : '✗';
+
+                    return `
+                        <span style="font-weight: 600;">${percentageDisplay}%</span>
+                        <span class="attendance-badge-sm ${badgeClass}">${icon}</span>
+                        ${adjustmentIcon}
+                    `;
+                }
+
+                // For open courses (no total lessons)
+                const attendedDisplay = stats.attended % 1 === 0
+                    ? stats.attended
+                    : stats.attended.toFixed(1);
+
+                return `<span style="color: #666;">${attendedDisplay} pres.</span>${adjustmentIcon}`;
+            },
+
+            /**
              * Populate course filter dropdown
              * @param {Array<string>} courses - Array of course names
              */
@@ -948,12 +1031,27 @@
                     ? stats.attended
                     : stats.attended.toFixed(1);
 
+                // Format breakdown if adjustment is present
+                let breakdownHtml = '';
+                if (stats.adjustment !== 0) {
+                    const regularDisplay = stats.attendedRegular % 1 === 0
+                        ? stats.attendedRegular
+                        : stats.attendedRegular.toFixed(1);
+                    const adjustmentSign = stats.adjustment > 0 ? '+' : '';
+                    breakdownHtml = `
+                        <div style="margin-top: 4px; font-size: 12px; opacity: 0.9;">
+                            (${regularDisplay} reg. ${adjustmentSign}${stats.adjustment} corr.)
+                        </div>
+                    `;
+                }
+
                 let html = `
                     <h2>${this._escapeHtml(studentName)} - ${this._escapeHtml(courseName)}</h2>
                     <div class="attendance-summary-grid">
                         <div class="attendance-summary-item">
                             <div class="attendance-summary-label">Lezioni Partecipate</div>
                             <div class="attendance-summary-value">${attendedDisplay}</div>
+                            ${breakdownHtml}
                         </div>
                 `;
 
@@ -998,7 +1096,76 @@
             hideAttendanceSummary() {
                 const container = document.getElementById('attendanceSummary');
                 container.classList.remove('visible');
+                container.classList.remove('course-info');
                 container.innerHTML = '';
+            },
+
+            /**
+             * Display course summary information
+             * @param {Object} courseInfo - Course summary information
+             */
+            showCourseSummary(courseInfo) {
+                const container = document.getElementById('attendanceSummary');
+
+                let html = `
+                    <h2>${this._escapeHtml(courseInfo.courseName)}</h2>
+                    ${courseInfo.description ? `<p style="margin: 0 0 15px 0; opacity: 0.9;">${this._escapeHtml(courseInfo.description)}</p>` : ''}
+                    <div class="attendance-summary-grid">
+                `;
+
+                // Lessons held (always show)
+                html += `
+                    <div class="attendance-summary-item">
+                        <div class="attendance-summary-label">Lezioni Svolte</div>
+                        <div class="attendance-summary-value">${courseInfo.lessonsHeld}${courseInfo.totalLessons ? `/${courseInfo.totalLessons}` : ''}</div>
+                    </div>
+                `;
+
+                // Total lessons or open course indicator
+                if (courseInfo.totalLessons) {
+                    html += `
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Soglia Richiesta</div>
+                            <div class="attendance-summary-value">${courseInfo.threshold}%</div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Tipo Corso</div>
+                            <div class="attendance-summary-value" style="font-size: 18px;">Corso Aperto</div>
+                            <div class="attendance-summary-badge info">Partecipazione libera</div>
+                        </div>
+                    `;
+                }
+
+                // Student stats
+                html += `
+                    <div class="attendance-summary-item">
+                        <div class="attendance-summary-label">Studenti Iscritti</div>
+                        <div class="attendance-summary-value">${courseInfo.totalStudents}</div>
+                    </div>
+                `;
+
+                // Students who can take exam (only for courses with totalLessons)
+                if (courseInfo.totalLessons) {
+                    const percentage = courseInfo.totalStudents > 0
+                        ? ((courseInfo.studentsCanTakeExam / courseInfo.totalStudents) * 100).toFixed(0)
+                        : 0;
+
+                    html += `
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Possono fare esame</div>
+                            <div class="attendance-summary-value">${courseInfo.studentsCanTakeExam}/${courseInfo.totalStudents}</div>
+                            <div style="margin-top: 4px; opacity: 0.9;">${percentage}% degli studenti</div>
+                        </div>
+                    `;
+                }
+
+                html += `</div>`;
+
+                container.innerHTML = html;
+                container.classList.add('visible', 'course-info');
             }
         };
 
@@ -1010,6 +1177,7 @@
             _rawData: null,
             _cleanData: null,
             _coursesConfig: null,
+            _attendanceStatsCache: null, // Map for pre-calculated percentages
             _currentFilters: {
                 course: '',
                 student: '',
@@ -1094,6 +1262,9 @@
                 const cleanedData = AttendanceService.cleanData(this._rawData);
                 this._cleanData = AttendanceService.sortData(cleanedData);
 
+                // Pre-calculate all attendance statistics for performance
+                this._calculateAllAttendanceStats();
+
                 // Reset filters
                 this._currentFilters = { course: '', student: '', showAbsent: false };
                 document.getElementById('showAbsentCheckbox').checked = false;
@@ -1114,6 +1285,93 @@
 
                 // Apply filters (including absent filter with default OFF)
                 this._applyFilters();
+            },
+
+            /**
+             * Pre-calculate attendance statistics for all student-course combinations
+             * Stores results in _attendanceStatsCache for fast lookup
+             * @private
+             */
+            _calculateAllAttendanceStats() {
+                this._attendanceStatsCache = new Map();
+
+                // Get unique combinations of course + student
+                const combinations = new Set();
+                this._cleanData.forEach(row => {
+                    const key = `${row['Class name']}|${row['First name']}|${row['Last name']}`;
+                    combinations.add(key);
+                });
+
+                // Calculate stats for each combination
+                combinations.forEach(key => {
+                    const [courseName, firstName, lastName] = key.split('|');
+                    const stats = AttendanceService.calculateStudentAttendance(
+                        this._cleanData,
+                        courseName,
+                        firstName,
+                        lastName,
+                        this._coursesConfig
+                    );
+                    this._attendanceStatsCache.set(key, stats);
+                });
+
+                console.log(`Pre-calculated attendance stats for ${combinations.size} student-course combinations`);
+            },
+
+            /**
+             * Get attendance stats for a specific student-course combination
+             * @param {string} courseName - Course name
+             * @param {string} firstName - Student first name
+             * @param {string} lastName - Student last name
+             * @returns {Object|null} Attendance statistics or null if not found
+             */
+            _getAttendanceStats(courseName, firstName, lastName) {
+                const key = `${courseName}|${firstName}|${lastName}`;
+                return this._attendanceStatsCache ? this._attendanceStatsCache.get(key) : null;
+            },
+
+            /**
+             * Calculate course summary statistics
+             * @param {string} courseName - Course name
+             * @returns {Object} Course summary with student stats
+             * @private
+             */
+            _getCourseSummary(courseName) {
+                if (!this._cleanData || !this._coursesConfig || !this._attendanceStatsCache) {
+                    return null;
+                }
+
+                // Get course config
+                const courseConfig = AttendanceService.getCourseConfig(this._coursesConfig, courseName);
+
+                // Get all students in this course
+                const courseData = AttendanceService.filterByCourse(this._cleanData, courseName);
+                const students = AttendanceService.getUniqueStudents(courseData);
+
+                // Count unique dates (lessons held)
+                const uniqueDates = new Set(courseData.map(row => row['Date'])).size;
+
+                // Count students who can take exam (only for courses with totalLessons)
+                let studentsCanTakeExam = 0;
+                if (courseConfig.totalLessons) {
+                    students.forEach(student => {
+                        const stats = this._getAttendanceStats(courseName, student.firstName, student.lastName);
+                        if (stats && stats.canTakeExam) {
+                            studentsCanTakeExam++;
+                        }
+                    });
+                }
+
+                return {
+                    courseName,
+                    description: courseConfig.description || '',
+                    totalLessons: courseConfig.totalLessons,
+                    lessonsHeld: uniqueDates,
+                    threshold: courseConfig.attendanceThreshold * 100,
+                    totalStudents: students.length,
+                    studentsCanTakeExam,
+                    active: courseConfig.active
+                };
             },
 
             /**
@@ -1204,8 +1462,9 @@
                     );
                 }
 
-                // Show attendance summary if both course AND student are selected
+                // Show appropriate summary based on filters
                 if (this._currentFilters.course && this._currentFilters.student && this._coursesConfig) {
+                    // Both course AND student selected → Show student attendance
                     const [firstName, lastName] = this._currentFilters.student.split('|');
                     const stats = AttendanceService.calculateStudentAttendance(
                         this._cleanData,
@@ -1216,7 +1475,14 @@
                     );
                     const studentName = `${firstName} ${lastName}`;
                     UIService.showAttendanceSummary(stats, studentName, this._currentFilters.course);
+                } else if (this._currentFilters.course && !this._currentFilters.student) {
+                    // Only course selected → Show course summary
+                    const courseInfo = this._getCourseSummary(this._currentFilters.course);
+                    if (courseInfo) {
+                        UIService.showCourseSummary(courseInfo);
+                    }
                 } else {
+                    // No filters or only student → Hide summary
                     UIService.hideAttendanceSummary();
                 }
 
