@@ -369,6 +369,14 @@
                 <h3>Studenti Unici</h3>
                 <p id="uniqueStudents">0</p>
             </div>
+            <div class="stat-card">
+                <h3>Docenti Unici</h3>
+                <p id="uniqueTeachers">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Tutor Unici</h3>
+                <p id="uniqueTutors">0</p>
+            </div>
         </div>
 
         <div class="attendance-summary" id="attendanceSummary">
@@ -556,12 +564,20 @@
              * @returns {Object} Statistics object
              */
             calculateStats(rawData, cleanData) {
+                // Get all unique people and count by type
+                const allPeople = this.getUniqueStudents(cleanData);
+                const students = allPeople.filter(p => p.type === 'student').length;
+                const teachers = allPeople.filter(p => p.type === 'teacher').length;
+                const tutors = allPeople.filter(p => p.type === 'tutor').length;
+
                 return {
                     total: rawData.length,
                     valid: cleanData.length,
                     empty: rawData.length - cleanData.length,
                     uniqueCourses: this.getUniqueCourses(cleanData).length,
-                    uniqueStudents: this.getUniqueStudents(cleanData).length
+                    uniqueStudents: students,
+                    uniqueTeachers: teachers,
+                    uniqueTutors: tutors
                 };
             },
 
@@ -576,9 +592,34 @@
             },
 
             /**
-             * Get list of unique students
+             * Extract person type and clean first name from raw first name
+             * @param {string} firstName - Raw first name (may contain role indicators)
+             * @returns {Object} {type: 'student'|'teacher'|'tutor', cleanFirstName: string}
+             * @private
+             */
+            _extractPersonType(firstName) {
+                if (firstName.includes('(DOCENTE)')) {
+                    return {
+                        type: 'teacher',
+                        cleanFirstName: firstName.replace('(DOCENTE)', '').trim()
+                    };
+                } else if (firstName.includes('(TUTOR)')) {
+                    return {
+                        type: 'tutor',
+                        cleanFirstName: firstName.replace('(TUTOR)', '').trim()
+                    };
+                } else {
+                    return {
+                        type: 'student',
+                        cleanFirstName: firstName
+                    };
+                }
+            },
+
+            /**
+             * Get list of unique students (and staff)
              * @param {Array<Object>} data - Attendance data
-             * @returns {Array<Object>} Array of {firstName, lastName, fullName}
+             * @returns {Array<Object>} Array of {firstName, lastName, fullName, type, cleanFirstName}
              */
             getUniqueStudents(data) {
                 const studentsMap = new Map();
@@ -586,10 +627,13 @@
                 data.forEach(row => {
                     const key = `${row['First name']}|${row['Last name']}`;
                     if (!studentsMap.has(key)) {
+                        const personInfo = this._extractPersonType(row['First name']);
                         studentsMap.set(key, {
                             firstName: row['First name'],
                             lastName: row['Last name'],
-                            fullName: `${row['First name']} ${row['Last name']}`
+                            fullName: `${row['First name']} ${row['Last name']}`,
+                            type: personInfo.type,
+                            cleanFirstName: personInfo.cleanFirstName
                         });
                     }
                 });
@@ -837,6 +881,8 @@
                 document.getElementById('emptyRecords').textContent = stats.empty;
                 document.getElementById('uniqueCourses').textContent = stats.uniqueCourses;
                 document.getElementById('uniqueStudents').textContent = stats.uniqueStudents;
+                document.getElementById('uniqueTeachers').textContent = stats.uniqueTeachers;
+                document.getElementById('uniqueTutors').textContent = stats.uniqueTutors;
                 document.getElementById('stats').style.display = 'flex';
             },
 
@@ -861,19 +907,19 @@
              * @returns {string} HTML string with formatted student name
              */
             formatStudent(firstName, lastName) {
-                let html = '';
-                let cleanFirstName = firstName;
+                // Use shared parsing logic from AttendanceService
+                const personInfo = AttendanceService._extractPersonType(firstName);
 
-                // Check for role indicators
-                if (firstName.includes('(DOCENTE)')) {
+                let html = '';
+
+                // Add role badge if not a student
+                if (personInfo.type === 'teacher') {
                     html += '<span class="role-badge role-docente">DOCENTE</span>';
-                    cleanFirstName = firstName.replace('(DOCENTE)', '').trim();
-                } else if (firstName.includes('(TUTOR)')) {
+                } else if (personInfo.type === 'tutor') {
                     html += '<span class="role-badge role-tutor">TUTOR</span>';
-                    cleanFirstName = firstName.replace('(TUTOR)', '').trim();
                 }
 
-                html += `${this._escapeHtml(cleanFirstName)} ${this._escapeHtml(lastName)}`;
+                html += `${this._escapeHtml(personInfo.cleanFirstName)} ${this._escapeHtml(lastName)}`;
                 return html;
             },
 
