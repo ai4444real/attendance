@@ -159,13 +159,8 @@ class GoogleOAuth {
 
     async _waitForAuthorizationCode(popup) {
         return new Promise((resolve, reject) => {
-            // Listen for redirect back to our app
-            const checkClosed = setInterval(() => {
-                if (popup.closed) {
-                    clearInterval(checkClosed);
-                    reject(new Error('Authorization cancelled'));
-                }
-            }, 1000);
+            let timeoutId;
+            let resolved = false;
 
             // Listen for message from popup
             const messageHandler = (event) => {
@@ -173,14 +168,18 @@ class GoogleOAuth {
                 if (event.origin !== window.location.origin) return;
 
                 if (event.data.type === 'oauth_code') {
-                    clearInterval(checkClosed);
+                    if (resolved) return;
+                    resolved = true;
+                    clearTimeout(timeoutId);
                     window.removeEventListener('message', messageHandler);
-                    popup.close();
+                    try { popup.close(); } catch (e) { /* ignore COOP errors */ }
                     resolve(event.data.code);
                 } else if (event.data.type === 'oauth_error') {
-                    clearInterval(checkClosed);
+                    if (resolved) return;
+                    resolved = true;
+                    clearTimeout(timeoutId);
                     window.removeEventListener('message', messageHandler);
-                    popup.close();
+                    try { popup.close(); } catch (e) { /* ignore COOP errors */ }
                     reject(new Error(event.data.error));
                 }
             };
@@ -188,9 +187,11 @@ class GoogleOAuth {
             window.addEventListener('message', messageHandler);
 
             // Timeout after 5 minutes
-            setTimeout(() => {
-                clearInterval(checkClosed);
-                if (!popup.closed) popup.close();
+            timeoutId = setTimeout(() => {
+                if (resolved) return;
+                resolved = true;
+                window.removeEventListener('message', messageHandler);
+                try { if (!popup.closed) popup.close(); } catch (e) { /* ignore */ }
                 reject(new Error('Authorization timeout'));
             }, 5 * 60 * 1000);
         });
