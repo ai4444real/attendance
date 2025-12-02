@@ -1,3 +1,39 @@
-"*.csv" 
-".DS_Store" 
-"Thumbs.db" 
+# Data files (sensitive student data)
+*.csv
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+*.local
+
+# OAuth credentials (if stored locally)
+oauth-config.js
+client_secret.json
+credentials.json
+
+# Logs
+*.log

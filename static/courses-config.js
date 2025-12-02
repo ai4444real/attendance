@@ -30,7 +30,7 @@ const COURSES_CONFIG = {
       "active": true,
       "adjustments": {
         // Esempio per corso aperto (senza totalLessons)
-        // "Giovanni|Bianchi": 2        // Presenza manuale non registrata
+        //"Manuel|Dennler": 2        // Presenza manuale non registrata
       }
     },
     "_Assistenti Practitioner 2025": {
@@ -48,8 +48,7 @@ const COURSES_CONFIG = {
         // Esempio di correzioni manuali per presenze non nel sistema
         // Formato: "Nome|Cognome": valore (positivo=aggiunge, negativo=sottrae)
         // Decommentare le righe sotto per testare:
-        // "Diana|Valshina": 4,        // Trasferimento da corso precedente
-        // "Mario|Rossi": -1            // Correzione doppia registrazione
+        //"Luca|Tidone": +2,        // Trasferimento da corso precedente
       }
     },
     "_Counseling 25": {
