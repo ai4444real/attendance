@@ -241,6 +241,76 @@
         .reset-btn:hover {
             background: #5a6268;
         }
+
+        .attendance-summary {
+            display: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .attendance-summary.visible {
+            display: block;
+        }
+
+        .attendance-summary h2 {
+            margin: 0 0 15px 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .attendance-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .attendance-summary-item {
+            background: rgba(255,255,255,0.15);
+            padding: 12px 16px;
+            border-radius: 6px;
+            backdrop-filter: blur(10px);
+        }
+
+        .attendance-summary-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+
+        .attendance-summary-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .attendance-summary-value.large {
+            font-size: 32px;
+        }
+
+        .attendance-summary-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .attendance-summary-badge.success {
+            background: #10b981;
+        }
+
+        .attendance-summary-badge.warning {
+            background: #f59e0b;
+        }
+
+        .attendance-summary-badge.info {
+            background: #3b82f6;
+        }
     </style>
 </head>
 <body>
@@ -278,6 +348,10 @@
             </div>
         </div>
 
+        <div class="attendance-summary" id="attendanceSummary">
+            <!-- Populated dynamically when course + student are selected -->
+        </div>
+
         <div class="filters" id="filters" style="display: none;">
             <div class="filter-group">
                 <label for="courseFilter">Filtra per Corso:</label>
@@ -306,6 +380,9 @@
 
         <div id="tableContainer"></div>
     </div>
+
+    <!-- Courses Configuration (optional - if not present, defaults will be used) -->
+    <script src="courses-config.js"></script>
 
     <script>
         'use strict';
@@ -347,6 +424,41 @@
                 }
 
                 return data;
+            },
+
+            /**
+             * Load courses configuration
+             * Checks for COURSES_CONFIG global variable (from courses-config.js)
+             * Falls back to default config if not found
+             * @returns {Promise<Object>} Courses configuration
+             */
+            async loadCoursesConfig() {
+                // Check if COURSES_CONFIG is defined (from courses-config.js)
+                if (typeof COURSES_CONFIG !== 'undefined' && COURSES_CONFIG) {
+                    console.log('Courses config loaded from courses-config.js');
+                    return COURSES_CONFIG;
+                }
+
+                // Fallback to defaults
+                console.log('Using default config (courses-config.js not included)');
+                return this._getDefaultConfig();
+            },
+
+            /**
+             * Get default configuration when config file is not available
+             * @private
+             */
+            _getDefaultConfig() {
+                return {
+                    version: "1.0",
+                    courses: {},
+                    defaults: {
+                        totalLessons: null,
+                        attendanceThreshold: 0.8,
+                        description: "",
+                        active: true
+                    }
+                };
             },
 
             /**
@@ -516,6 +628,121 @@
                     acc[studentKey].push(row);
                     return acc;
                 }, {});
+            },
+
+            /**
+             * Get course configuration with fallback to defaults
+             * @param {Object} coursesConfig - Full courses configuration object
+             * @param {string} courseName - Course name to look up
+             * @returns {Object} Course configuration
+             */
+            getCourseConfig(coursesConfig, courseName) {
+                const courseConfig = coursesConfig.courses[courseName];
+                if (courseConfig) {
+                    return courseConfig;
+                }
+                // Return defaults if course not found
+                return coursesConfig.defaults || {
+                    totalLessons: null,
+                    attendanceThreshold: 0.8,
+                    description: "",
+                    active: true
+                };
+            },
+
+            /**
+             * Calculate attendance statistics for a student in a course
+             * @param {Array<Object>} data - Attendance data
+             * @param {string} courseName - Course name
+             * @param {string} firstName - Student first name
+             * @param {string} lastName - Student last name
+             * @param {Object} coursesConfig - Courses configuration
+             * @returns {Object} Attendance statistics
+             */
+            calculateStudentAttendance(data, courseName, firstName, lastName, coursesConfig) {
+                // Filter data for this student and course
+                const studentData = data.filter(row =>
+                    row['Class name'] === courseName &&
+                    row['First name'] === firstName &&
+                    row['Last name'] === lastName
+                );
+
+                // Calculate attendance score with weighted values
+                const attended = studentData.reduce((sum, row) => {
+                    const status = row['Check-in status'].toLowerCase();
+
+                    if (status.includes('assente')) {
+                        return sum + 0;  // Absent = 0
+                    } else if (status.includes('uscito')) {
+                        return sum + 0.5;  // Left early = 0.5
+                    } else {
+                        return sum + 1;  // Present = 1
+                    }
+                }, 0);
+
+                // Total lessons attended (including absent marks)
+                const totalRecorded = studentData.length;
+
+                // Get course config
+                const courseConfig = this.getCourseConfig(coursesConfig, courseName);
+                const totalLessons = courseConfig.totalLessons;
+                const threshold = courseConfig.attendanceThreshold;
+
+                // Calculate percentage
+                let percentage = null;
+                let meetsThreshold = null;
+
+                if (totalLessons && totalLessons > 0) {
+                    percentage = (attended / totalLessons) * 100;
+                    meetsThreshold = percentage >= (threshold * 100);
+                }
+
+                return {
+                    attended,
+                    totalRecorded,
+                    totalLessons,
+                    percentage,
+                    threshold: threshold * 100,
+                    meetsThreshold,
+                    canTakeExam: meetsThreshold
+                };
+            },
+
+            /**
+             * Calculate attendance summary for all students in a course
+             * @param {Array<Object>} data - Attendance data
+             * @param {string} courseName - Course name
+             * @param {Object} coursesConfig - Courses configuration
+             * @returns {Array<Object>} Array of student attendance summaries
+             */
+            getCourseAttendanceSummary(data, courseName, coursesConfig) {
+                // Filter data for this course
+                const courseData = this.filterByCourse(data, courseName);
+
+                // Get unique students in this course
+                const students = this.getUniqueStudents(courseData);
+
+                // Calculate stats for each student
+                return students.map(student => {
+                    const stats = this.calculateStudentAttendance(
+                        data,
+                        courseName,
+                        student.firstName,
+                        student.lastName,
+                        coursesConfig
+                    );
+
+                    return {
+                        ...student,
+                        ...stats
+                    };
+                }).sort((a, b) => {
+                    // Sort by percentage (descending), then by name
+                    if (a.percentage !== null && b.percentage !== null) {
+                        return b.percentage - a.percentage;
+                    }
+                    return a.fullName.localeCompare(b.fullName);
+                });
             }
         };
 
@@ -705,6 +932,73 @@
             resetFilters() {
                 document.getElementById('courseFilter').value = '';
                 document.getElementById('studentFilter').value = '';
+            },
+
+            /**
+             * Display attendance summary for student in course
+             * @param {Object} stats - Attendance statistics
+             * @param {string} studentName - Student full name
+             * @param {string} courseName - Course name
+             */
+            showAttendanceSummary(stats, studentName, courseName) {
+                const container = document.getElementById('attendanceSummary');
+
+                // Format attended lessons (show decimals only if needed)
+                const attendedDisplay = stats.attended % 1 === 0
+                    ? stats.attended
+                    : stats.attended.toFixed(1);
+
+                let html = `
+                    <h2>${this._escapeHtml(studentName)} - ${this._escapeHtml(courseName)}</h2>
+                    <div class="attendance-summary-grid">
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Lezioni Partecipate</div>
+                            <div class="attendance-summary-value">${attendedDisplay}</div>
+                        </div>
+                `;
+
+                if (stats.totalLessons) {
+                    html += `
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Totale Lezioni</div>
+                            <div class="attendance-summary-value">${stats.totalLessons}</div>
+                        </div>
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Percentuale Presenza</div>
+                            <div class="attendance-summary-value large">${stats.percentage.toFixed(1)}%</div>
+                        </div>
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Soglia Richiesta</div>
+                            <div class="attendance-summary-value">${stats.threshold}%</div>
+                            ${stats.canTakeExam
+                                ? '<div class="attendance-summary-badge success">Può fare esame</div>'
+                                : '<div class="attendance-summary-badge warning">Soglia non raggiunta</div>'
+                            }
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="attendance-summary-item">
+                            <div class="attendance-summary-label">Tipo Corso</div>
+                            <div class="attendance-summary-value" style="font-size: 16px;">Corso Aperto</div>
+                            <div class="attendance-summary-badge info">Partecipazione libera</div>
+                        </div>
+                    `;
+                }
+
+                html += `</div>`;
+
+                container.innerHTML = html;
+                container.classList.add('visible');
+            },
+
+            /**
+             * Hide attendance summary
+             */
+            hideAttendanceSummary() {
+                const container = document.getElementById('attendanceSummary');
+                container.classList.remove('visible');
+                container.innerHTML = '';
             }
         };
 
@@ -715,6 +1009,7 @@
             // Store processed data
             _rawData: null,
             _cleanData: null,
+            _coursesConfig: null,
             _currentFilters: {
                 course: '',
                 student: '',
@@ -788,9 +1083,12 @@
              * Process CSV data
              * @private
              */
-            _processData(csvContent) {
+            async _processData(csvContent) {
                 // Parse CSV
                 this._rawData = DataService.parseCSV(csvContent);
+
+                // Load courses configuration (auto-load if available)
+                this._coursesConfig = await DataService.loadCoursesConfig();
 
                 // Clean and sort data
                 const cleanedData = AttendanceService.cleanData(this._rawData);
@@ -906,6 +1204,22 @@
                     );
                 }
 
+                // Show attendance summary if both course AND student are selected
+                if (this._currentFilters.course && this._currentFilters.student && this._coursesConfig) {
+                    const [firstName, lastName] = this._currentFilters.student.split('|');
+                    const stats = AttendanceService.calculateStudentAttendance(
+                        this._cleanData,
+                        this._currentFilters.course,
+                        firstName,
+                        lastName,
+                        this._coursesConfig
+                    );
+                    const studentName = `${firstName} ${lastName}`;
+                    UIService.showAttendanceSummary(stats, studentName, this._currentFilters.course);
+                } else {
+                    UIService.hideAttendanceSummary();
+                }
+
                 // Update table with filtered data
                 UIService.displayTable(filteredData);
             },
@@ -924,6 +1238,31 @@
              */
             getRawData() {
                 return this._rawData;
+            },
+
+            /**
+             * Get courses configuration
+             * @returns {Object} Courses configuration
+             */
+            getCoursesConfig() {
+                return this._coursesConfig;
+            },
+
+            /**
+             * Get attendance summary for a specific course
+             * @param {string} courseName - Course name
+             * @returns {Array<Object>} Student attendance summaries
+             */
+            getCourseAttendance(courseName) {
+                if (!this._cleanData || !this._coursesConfig) {
+                    console.warn('Data not loaded yet');
+                    return [];
+                }
+                return AttendanceService.getCourseAttendanceSummary(
+                    this._cleanData,
+                    courseName,
+                    this._coursesConfig
+                );
             }
         };
 
