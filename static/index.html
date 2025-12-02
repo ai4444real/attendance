@@ -334,11 +334,93 @@
             background: #fff3cd;
             color: #856404;
         }
+
+        /* Calendar Section */
+        .calendar-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            color: white;
+        }
+
+        .calendar-section h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+
+        .calendar-section p {
+            margin: 0 0 15px 0;
+            opacity: 0.9;
+        }
+
+        .calendar-btn {
+            background: white;
+            color: #667eea;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+
+        .calendar-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .calendar-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .calendar-btn.secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .calendar-status {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .calendar-status.success {
+            background: rgba(16,185,129,0.2);
+        }
+
+        .calendar-status.error {
+            background: rgba(239,68,68,0.2);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Gestione Presenze - Sistema Attendance</h1>
+
+        <!-- Google Calendar Integration -->
+        <div class="calendar-section" id="calendarSection">
+            <h2>📅 Google Calendar Integration</h2>
+            <p id="calendarDescription">Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.</p>
+            <div>
+                <button class="calendar-btn" id="connectCalendarBtn" onclick="CalendarIntegration.connect()">
+                    Connetti Google Calendar
+                </button>
+                <button class="calendar-btn secondary" id="disconnectCalendarBtn" onclick="CalendarIntegration.disconnect()" style="display: none;">
+                    Disconnetti
+                </button>
+                <button class="calendar-btn" id="loadEventsBtn" onclick="CalendarIntegration.loadEvents()" style="display: none;">
+                    Carica Eventi
+                </button>
+            </div>
+            <div class="calendar-status" id="calendarStatus" style="display: none;"></div>
+        </div>
 
         <div class="upload-section">
             <input type="file" id="csvFile" class="file-input" accept=".csv">
@@ -414,6 +496,11 @@
 
     <!-- Courses Configuration (optional - if not present, defaults will be used) -->
     <script src="courses-config.js"></script>
+
+    <!-- Google OAuth and Calendar API -->
+    <script src="js/oauth-config.js"></script>
+    <script src="js/google-auth.js"></script>
+    <script src="js/google-calendar-api.js"></script>
 
     <script>
         'use strict';
@@ -1579,10 +1666,114 @@
         };
 
         // ============================================================================
+        // CALENDAR INTEGRATION
+        // ============================================================================
+        const CalendarIntegration = {
+            auth: null,
+            calendar: null,
+
+            async init() {
+                // Initialize OAuth
+                this.auth = new GoogleOAuth(GOOGLE_OAUTH_CONFIG);
+                this.calendar = new GoogleCalendarAPI(this.auth);
+
+                // Listen for auth events
+                this.auth.on('authorized', () => {
+                    this._updateUI(true);
+                });
+
+                this.auth.on('unauthorized', () => {
+                    this._updateUI(false);
+                });
+
+                this.auth.on('error', (error) => {
+                    this._showStatus(`Errore: ${error.message}`, 'error');
+                });
+
+                // Update UI based on current auth status
+                this._updateUI(this.auth.isAuthorized());
+            },
+
+            async connect() {
+                try {
+                    this._showStatus('Connessione in corso...', '');
+                    await this.auth.authorize();
+                    this._showStatus('✅ Connesso! Puoi caricare gli eventi.', 'success');
+                } catch (error) {
+                    this._showStatus(`❌ Errore: ${error.message}`, 'error');
+                }
+            },
+
+            async disconnect() {
+                try {
+                    await this.auth.logout();
+                    this._showStatus('Disconnesso', '');
+                } catch (error) {
+                    this._showStatus(`Errore: ${error.message}`, 'error');
+                }
+            },
+
+            async loadEvents() {
+                try {
+                    this._showStatus('Caricamento eventi in corso...', '');
+
+                    // Get events from last 6 months
+                    const endDate = new Date();
+                    const startDate = new Date();
+                    startDate.setMonth(startDate.getMonth() - 6);
+
+                    const lessons = await this.calendar.getLessons('primary', startDate, endDate);
+
+                    this._showStatus(
+                        `✅ Caricati ${lessons.length} eventi! (Prossima versione: integrazione con attendance)`,
+                        'success'
+                    );
+
+                    // Log events for debugging
+                    console.log('Calendar events loaded:', lessons);
+
+                    // TODO: Future integration with attendance data
+                    // For now, just show in console
+
+                } catch (error) {
+                    this._showStatus(`❌ Errore: ${error.message}`, 'error');
+                }
+            },
+
+            _updateUI(isAuthorized) {
+                const connectBtn = document.getElementById('connectCalendarBtn');
+                const disconnectBtn = document.getElementById('disconnectCalendarBtn');
+                const loadEventsBtn = document.getElementById('loadEventsBtn');
+                const description = document.getElementById('calendarDescription');
+
+                if (isAuthorized) {
+                    connectBtn.style.display = 'none';
+                    disconnectBtn.style.display = 'inline-block';
+                    loadEventsBtn.style.display = 'inline-block';
+                    description.textContent = '✅ Connesso al tuo Google Calendar';
+                } else {
+                    connectBtn.style.display = 'inline-block';
+                    disconnectBtn.style.display = 'none';
+                    loadEventsBtn.style.display = 'none';
+                    description.textContent = 'Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.';
+                }
+            },
+
+            _showStatus(message, type) {
+                const statusDiv = document.getElementById('calendarStatus');
+                statusDiv.textContent = message;
+                statusDiv.className = 'calendar-status';
+                if (type) statusDiv.classList.add(type);
+                statusDiv.style.display = message ? 'block' : 'none';
+            }
+        };
+
+        // ============================================================================
         // INITIALIZATION
         // ============================================================================
         document.addEventListener('DOMContentLoaded', () => {
             App.init();
+            CalendarIntegration.init();
         });
     </script>
 </body>
