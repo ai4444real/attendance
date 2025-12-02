@@ -198,17 +198,15 @@ class GoogleOAuth {
     }
 
     async _exchangeCodeForTokens(code, codeVerifier) {
-        const response = await fetch(this.config.tokenEndpoint, {
+        // Call our backend to exchange code for tokens (keeps client_secret secure)
+        const response = await fetch('/api/oauth/token', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/json'
             },
-            body: new URLSearchParams({
-                client_id: this.config.clientId,
-                client_secret: this.config.clientSecret,
+            body: JSON.stringify({
                 code: code,
                 code_verifier: codeVerifier,
-                grant_type: 'authorization_code',
                 redirect_uri: this.config.redirectUri
             })
         });
@@ -232,16 +230,14 @@ class GoogleOAuth {
     }
 
     async _refreshAccessToken(refreshToken) {
-        const response = await fetch(this.config.tokenEndpoint, {
+        // Call our backend to refresh token (keeps client_secret secure)
+        const response = await fetch('/api/oauth/refresh', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/json'
             },
-            body: new URLSearchParams({
-                client_id: this.config.clientId,
-                client_secret: this.config.clientSecret,
-                refresh_token: refreshToken,
-                grant_type: 'refresh_token'
+            body: JSON.stringify({
+                refresh_token: refreshToken
             })
         });
 
