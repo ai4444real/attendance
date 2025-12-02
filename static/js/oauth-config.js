@@ -17,7 +17,7 @@ const GOOGLE_OAUTH_CONFIG = {
     ],
 
     // Redirect URI (deve matchare quello in Google Cloud Console)
-    redirectUri: window.location.origin,
+    redirectUri: window.location.origin + '/oauth-callback',
 
     // Google OAuth endpoints
     authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
