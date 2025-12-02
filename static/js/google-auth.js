@@ -205,6 +205,7 @@ class GoogleOAuth {
             },
             body: new URLSearchParams({
                 client_id: this.config.clientId,
+                client_secret: this.config.clientSecret,
                 code: code,
                 code_verifier: codeVerifier,
                 grant_type: 'authorization_code',
@@ -238,6 +239,7 @@ class GoogleOAuth {
             },
             body: new URLSearchParams({
                 client_id: this.config.clientId,
+                client_secret: this.config.clientSecret,
                 refresh_token: refreshToken,
                 grant_type: 'refresh_token'
             })

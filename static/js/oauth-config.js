@@ -11,6 +11,9 @@ const GOOGLE_OAUTH_CONFIG = {
     // Client ID from Google Cloud Console
     clientId: '572268474022-54j1dba72gm26n00oi42ijrhv3ielep1.apps.googleusercontent.com',
 
+    // Client Secret from Google Cloud Console
+    clientSecret: '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Your',
+
     // Scopes richiesti (solo lettura calendario)
     scopes: [
         'https://www.googleapis.com/auth/calendar.readonly'
