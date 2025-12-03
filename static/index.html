@@ -415,6 +415,9 @@
                 <button class="calendar-btn secondary" id="disconnectCalendarBtn" onclick="CalendarIntegration.disconnect()" style="display: none;">
                     Disconnetti
                 </button>
+                <button class="calendar-btn secondary" id="listCalendarsBtn" onclick="CalendarIntegration.listCalendars()" style="display: none;">
+                    Mostra Calendari
+                </button>
                 <button class="calendar-btn" id="loadEventsBtn" onclick="CalendarIntegration.loadEvents()" style="display: none;">
                     Carica Eventi
                 </button>
@@ -1671,6 +1674,7 @@
         const CalendarIntegration = {
             auth: null,
             calendar: null,
+            selectedCalendarId: 'primary', // Default to primary calendar
 
             async init() {
                 try {
@@ -1721,6 +1725,50 @@
                 }
             },
 
+            async listCalendars() {
+                try {
+                    this._showStatus('Caricamento calendari...', '');
+
+                    const calendars = await this.calendar.listCalendars();
+
+                    console.log('=== CALENDARI DISPONIBILI ===');
+                    console.table(calendars.map(cal => ({
+                        'Nome': cal.summary,
+                        'ID': cal.id,
+                        'Primario': cal.primary ? 'Sì' : 'No',
+                        'Accesso': cal.accessRole
+                    })));
+
+                    console.log('\n📋 Per selezionare un calendario, copia l\'ID e usa:');
+                    console.log('CalendarIntegration.selectCalendar("ID_DEL_CALENDARIO")');
+                    console.log('\nOppure per vedere i dettagli completi:');
+                    console.log('window.calendars');
+
+                    // Salva in una variabile globale per facile accesso
+                    window.calendars = calendars;
+
+                    this._showStatus(
+                        `✅ ${calendars.length} calendari trovati! Guarda la console per i dettagli.`,
+                        'success'
+                    );
+                } catch (error) {
+                    console.error('Errore nel caricamento dei calendari:', error);
+                    this._showStatus(`❌ Errore: ${error.message}`, 'error');
+                }
+            },
+
+            selectCalendar(calendarId) {
+                this.selectedCalendarId = calendarId;
+                const calendar = window.calendars?.find(c => c.id === calendarId);
+                const calendarName = calendar ? calendar.summary : calendarId;
+
+                console.log(`✅ Calendario selezionato: ${calendarName}`);
+                this._showStatus(
+                    `📅 Calendario selezionato: ${calendarName}`,
+                    'success'
+                );
+            },
+
             async loadEvents() {
                 try {
                     this._showStatus('Caricamento eventi in corso...', '');
@@ -1730,10 +1778,14 @@
                     const startDate = new Date();
                     startDate.setMonth(startDate.getMonth() - 6);
 
-                    const lessons = await this.calendar.getLessons('primary', startDate, endDate);
+                    // Use selected calendar (default: 'primary')
+                    const calendarName = window.calendars?.find(c => c.id === this.selectedCalendarId)?.summary || this.selectedCalendarId;
+                    console.log(`📅 Caricamento eventi dal calendario: ${calendarName}`);
+
+                    const lessons = await this.calendar.getLessons(this.selectedCalendarId, startDate, endDate);
 
                     this._showStatus(
-                        `✅ Caricati ${lessons.length} eventi! (Prossima versione: integrazione con attendance)`,
+                        `✅ Caricati ${lessons.length} eventi da "${calendarName}"! (Prossima versione: integrazione con attendance)`,
                         'success'
                     );
 
@@ -1751,17 +1803,20 @@
             _updateUI(isAuthorized) {
                 const connectBtn = document.getElementById('connectCalendarBtn');
                 const disconnectBtn = document.getElementById('disconnectCalendarBtn');
+                const listCalendarsBtn = document.getElementById('listCalendarsBtn');
                 const loadEventsBtn = document.getElementById('loadEventsBtn');
                 const description = document.getElementById('calendarDescription');
 
                 if (isAuthorized) {
                     connectBtn.style.display = 'none';
                     disconnectBtn.style.display = 'inline-block';
+                    listCalendarsBtn.style.display = 'inline-block';
                     loadEventsBtn.style.display = 'inline-block';
                     description.textContent = '✅ Connesso al tuo Google Calendar';
                 } else {
                     connectBtn.style.display = 'inline-block';
                     disconnectBtn.style.display = 'none';
+                    listCalendarsBtn.style.display = 'none';
                     loadEventsBtn.style.display = 'none';
                     description.textContent = 'Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.';
                 }
