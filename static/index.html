@@ -335,6 +335,59 @@
             color: #856404;
         }
 
+        /* ========================================================================
+           INACTIVE STUDENTS FEATURE - Easily removable section
+           Delete this entire CSS block to remove the feature styles
+           ======================================================================== */
+        .inactive-student-row {
+            background: #fff3cd !important;
+            border-left: 4px solid #f59e0b !important;
+        }
+
+        .inactive-student-row:hover {
+            background: #fef3c7 !important;
+        }
+
+        .inactive-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #f59e0b;
+            color: white;
+            margin-left: 8px;
+        }
+
+        .inactive-settings {
+            display: none;
+            padding: 12px;
+            background: #fff3cd;
+            border-radius: 4px;
+            border-left: 4px solid #f59e0b;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .inactive-settings.visible {
+            display: block;
+        }
+
+        .inactive-settings label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .inactive-settings input[type="number"] {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #d97706;
+            border-radius: 4px;
+        }
+        /* ======================================================================== */
+
         /* Calendar Section */
         .calendar-section {
             margin-bottom: 30px;
@@ -487,8 +540,34 @@
                     Mostra anche assenti
                 </label>
             </div>
+            <!-- ============================================================
+                 INACTIVE STUDENTS FEATURE - UI Controls
+                 Delete this entire block to remove the feature UI
+                 ============================================================ -->
+            <div class="filter-group checkbox-group">
+                <label>
+                    <input type="checkbox" id="highlightInactiveCheckbox">
+                    Evidenzia studenti inattivi
+                </label>
+            </div>
+            <!-- ============================================================ -->
             <button class="reset-btn" id="resetFilters">Reset Filtri</button>
         </div>
+
+        <!-- ============================================================
+             INACTIVE STUDENTS FEATURE - Settings Panel
+             Delete this entire block to remove the feature settings
+             ============================================================ -->
+        <div class="inactive-settings" id="inactiveSettings">
+            <label>
+                🔍 Numero di lezioni da controllare:
+                <input type="number" id="inactiveLessonsCount" value="3" min="1" max="10">
+            </label>
+            <p style="margin: 0; opacity: 0.8; font-size: 13px;">
+                Gli studenti senza presenze nelle ultime N lezioni verranno evidenziati
+            </p>
+        </div>
+        <!-- ============================================================ -->
 
         <div class="loading" id="loading">
             Caricamento e pulizia dati in corso...
@@ -1832,11 +1911,208 @@
         };
 
         // ============================================================================
+        // INACTIVE STUDENTS DETECTION MODULE
+        // Delete this entire module to remove the inactive students feature
+        // ============================================================================
+        const InactiveStudentsDetector = {
+            enabled: false,
+            lessonsToCheck: 3,
+
+            /**
+             * Get all unique dates for a course, sorted chronologically
+             * @param {Array<Object>} courseData - Data filtered by course
+             * @returns {Array<string>} Sorted array of unique dates (ISO format)
+             */
+            getCourseDates(courseData) {
+                const dates = new Set(courseData.map(row => row['Date']));
+                return Array.from(dates).sort((a, b) => new Date(a) - new Date(b));
+            },
+
+            /**
+             * Get the last N dates from a sorted array of dates
+             * @param {Array<string>} sortedDates - Sorted array of dates
+             * @param {number} n - Number of recent dates to get
+             * @returns {Array<string>} Last N dates
+             */
+            getLastNDates(sortedDates, n) {
+                return sortedDates.slice(-n);
+            },
+
+            /**
+             * Check if a student is inactive (no attendance in last N lessons)
+             * @param {Array<Object>} studentData - All records for a specific student
+             * @param {Array<string>} lastNDates - Last N lesson dates
+             * @returns {boolean} True if student is inactive
+             */
+            isStudentInactive(studentData, lastNDates) {
+                // Get student's records in the last N dates
+                const recentRecords = studentData.filter(row =>
+                    lastNDates.includes(row['Date'])
+                );
+
+                // If no records at all in last N dates, student is inactive
+                if (recentRecords.length === 0) {
+                    return true;
+                }
+
+                // Check if all recent records are absences
+                const allAbsent = recentRecords.every(row => {
+                    const status = row['Check-in status'].toLowerCase();
+                    return status.includes('assente');
+                });
+
+                return allAbsent;
+            },
+
+            /**
+             * Get list of inactive students for a course
+             * @param {Array<Object>} courseData - Data filtered by course
+             * @param {number} lessonsToCheck - Number of recent lessons to check
+             * @returns {Set<string>} Set of inactive student keys (firstName|lastName)
+             */
+            getInactiveStudents(courseData, lessonsToCheck) {
+                if (!courseData || courseData.length === 0) {
+                    return new Set();
+                }
+
+                // Get all dates and take last N
+                const allDates = this.getCourseDates(courseData);
+                const lastNDates = this.getLastNDates(allDates, lessonsToCheck);
+
+                console.log(`📊 Checking inactivity for last ${lessonsToCheck} lessons:`, lastNDates);
+
+                // Group data by student
+                const studentGroups = AttendanceService.groupByStudent(courseData);
+                const inactiveStudents = new Set();
+
+                // Check each student
+                Object.entries(studentGroups).forEach(([studentKey, studentData]) => {
+                    if (this.isStudentInactive(studentData, lastNDates)) {
+                        inactiveStudents.add(studentKey);
+                        console.log(`⚠️  Inactive student detected: ${studentKey}`);
+                    }
+                });
+
+                console.log(`Total inactive students: ${inactiveStudents.size}`);
+                return inactiveStudents;
+            },
+
+            /**
+             * Check if a row belongs to an inactive student
+             * @param {Object} row - Data row
+             * @param {Set<string>} inactiveStudents - Set of inactive student keys
+             * @returns {boolean} True if row belongs to inactive student
+             */
+            isRowInactive(row, inactiveStudents) {
+                const studentKey = `${row['First name']} ${row['Last name']}`;
+                return inactiveStudents.has(studentKey);
+            },
+
+            /**
+             * Initialize event listeners for the feature
+             */
+            init() {
+                const checkbox = document.getElementById('highlightInactiveCheckbox');
+                const settings = document.getElementById('inactiveSettings');
+                const lessonsInput = document.getElementById('inactiveLessonsCount');
+
+                // Toggle feature on checkbox change
+                checkbox.addEventListener('change', (e) => {
+                    this.enabled = e.target.checked;
+                    settings.classList.toggle('visible', this.enabled);
+
+                    // Re-apply filters to update highlighting
+                    if (App._cleanData) {
+                        App._applyFilters();
+                    }
+                });
+
+                // Update lessons count
+                lessonsInput.addEventListener('change', (e) => {
+                    this.lessonsToCheck = parseInt(e.target.value) || 3;
+
+                    // Re-apply filters to update highlighting
+                    if (this.enabled && App._cleanData) {
+                        App._applyFilters();
+                    }
+                });
+            }
+        };
+
+        // Patch UIService.displayTable to support inactive highlighting
+        const _originalDisplayTable = UIService.displayTable;
+        UIService.displayTable = function(data) {
+            // Store inactive students if feature is enabled and course is selected
+            let inactiveStudents = new Set();
+
+            if (InactiveStudentsDetector.enabled && App._currentFilters.course) {
+                const courseData = AttendanceService.filterByCourse(
+                    App._cleanData,
+                    App._currentFilters.course
+                );
+                inactiveStudents = InactiveStudentsDetector.getInactiveStudents(
+                    courseData,
+                    InactiveStudentsDetector.lessonsToCheck
+                );
+            }
+
+            // Generate table HTML
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Corso</th>
+                            <th>Data</th>
+                            <th>Studente</th>
+                            <th>Stato Presenza</th>
+                            <th>% Presenza</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(row => {
+                            const isInactive = InactiveStudentsDetector.enabled &&
+                                             InactiveStudentsDetector.isRowInactive(row, inactiveStudents);
+                            const rowClass = isInactive ? 'inactive-student-row' : '';
+
+                            const attendanceInfo = this._formatAttendancePercentage(
+                                row['Class name'],
+                                row['First name'],
+                                row['Last name']
+                            );
+
+                            const inactiveBadge = isInactive ? '<span class="inactive-badge">INATTIVO</span>' : '';
+
+                            return `
+                                <tr class="${rowClass}">
+                                    <td>${this._escapeHtml(row['Class name'])}</td>
+                                    <td>${this.formatDate(row['Date'])}</td>
+                                    <td>${this.formatStudent(row['First name'], row['Last name'])}${inactiveBadge}</td>
+                                    <td>
+                                        <span class="status ${this._getStatusClass(row['Check-in status'])}">
+                                            ${this._escapeHtml(row['Check-in status'])}
+                                        </span>
+                                    </td>
+                                    <td>${attendanceInfo}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            document.getElementById('tableContainer').innerHTML = html;
+        };
+        // ============================================================================
+        // END INACTIVE STUDENTS DETECTION MODULE
+        // ============================================================================
+
+        // ============================================================================
         // INITIALIZATION
         // ============================================================================
         document.addEventListener('DOMContentLoaded', () => {
             App.init();
             CalendarIntegration.init();
+            InactiveStudentsDetector.init();  // Initialize inactive students feature
         });
     </script>
 </body>

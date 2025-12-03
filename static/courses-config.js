@@ -16,6 +16,10 @@ const COURSES_CONFIG = {
   "version": "1.0",
   "lastUpdated": "2024-12-02",
   "description": "Configurazione corsi con numero totale lezioni e soglia presenza minima",
+
+  // Google Calendar ID (shared calendar)
+  "calendarId": "0cqr6r2kjdgrgilob4hrpbm1sc@group.calendar.google.com",
+
   "courses": {
     "_Analisi Transazionale AT ATI 27.09.25": {
       "totalLessons": 20,
