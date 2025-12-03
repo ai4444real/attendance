@@ -12,6 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import httpx
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (for local development)
+load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -102,6 +106,13 @@ async def exchange_oauth_token(request: TokenExchangeRequest):
     Client secret is kept secure on the server side.
     """
     try:
+        # Debug logging
+        print(f"[DEBUG] Token exchange request:")
+        print(f"  - redirect_uri: {request.redirect_uri}")
+        print(f"  - client_id: {GOOGLE_CLIENT_ID}")
+        print(f"  - client_secret present: {bool(GOOGLE_CLIENT_SECRET)}")
+        print(f"  - client_secret length: {len(GOOGLE_CLIENT_SECRET) if GOOGLE_CLIENT_SECRET else 0}")
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 GOOGLE_TOKEN_ENDPOINT,
@@ -118,6 +129,7 @@ async def exchange_oauth_token(request: TokenExchangeRequest):
 
             if response.status_code != 200:
                 error_data = response.json()
+                print(f"[ERROR] Google OAuth error: {error_data}")
                 raise HTTPException(
                     status_code=response.status_code,
                     detail=error_data
@@ -126,6 +138,7 @@ async def exchange_oauth_token(request: TokenExchangeRequest):
             return response.json()
 
     except httpx.HTTPError as e:
+        print(f"[ERROR] HTTP error during token exchange: {str(e)}")
         raise HTTPException(status_code=500, detail=f"OAuth token exchange failed: {str(e)}")
 
 

@@ -400,6 +400,36 @@
         .calendar-section h2 {
             margin: 0 0 15px 0;
             font-size: 18px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .calendar-section h2:hover {
+            opacity: 0.9;
+        }
+
+        .calendar-toggle-icon {
+            font-size: 20px;
+            transition: transform 0.3s;
+        }
+
+        .calendar-section.collapsed .calendar-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .calendar-content {
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            max-height: 500px;
+            opacity: 1;
+            overflow: hidden;
+        }
+
+        .calendar-section.collapsed .calendar-content {
+            max-height: 0;
+            opacity: 0;
         }
 
         .calendar-section p {
@@ -459,23 +489,28 @@
 
         <!-- Google Calendar Integration -->
         <div class="calendar-section" id="calendarSection">
-            <h2>📅 Google Calendar Integration</h2>
-            <p id="calendarDescription">Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.</p>
-            <div>
-                <button class="calendar-btn" id="connectCalendarBtn" onclick="CalendarIntegration.connect()">
-                    Connetti Google Calendar
-                </button>
-                <button class="calendar-btn secondary" id="disconnectCalendarBtn" onclick="CalendarIntegration.disconnect()" style="display: none;">
-                    Disconnetti
-                </button>
-                <button class="calendar-btn secondary" id="listCalendarsBtn" onclick="CalendarIntegration.listCalendars()" style="display: none;">
-                    Mostra Calendari
-                </button>
-                <button class="calendar-btn" id="loadEventsBtn" onclick="CalendarIntegration.loadEvents()" style="display: none;">
-                    Carica Eventi
-                </button>
+            <h2 onclick="toggleCalendarSection()">
+                <span>📅 Google Calendar Integration</span>
+                <span class="calendar-toggle-icon">▼</span>
+            </h2>
+            <div class="calendar-content">
+                <p id="calendarDescription">Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.</p>
+                <div>
+                    <button class="calendar-btn" id="connectCalendarBtn" onclick="CalendarIntegration.connect()">
+                        Connetti Google Calendar
+                    </button>
+                    <button class="calendar-btn secondary" id="disconnectCalendarBtn" onclick="CalendarIntegration.disconnect()" style="display: none;">
+                        Disconnetti
+                    </button>
+                    <button class="calendar-btn secondary" id="listCalendarsBtn" onclick="CalendarIntegration.listCalendars()" style="display: none;">
+                        Mostra Calendari
+                    </button>
+                    <button class="calendar-btn" id="loadEventsBtn" onclick="CalendarIntegration.loadEvents()" style="display: none;">
+                        Carica Eventi
+                    </button>
+                </div>
+                <div class="calendar-status" id="calendarStatus" style="display: none;"></div>
             </div>
-            <div class="calendar-status" id="calendarStatus" style="display: none;"></div>
         </div>
 
         <div class="upload-section">
@@ -2107,12 +2142,29 @@
         // ============================================================================
 
         // ============================================================================
+        // CALENDAR SECTION TOGGLE
+        // ============================================================================
+        function toggleCalendarSection() {
+            const section = document.getElementById('calendarSection');
+            const isCollapsed = section.classList.toggle('collapsed');
+
+            // Save state to localStorage
+            localStorage.setItem('calendarSectionCollapsed', isCollapsed);
+        }
+
+        // ============================================================================
         // INITIALIZATION
         // ============================================================================
         document.addEventListener('DOMContentLoaded', () => {
             App.init();
             CalendarIntegration.init();
             InactiveStudentsDetector.init();  // Initialize inactive students feature
+
+            // Restore calendar section collapsed state from localStorage
+            const wasCollapsed = localStorage.getItem('calendarSectionCollapsed') === 'true';
+            if (wasCollapsed) {
+                document.getElementById('calendarSection').classList.add('collapsed');
+            }
         });
     </script>
 </body>
