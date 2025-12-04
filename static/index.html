@@ -276,6 +276,29 @@
             background: #5a6268;
         }
 
+        .export-btn {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            height: 42px;
+            font-weight: 500;
+        }
+
+        .export-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+        }
+
+        .export-btn:active {
+            transform: translateY(0);
+        }
+
         .attendance-summary {
             display: none;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -630,6 +653,9 @@
             </div>
             <!-- ============================================================ -->
             <button class="reset-btn" id="resetFilters">Reset Filtri</button>
+            <button class="export-btn" id="exportBtn" onclick="ExportService.exportToCSV()">
+                📥 Export CSV
+            </button>
         </div>
 
         <!-- ============================================================
@@ -1849,6 +1875,54 @@
                     courseName,
                     this._coursesConfig
                 );
+            },
+
+            /**
+             * Get currently filtered data for export
+             * Returns the same data that is currently displayed in the table
+             * @returns {Array<Object>} Filtered attendance data
+             */
+            _getFilteredDataForExport() {
+                if (!this._cleanData) {
+                    return [];
+                }
+
+                let filteredData = this._cleanData;
+
+                // Apply same filters as _applyFilters()
+
+                // Filter out absent records if checkbox not checked
+                if (!this._currentFilters.showAbsent) {
+                    filteredData = filteredData.filter(row => {
+                        const status = row['Check-in status'].toLowerCase();
+                        return !status.includes('assente');
+                    });
+                }
+
+                // Apply person type filter
+                filteredData = filteredData.filter(row => {
+                    return PersonTypeFilter.shouldShow(row['First name']);
+                });
+
+                // Apply course filter
+                if (this._currentFilters.course) {
+                    filteredData = AttendanceService.filterByCourse(
+                        filteredData,
+                        this._currentFilters.course
+                    );
+                }
+
+                // Apply student filter
+                if (this._currentFilters.student) {
+                    const [firstName, lastName] = this._currentFilters.student.split('|');
+                    filteredData = AttendanceService.filterByStudent(
+                        filteredData,
+                        firstName,
+                        lastName
+                    );
+                }
+
+                return filteredData;
             }
         };
 
@@ -2301,6 +2375,125 @@
         };
         // ============================================================================
         // END PERSON TYPE FILTER MODULE
+        // ============================================================================
+
+        // ============================================================================
+        // EXPORT SERVICE MODULE
+        // Export filtered data to CSV
+        // ============================================================================
+        const ExportService = {
+            /**
+             * Export currently filtered data to CSV file
+             */
+            exportToCSV() {
+                // Get current filtered data from App
+                const data = App._getFilteredDataForExport();
+
+                if (!data || data.length === 0) {
+                    alert('Nessun dato da esportare. Carica un file CSV prima.');
+                    return;
+                }
+
+                // Generate CSV content
+                const csv = this._convertToCSV(data);
+
+                // Generate filename with timestamp
+                const filename = this._generateFilename();
+
+                // Trigger download
+                this._downloadCSV(csv, filename);
+
+                console.log(`✅ Exported ${data.length} records to ${filename}`);
+            },
+
+            /**
+             * Convert data array to CSV string
+             * @param {Array<Object>} data - Array of attendance records
+             * @returns {string} CSV string
+             * @private
+             */
+            _convertToCSV(data) {
+                if (data.length === 0) return '';
+
+                // CSV headers (same as original format)
+                const headers = ['Class name', 'Date', 'First name', 'Last name', 'Check-in status'];
+
+                // Build CSV rows
+                const rows = data.map(row => {
+                    return [
+                        this._escapeCSV(row['Class name']),
+                        this._escapeCSV(row['Date']),
+                        this._escapeCSV(row['First name']),
+                        this._escapeCSV(row['Last name']),
+                        this._escapeCSV(row['Check-in status'])
+                    ].join(',');
+                });
+
+                // Combine headers and rows
+                return [headers.join(','), ...rows].join('\n');
+            },
+
+            /**
+             * Escape CSV value (handle commas, quotes, newlines)
+             * @param {string} value - Value to escape
+             * @returns {string} Escaped value
+             * @private
+             */
+            _escapeCSV(value) {
+                if (value == null) return '';
+
+                const str = String(value);
+
+                // If contains comma, quote, or newline, wrap in quotes and escape quotes
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return '"' + str.replace(/"/g, '""') + '"';
+                }
+
+                return str;
+            },
+
+            /**
+             * Generate filename with timestamp
+             * @returns {string} Filename
+             * @private
+             */
+            _generateFilename() {
+                const now = new Date();
+                const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+                const time = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+
+                return `attendance_export_${date}_${time}.csv`;
+            },
+
+            /**
+             * Trigger CSV download
+             * @param {string} csvContent - CSV content
+             * @param {string} filename - Filename for download
+             * @private
+             */
+            _downloadCSV(csvContent, filename) {
+                // Create blob
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+                // Create download link
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+
+                // Trigger download
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                // Clean up
+                URL.revokeObjectURL(url);
+            }
+        };
+        // ============================================================================
+        // END EXPORT SERVICE MODULE
         // ============================================================================
 
         // ============================================================================
