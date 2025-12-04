@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestione Presenze</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📊</text></svg>">
     <style>
         * {
             margin: 0;
@@ -70,12 +71,45 @@
             padding: 15px 20px;
             border-radius: 4px;
             border-left: 4px solid #007bff;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card.filterable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .stat-card.filterable:hover {
+            background: #e6f2ff;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0,123,255,0.2);
+        }
+
+        .stat-card.filterable.unchecked {
+            opacity: 0.4;
+            background: #f5f5f5;
+            border-left-color: #ccc;
+        }
+
+        .stat-card.filterable.unchecked:hover {
+            opacity: 0.6;
+            background: #ececec;
         }
 
         .stat-card h3 {
             font-size: 14px;
             color: #666;
             margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-card h3 input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            margin: 0;
         }
 
         .stat-card p {
@@ -538,16 +572,25 @@
                 <h3>Corsi Unici</h3>
                 <p id="uniqueCourses">0</p>
             </div>
-            <div class="stat-card">
-                <h3>Studenti Unici</h3>
+            <div class="stat-card filterable" id="studentsCard" onclick="PersonTypeFilter.toggle('students')">
+                <h3>
+                    <input type="checkbox" id="studentsCheckbox" checked onclick="event.stopPropagation()">
+                    Studenti Unici
+                </h3>
                 <p id="uniqueStudents">0</p>
             </div>
-            <div class="stat-card">
-                <h3>Docenti Unici</h3>
+            <div class="stat-card filterable" id="teachersCard" onclick="PersonTypeFilter.toggle('teachers')">
+                <h3>
+                    <input type="checkbox" id="teachersCheckbox" checked onclick="event.stopPropagation()">
+                    Docenti Unici
+                </h3>
                 <p id="uniqueTeachers">0</p>
             </div>
-            <div class="stat-card">
-                <h3>Tutor Unici</h3>
+            <div class="stat-card filterable" id="tutorsCard" onclick="PersonTypeFilter.toggle('tutors')">
+                <h3>
+                    <input type="checkbox" id="tutorsCheckbox" checked onclick="event.stopPropagation()">
+                    Tutor Unici
+                </h3>
                 <p id="uniqueTutors">0</p>
             </div>
         </div>
@@ -621,6 +664,17 @@
 
     <script>
         'use strict';
+
+        // ============================================================================
+        // GLOBAL ERROR HANDLERS - Suppress known harmless errors
+        // ============================================================================
+        window.addEventListener('unhandledrejection', (event) => {
+            // Suppress Chrome extension message channel errors (harmless)
+            if (event.reason?.message?.includes('message channel closed')) {
+                event.preventDefault();
+                console.debug('Suppressed Chrome extension error:', event.reason.message);
+            }
+        });
 
         // ============================================================================
         // DATA LAYER - Parsing and data access
@@ -1651,6 +1705,12 @@
                 UIService.resetFilters();
                 document.getElementById('showAbsentCheckbox').checked = false;
 
+                // Reset person type filters (all enabled)
+                PersonTypeFilter.enabled = { students: true, teachers: true, tutors: true };
+                ['students', 'teachers', 'tutors'].forEach(type => {
+                    PersonTypeFilter._updateUI(type);
+                });
+
                 // Repopulate student filter with all students
                 const allStudents = AttendanceService.getUniqueStudents(this._cleanData);
                 UIService.populateStudentFilter(allStudents);
@@ -1665,6 +1725,11 @@
              */
             _updateStudentFilterOptions() {
                 let dataForStudents = this._cleanData;
+
+                // Apply person type filter
+                dataForStudents = dataForStudents.filter(row => {
+                    return PersonTypeFilter.shouldShow(row['First name']);
+                });
 
                 // If a course is selected, filter data by that course
                 if (this._currentFilters.course) {
@@ -1693,6 +1758,11 @@
                         return !status.includes('assente');
                     });
                 }
+
+                // Apply person type filter (students/teachers/tutors)
+                filteredData = filteredData.filter(row => {
+                    return PersonTypeFilter.shouldShow(row['First name']);
+                });
 
                 // Apply course filter
                 if (this._currentFilters.course) {
@@ -2142,6 +2212,98 @@
         // ============================================================================
 
         // ============================================================================
+        // PERSON TYPE FILTER MODULE
+        // Filter by person type (students, teachers, tutors)
+        // ============================================================================
+        const PersonTypeFilter = {
+            enabled: {
+                students: true,
+                teachers: true,
+                tutors: true
+            },
+
+            /**
+             * Toggle a person type filter
+             * @param {string} type - 'students', 'teachers', or 'tutors'
+             */
+            toggle(type) {
+                // Toggle the state
+                this.enabled[type] = !this.enabled[type];
+
+                // Prevent all from being unchecked (need at least one)
+                const anyEnabled = this.enabled.students || this.enabled.teachers || this.enabled.tutors;
+                if (!anyEnabled) {
+                    this.enabled[type] = true;
+                    this._updateUI(type);  // Fix: Update UI to show it's still checked
+                    alert('Devi selezionare almeno una categoria!');
+                    return;
+                }
+
+                // Update UI
+                this._updateUI(type);
+
+                // Re-apply filters
+                if (App._cleanData) {
+                    App._applyFilters();
+                }
+            },
+
+            /**
+             * Update checkbox and card state
+             * @private
+             */
+            _updateUI(type) {
+                const checkboxId = type + 'Checkbox';
+                const cardId = type.replace(/s$/, '') + 'sCard'; // students -> studentsCard
+
+                const checkbox = document.getElementById(checkboxId);
+                const card = document.getElementById(cardId);
+
+                if (checkbox && card) {
+                    checkbox.checked = this.enabled[type];
+                    card.classList.toggle('unchecked', !this.enabled[type]);
+                }
+            },
+
+            /**
+             * Check if a person should be shown based on current filters
+             * @param {string} firstName - Person's first name (may contain role indicators)
+             * @returns {boolean} True if person should be shown
+             */
+            shouldShow(firstName) {
+                const personInfo = AttendanceService._extractPersonType(firstName);
+
+                if (personInfo.type === 'student') return this.enabled.students;
+                if (personInfo.type === 'teacher') return this.enabled.teachers;
+                if (personInfo.type === 'tutor') return this.enabled.tutors;
+
+                return true; // Default to showing if type unknown
+            },
+
+            /**
+             * Initialize - set up checkbox click handlers
+             */
+            init() {
+                // Checkboxes handle their own clicks due to onclick="event.stopPropagation()"
+                // Cards handle clicks via inline onclick="PersonTypeFilter.toggle(...)"
+                ['students', 'teachers', 'tutors'].forEach(type => {
+                    const checkboxId = type + 'Checkbox';
+                    const checkbox = document.getElementById(checkboxId);
+
+                    if (checkbox) {
+                        checkbox.addEventListener('change', (e) => {
+                            e.stopPropagation();
+                            this.toggle(type);
+                        });
+                    }
+                });
+            }
+        };
+        // ============================================================================
+        // END PERSON TYPE FILTER MODULE
+        // ============================================================================
+
+        // ============================================================================
         // CALENDAR SECTION TOGGLE
         // ============================================================================
         function toggleCalendarSection() {
@@ -2159,6 +2321,7 @@
             App.init();
             CalendarIntegration.init();
             InactiveStudentsDetector.init();  // Initialize inactive students feature
+            PersonTypeFilter.init();  // Initialize person type filter
 
             // Restore calendar section collapsed state from localStorage
             const wasCollapsed = localStorage.getItem('calendarSectionCollapsed') === 'true';

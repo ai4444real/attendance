@@ -50,7 +50,11 @@ async def oauth_callback():
     """
     OAuth callback handler - serves the callback page that communicates with parent window
     """
-    return FileResponse('static/oauth-callback.html')
+    from fastapi.responses import FileResponse
+    response = FileResponse('static/oauth-callback.html')
+    # Fix COOP warning by allowing same-origin window access
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    return response
 
 
 @app.get("/health")
