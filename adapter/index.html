@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom Attendance Adapter</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 { color: #333; margin-bottom: 6px; }
+        .subtitle { color: #666; margin-bottom: 24px; font-size: 14px; }
+
+        /* Drop zone */
+        .drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 24px;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #007bff;
+            background: #f0f7ff;
+        }
+        .drop-zone p { color: #666; margin-bottom: 12px; }
+        .file-input { display: none; }
+
+        .upload-btn {
+            background: #007bff; color: white;
+            padding: 10px 24px; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 14px;
+        }
+        .upload-btn:hover { background: #0056b3; }
+
+        /* Status */
+        #status { padding: 10px; color: #666; font-size: 14px; }
+
+        /* Global summary cards */
+        .summary-grid {
+            display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .summary-item {
+            padding: 12px 20px; border-radius: 6px;
+            background: white; border-left: 4px solid #007bff;
+        }
+        .summary-item.present     { border-left-color: #28a745; }
+        .summary-item.first-half  { border-left-color: #17a2b8; }
+        .summary-item.second-half { border-left-color: #fd7e14; }
+        .summary-item.absent      { border-left-color: #dc3545; }
+        .summary-label { font-size: 12px; color: #666; }
+        .summary-value { font-size: 24px; font-weight: bold; color: #333; }
+
+        /* Warnings */
+        #warnings {
+            display: none; background: #fff3cd; border-left: 4px solid #ffc107;
+            padding: 12px; border-radius: 4px; margin-bottom: 20px;
+        }
+        #warnings h3 { font-size: 14px; color: #856404; margin-bottom: 8px; }
+        .warning-item { font-size: 13px; color: #856404; padding: 2px 0; }
+
+        /* Download */
+        .download-btn {
+            display: none; background: #28a745; color: white;
+            padding: 12px 28px; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 15px; font-weight: 500; margin: 16px 0;
+        }
+        .download-btn:hover { background: #218838; }
+
+        /* ========== Course cards ========== */
+        .course-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+
+        .cc-header {
+            display: flex;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .cc-title { font-size: 18px; font-weight: 600; color: #333; }
+        .cc-meta { font-size: 13px; color: #666; }
+
+        .cc-controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 16px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .cc-timeline-wrap { flex: 1; min-width: 300px; }
+        .cc-time-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .cc-settings {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+            min-width: 200px;
+        }
+        .cc-break-info { font-size: 13px; color: #856404; }
+        .cc-threshold {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .cc-threshold input[type="range"] { width: 120px; accent-color: #007bff; }
+        .cc-threshold-value { font-weight: 600; min-width: 36px; }
+
+        .mp-apply-btn {
+            display: none;
+            background: #007bff; color: white;
+            border: none; padding: 4px 14px;
+            border-radius: 4px; font-size: 13px;
+            cursor: pointer; font-weight: 500;
+        }
+        .mp-apply-btn:hover { background: #0056b3; }
+
+        /* Per-card summary */
+        .cc-summary {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .cc-stat {
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .cc-stat.present     { background: #d4edda; color: #155724; }
+        .cc-stat.first-half  { background: #cce5ff; color: #004085; }
+        .cc-stat.second-half { background: #ffe8cc; color: #854d0e; }
+        .cc-stat.absent      { background: #f8d7da; color: #721c24; }
+
+        /* Per-card table */
+        .cc-table-wrap { overflow-x: auto; }
+        .cc-table-wrap table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .cc-table-wrap th, .cc-table-wrap td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
+        .cc-table-wrap th { background: #f8f9fa; font-weight: 600; position: sticky; top: 0; }
+        .cc-table-wrap tr:hover { background: #f9f9f9; }
+
+        /* Presence select */
+        .presence-select {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            outline: none;
+        }
+        .presence-select.present     { background: #d4edda; color: #155724; }
+        .presence-select.first-half  { background: #cce5ff; color: #004085; }
+        .presence-select.second-half { background: #ffe8cc; color: #854d0e; }
+        .presence-select.absent      { background: #f8d7da; color: #721c24; }
+        .presence-select.forced      { border: 2px solid #856404; }
+
+        /* ========== Timeline bar (shared by cards) ========== */
+        .mp-bar {
+            position: relative;
+            height: 48px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            overflow: visible;
+            cursor: crosshair;
+        }
+        .mp-hist {
+            position: absolute;
+            bottom: 0;
+            background: rgba(40, 167, 69, 0.45);
+            min-width: 1px;
+            border-radius: 1px 1px 0 0;
+        }
+        .mp-handle {
+            position: absolute;
+            top: -6px;
+            bottom: -6px;
+            width: 20px;
+            transform: translateX(-50%);
+            cursor: ew-resize;
+            z-index: 10;
+        }
+        .mp-handle-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            transform: translateX(-50%);
+            background: #ffc832;
+        }
+        .mp-handle-grip {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 10px;
+            height: 22px;
+            transform: translate(-50%, -50%);
+            background: #ffc832;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.15);
+        }
+        .mp-handle:hover .mp-handle-grip,
+        .mp-handle.dragging .mp-handle-grip {
+            background: #ffe066;
+            box-shadow: 0 0 6px rgba(255, 200, 50, 0.5);
+        }
+        .mp-handle-time {
+            position: absolute;
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: #ffc832;
+            white-space: nowrap;
+            background: rgba(26,26,46,0.9);
+            padding: 2px 6px;
+            border-radius: 3px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .mp-handle:hover .mp-handle-time,
+        .mp-handle.dragging .mp-handle-time {
+            opacity: 1;
+        }
+
+        /* Start trim overlay + handle */
+        .mp-trim-overlay {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 5;
+            border-radius: 6px 0 0 6px;
+            pointer-events: none;
+        }
+        .mp-start-handle {
+            position: absolute;
+            top: -6px;
+            bottom: -6px;
+            width: 20px;
+            transform: translateX(-50%);
+            cursor: ew-resize;
+            z-index: 11;
+        }
+        .mp-start-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            transform: translateX(-50%);
+            background: #17a2b8;
+        }
+        .mp-start-grip {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 10px;
+            height: 22px;
+            transform: translate(-50%, -50%);
+            background: #17a2b8;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.15);
+        }
+        .mp-start-handle:hover .mp-start-grip,
+        .mp-start-handle.dragging .mp-start-grip {
+            background: #3dd5f3;
+            box-shadow: 0 0 6px rgba(23, 162, 184, 0.5);
+        }
+        .mp-start-time {
+            position: absolute;
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: #17a2b8;
+            white-space: nowrap;
+            background: rgba(26,26,46,0.9);
+            padding: 2px 6px;
+            border-radius: 3px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .mp-start-handle:hover .mp-start-time,
+        .mp-start-handle.dragging .mp-start-time {
+            opacity: 1;
+        }
+        .cc-start-info { font-size: 13px; color: #17a2b8; }
+
+        /* ========== Per-student tooltip (on Seg. hover) ========== */
+        .seg-cell {
+            position: relative;
+            cursor: default;
+        }
+        .tl-tooltip {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            right: 0;
+            width: 320px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 10px 14px 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            z-index: 100;
+        }
+        .tl-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            right: 16px;
+            border: 6px solid transparent;
+            border-top-color: #1a1a2e;
+        }
+        .seg-cell:hover .tl-tooltip { display: block; }
+        .tl-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+        .tl-bar {
+            position: relative;
+            height: 24px;
+            background: #2d2d44;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .tl-seg {
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            background: #28a745;
+            border-radius: 2px;
+            opacity: 0.85;
+        }
+        .tl-break-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ffc832;
+            transform: translateX(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Zoom Attendance Adapter</h1>
+        <p class="subtitle">Carica file CSV Zoom &rarr; genera il report presenze normalizzato</p>
+
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <p>Trascina qui i file CSV Zoom oppure clicca per selezionare</p>
+            <input type="file" id="fileInput" class="file-input" accept=".csv" multiple>
+            <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                Seleziona File CSV
+            </button>
+        </div>
+
+        <div id="status"></div>
+        <div id="summary"></div>
+        <div id="warnings"></div>
+
+        <div id="courseCards"></div>
+
+        <button class="download-btn" id="downloadBtn">Scarica CSV Normalizzato</button>
+    </div>
+
+    <script src="js/zoom-parser.js"></script>
+    <script src="js/break-detector.js"></script>
+    <script src="js/aggregator.js"></script>
+    <script src="js/presence-rules.js"></script>
+    <script src="js/csv-export.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
