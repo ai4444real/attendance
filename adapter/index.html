@@ -72,6 +72,69 @@
         #warnings h3 { font-size: 14px; color: #856404; margin-bottom: 8px; }
         .warning-item { font-size: 13px; color: #856404; padding: 2px 0; }
 
+        /* Course filter */
+        #courseFilter {
+            display: none;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .cf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .cf-header h3 { font-size: 16px; color: #333; margin: 0; }
+        .cf-counter { font-size: 13px; color: #666; }
+        .cf-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .cf-actions button {
+            padding: 5px 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .cf-actions button:hover { background: #f0f0f0; }
+        .cf-actions button.cf-proceed {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+            font-weight: 500;
+        }
+        .cf-actions button.cf-proceed:hover { background: #0056b3; }
+        .cf-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 4px 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+        .cf-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .cf-item:hover { background: #f5f5f5; }
+        .cf-item.pre-selected { font-weight: 600; }
+        .cf-item input[type="checkbox"] { accent-color: #007bff; }
+        .cf-item .cf-count { color: #999; font-size: 12px; margin-left: auto; }
+
         /* Download */
         .download-btn {
             display: none; background: #28a745; color: white;
@@ -162,7 +225,7 @@
         .cc-stat.absent      { background: #f8d7da; color: #721c24; }
 
         /* Per-card table */
-        .cc-table-wrap { overflow-x: auto; }
+        .cc-table-wrap { overflow: visible; }
         .cc-table-wrap table { width: 100%; border-collapse: collapse; font-size: 14px; }
         .cc-table-wrap th, .cc-table-wrap td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
         .cc-table-wrap th { background: #f8f9fa; font-weight: 600; position: sticky; top: 0; }
@@ -392,6 +455,7 @@
         </div>
 
         <div id="status"></div>
+        <div id="courseFilter"></div>
         <div id="summary"></div>
         <div id="warnings"></div>
 

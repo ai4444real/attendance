@@ -79,9 +79,7 @@ const AdapterApp = {
                 return;
             }
 
-            this._initMeetingData();
-            this._recalculateAll();
-            this._render();
+            this._showCourseFilter();
 
         } catch (error) {
             console.error('Errore elaborazione:', error);
@@ -632,6 +630,107 @@ const AdapterApp = {
         document.getElementById('warnings').style.display = 'none';
         document.getElementById('courseCards').innerHTML = '';
         document.getElementById('downloadBtn').style.display = 'none';
+        document.getElementById('courseFilter').style.display = 'none';
+    },
+
+    // ------------------------------------------------------------------
+    // Course filter
+    // ------------------------------------------------------------------
+
+    _isUpperCase(name) {
+        const letters = name.replace(/[^a-zA-ZÀ-ÿ]/g, '');
+        return letters.length > 0 && letters === letters.toUpperCase();
+    },
+
+    _showCourseFilter() {
+        const courseMap = new Map();
+        for (const m of this._meetings) {
+            const name = m.course || '(senza nome)';
+            courseMap.set(name, (courseMap.get(name) || 0) + 1);
+        }
+
+        const sorted = [...courseMap.entries()].sort((a, b) => a[0].localeCompare(b[0], 'it'));
+
+        let listHtml = '';
+        let preSelected = 0;
+        for (const [name, count] of sorted) {
+            const checked = this._isUpperCase(name);
+            if (checked) preSelected++;
+            const cls = checked ? ' pre-selected' : '';
+            listHtml += `
+                <label class="cf-item${cls}">
+                    <input type="checkbox" value="${this._escAttr(name)}" ${checked ? 'checked' : ''}>
+                    <span>${this._escHtml(name)}</span>
+                    <span class="cf-count">${count}</span>
+                </label>`;
+        }
+
+        const filterEl = document.getElementById('courseFilter');
+        filterEl.innerHTML = `
+            <div class="cf-header">
+                <h3>Seleziona i corsi da elaborare</h3>
+                <span class="cf-counter">${preSelected} / ${sorted.length} selezionati</span>
+            </div>
+            <div class="cf-actions">
+                <button class="cf-all">Tutti</button>
+                <button class="cf-none">Nessuno</button>
+                <button class="cf-uppercase">Solo MAIUSCOLO</button>
+                <button class="cf-proceed">Procedi</button>
+            </div>
+            <div class="cf-list">${listHtml}</div>
+        `;
+        filterEl.style.display = 'block';
+
+        const updateCounter = () => {
+            const total = filterEl.querySelectorAll('.cf-item input').length;
+            const checked = filterEl.querySelectorAll('.cf-item input:checked').length;
+            filterEl.querySelector('.cf-counter').textContent = `${checked} / ${total} selezionati`;
+        };
+
+        filterEl.querySelector('.cf-list').addEventListener('change', updateCounter);
+
+        filterEl.querySelector('.cf-all').addEventListener('click', () => {
+            filterEl.querySelectorAll('.cf-item input').forEach(cb => cb.checked = true);
+            updateCounter();
+        });
+
+        filterEl.querySelector('.cf-none').addEventListener('click', () => {
+            filterEl.querySelectorAll('.cf-item input').forEach(cb => cb.checked = false);
+            updateCounter();
+        });
+
+        filterEl.querySelector('.cf-uppercase').addEventListener('click', () => {
+            filterEl.querySelectorAll('.cf-item input').forEach(cb => {
+                cb.checked = this._isUpperCase(cb.value);
+            });
+            updateCounter();
+        });
+
+        filterEl.querySelector('.cf-proceed').addEventListener('click', () => {
+            this._applyCourseFilter();
+        });
+
+        this._showStatus(`${this._meetings.length} meeting trovati. Seleziona i corsi da elaborare.`);
+    },
+
+    _applyCourseFilter() {
+        const filterEl = document.getElementById('courseFilter');
+        const selected = new Set();
+        filterEl.querySelectorAll('.cf-item input:checked').forEach(cb => {
+            selected.add(cb.value);
+        });
+
+        if (selected.size === 0) {
+            this._showStatus('Seleziona almeno un corso.');
+            return;
+        }
+
+        this._meetings = this._meetings.filter(m => selected.has(m.course || '(senza nome)'));
+        filterEl.style.display = 'none';
+
+        this._initMeetingData();
+        this._recalculateAll();
+        this._render();
     },
 
     _showStatus(msg) {

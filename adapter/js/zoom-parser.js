@@ -39,7 +39,7 @@ const ZoomParser = {
         for (let i = 1; i < lines.length; i++) {
             const trimmed = lines[i].trim();
 
-            if (!trimmed) {
+            if (!trimmed || !trimmed.replace(/,/g, '')) {
                 if (currentRows.length > 0) {
                     const m = this._buildMeeting(currentRows, warnings);
                     if (m) meetings.push(m);

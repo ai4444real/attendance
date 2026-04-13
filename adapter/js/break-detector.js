@@ -21,7 +21,7 @@
 const BreakDetector = {
 
     /** Strategy 1 config */
-    valleyDropThreshold: 0.3,   // count must drop below 30% of peak
+    valleyDropThreshold: 0.15,  // count must drop below 15% of peak
     valleyMinMinutes: 5,        // valley must last at least 5 min
 
     /** Strategy 2 config */
@@ -74,6 +74,7 @@ const BreakDetector = {
         if (peak < 2) return null;
 
         const cutoff = peak * this.valleyDropThreshold;
+        const duration = endMs - startMs;
         let best = null;
         let valleyStart = null;
 
@@ -82,18 +83,26 @@ const BreakDetector = {
                 if (valleyStart === null) valleyStart = point.time;
             } else {
                 if (valleyStart !== null) {
-                    const dur = point.time - valleyStart;
-                    if (!best || dur > (best.endMs - best.startMs)) {
-                        best = { startMs: valleyStart, endMs: point.time };
+                    const midValley = (valleyStart + point.time) / 2;
+                    const relPos = (midValley - startMs) / duration;
+                    if (relPos >= 0.15 && relPos <= 0.85) {
+                        const dur = point.time - valleyStart;
+                        if (!best || dur > (best.endMs - best.startMs)) {
+                            best = { startMs: valleyStart, endMs: point.time };
+                        }
                     }
                     valleyStart = null;
                 }
             }
         }
         if (valleyStart !== null) {
-            const dur = endMs - valleyStart;
-            if (!best || dur > (best.endMs - best.startMs)) {
-                best = { startMs: valleyStart, endMs: endMs };
+            const midValley = (valleyStart + endMs) / 2;
+            const relPos = (midValley - startMs) / duration;
+            if (relPos >= 0.15 && relPos <= 0.85) {
+                const dur = endMs - valleyStart;
+                if (!best || dur > (best.endMs - best.startMs)) {
+                    best = { startMs: valleyStart, endMs: endMs };
+                }
             }
         }
 
@@ -160,6 +169,21 @@ const BreakDetector = {
 
         // Must include a significant portion of participants
         if (bestCount < allParticipants.size * this.boundaryMinParticipants) return null;
+
+        // Verify connection count actually drops around this time.
+        // If people just reconnect immediately, it's not a real break.
+        const checkMs = bestTime;
+        const beforeMs = checkMs - 2 * 60000;
+        const afterMs = checkMs + 2 * 60000;
+        let countBefore = 0, countAfter = 0;
+        for (const seg of segs) {
+            const jt = seg.joinTime.getTime(), lt = seg.leaveTime.getTime();
+            if (jt <= beforeMs && lt > beforeMs) countBefore++;
+            if (jt <= afterMs && lt > afterMs) countAfter++;
+        }
+        const peakCount = allParticipants.size;
+        // Connection count must drop to below 50% of participants in the 2 min after
+        if (countAfter > peakCount * 0.5 && countBefore > peakCount * 0.5) return null;
 
         // This is a point-in-time boundary (zero-duration "break")
         return {
