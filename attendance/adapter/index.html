@@ -3,14 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zoom Attendance Adapter</title>
+    <title>Gestione Presenze</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            margin: 0;
             padding: 20px;
-            background: #f5f5f5;
+            background: var(--brand-surface);
+        }
+
+        .workspace-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            margin: -20px -20px 24px;
+            background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--brand-border);
+        }
+
+        .workspace-header-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .workspace-brand img {
+            height: 42px;
+            width: auto;
+            display: block;
+        }
+
+        .workspace-brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .workspace-brand-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--brand-ink);
+        }
+
+        .workspace-brand-subtitle {
+            font-size: 12px;
+            color: var(--brand-muted);
+        }
+
+        .workspace-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-link {
+            text-decoration: none;
+            color: #155e75;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .workspace-link:hover {
+            text-decoration: underline;
+        }
+
+        .workspace-module-badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--brand-pnl-green-soft);
+            color: var(--brand-pnl-green-dark);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .container {
@@ -33,18 +119,18 @@
             margin-bottom: 24px;
         }
         .drop-zone:hover, .drop-zone.dragover {
-            border-color: #007bff;
-            background: #f0f7ff;
+            border-color: var(--brand-pnl-blue);
+            background: var(--brand-pnl-blue-soft);
         }
         .drop-zone p { color: #666; margin-bottom: 12px; }
         .file-input { display: none; }
 
         .upload-btn {
-            background: #007bff; color: white;
+            background: var(--brand-pnl-blue); color: white;
             padding: 10px 24px; border: none; border-radius: 4px;
             cursor: pointer; font-size: 14px;
         }
-        .upload-btn:hover { background: #0056b3; }
+        .upload-btn:hover { background: var(--brand-pnl-blue-dark); }
 
         /* Status */
         #status { padding: 10px; color: #666; font-size: 14px; }
@@ -55,9 +141,9 @@
         }
         .summary-item {
             padding: 12px 20px; border-radius: 6px;
-            background: white; border-left: 4px solid #007bff;
+            background: white; border-left: 4px solid var(--brand-pnl-blue);
         }
-        .summary-item.present     { border-left-color: #28a745; }
+        .summary-item.present     { border-left-color: var(--brand-pnl-green); }
         .summary-item.first-half  { border-left-color: #17a2b8; }
         .summary-item.second-half { border-left-color: #fd7e14; }
         .summary-item.absent      { border-left-color: #dc3545; }
@@ -107,12 +193,12 @@
         }
         .cf-actions button:hover { background: #f0f0f0; }
         .cf-actions button.cf-proceed {
-            background: #007bff;
+            background: var(--brand-pnl-blue);
             color: white;
-            border-color: #007bff;
+            border-color: var(--brand-pnl-blue);
             font-weight: 500;
         }
-        .cf-actions button.cf-proceed:hover { background: #0056b3; }
+        .cf-actions button.cf-proceed:hover { background: var(--brand-pnl-blue-dark); }
         .cf-list {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -132,16 +218,16 @@
         }
         .cf-item:hover { background: #f5f5f5; }
         .cf-item.pre-selected { font-weight: 600; }
-        .cf-item input[type="checkbox"] { accent-color: #007bff; }
+        .cf-item input[type="checkbox"] { accent-color: var(--brand-pnl-blue); }
         .cf-item .cf-count { color: #999; font-size: 12px; margin-left: auto; }
 
         /* Download */
         .download-btn {
-            display: none; background: #28a745; color: white;
+            display: none; background: var(--brand-pnl-green); color: white;
             padding: 12px 28px; border: none; border-radius: 4px;
             cursor: pointer; font-size: 15px; font-weight: 500; margin: 16px 0;
         }
-        .download-btn:hover { background: #218838; }
+        .download-btn:hover { background: var(--brand-pnl-green-dark); }
 
         /* ========== Course cards ========== */
         .course-card {
@@ -194,17 +280,17 @@
             font-size: 13px;
             white-space: nowrap;
         }
-        .cc-threshold input[type="range"] { width: 120px; accent-color: #007bff; }
+        .cc-threshold input[type="range"] { width: 120px; accent-color: var(--brand-pnl-blue); }
         .cc-threshold-value { font-weight: 600; min-width: 36px; }
 
         .mp-apply-btn {
             display: none;
-            background: #007bff; color: white;
+            background: var(--brand-pnl-blue); color: white;
             border: none; padding: 4px 14px;
             border-radius: 4px; font-size: 13px;
             cursor: pointer; font-weight: 500;
         }
-        .mp-apply-btn:hover { background: #0056b3; }
+        .mp-apply-btn:hover { background: var(--brand-pnl-blue-dark); }
 
         /* Per-card summary */
         .cc-summary {
@@ -442,9 +528,25 @@
     </style>
 </head>
 <body>
+    <header class="workspace-header">
+        <div class="workspace-header-inner">
+            <a class="workspace-brand" href="/">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="workspace-brand-text">
+                    <span class="workspace-brand-title">Rebekko Webapps</span>
+                    <span class="workspace-brand-subtitle">PNL Evolution</span>
+                </div>
+            </a>
+            <nav class="workspace-nav" aria-label="Workspace navigation">
+                <a class="workspace-link" href="/">Home</a>
+                <a class="workspace-link" href="/attendance">Attendance</a>
+                <span class="workspace-module-badge">Gestione presenze</span>
+            </nav>
+        </div>
+    </header>
     <div class="container">
-        <h1>Zoom Attendance Adapter</h1>
-        <p class="subtitle">Carica file CSV Zoom &rarr; genera il report presenze normalizzato</p>
+        <h1>Gestione presenze</h1>
+        <p class="subtitle">Carica i file CSV Zoom, lavora sui dati di presenza ed esporta il report normalizzato.</p>
 
         <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
             <p>Trascina qui i file CSV Zoom oppure clicca per selezionare</p>

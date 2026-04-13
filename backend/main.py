@@ -7,7 +7,7 @@ At the moment it serves the Attendance module and its related APIs.
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
@@ -38,10 +38,12 @@ app.add_middleware(
 # Attendance module paths
 ATTENDANCE_STATIC_DIR = os.path.join(WORKSPACE_DIR, "attendance", "static")
 ATTENDANCE_INDEX_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "index.html")
+ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
 # Mount current module static files
 app.mount("/attendance/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), name="attendance-static")
+app.mount("/attendance/manage", StaticFiles(directory=ATTENDANCE_ADAPTER_DIR, html=True), name="attendance-manage")
 app.mount("/assets", StaticFiles(directory=GLOBAL_ASSETS_DIR), name="global-assets")
 
 
@@ -263,9 +265,9 @@ async def attendance_home():
                     <p>Apri la schermata attuale per caricare i file CSV trackcc-like, analizzare i dati e usare filtri ed export.</p>
                 </a>
                 <a class="card" href="/attendance/manage">
-                    <span class="card-label">Prossimo step</span>
+                    <span class="card-label">Attivo</span>
                     <h2>Gestione presenze</h2>
-                    <p>Area dedicata al flusso operativo di gestione. Per ora e' un placeholder pronto per lo sviluppo successivo.</p>
+                    <p>Apri il flusso operativo Zoom: carica i report, lavora sui dati e esporta il formato normalizzato.</p>
                 </a>
             </div>
         </section>
@@ -290,26 +292,8 @@ async def attendance_view():
 
 
 @app.get("/attendance/manage")
-@app.get("/attendance/manage/")
 async def attendance_manage():
-    body_html = """
-        <section>
-            <div class="card">
-                <span class="card-label">Placeholder</span>
-                <h2>Gestione presenze</h2>
-                <p>Questa sezione verra' sviluppata a breve. Lo spazio e' gia' predisposto per ospitare il flusso operativo di gestione presenze.</p>
-                <div class="placeholder-note">Per ora puoi continuare a usare "Visualizzazione presenze" dalla sezione Attendance.</div>
-            </div>
-        </section>
-    """
-    return HTMLResponse(
-        render_module_shell(
-            "Gestione presenze",
-            "Area in preparazione per il flusso di gestione operativo del modulo attendance.",
-            body_html
-        ),
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
-    )
+    return RedirectResponse(url="/attendance/manage/", status_code=307)
 
 
 @app.get("/health")
