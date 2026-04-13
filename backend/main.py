@@ -45,146 +45,159 @@ app.mount("/attendance/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), na
 app.mount("/assets", StaticFiles(directory=GLOBAL_ASSETS_DIR), name="global-assets")
 
 
-@app.get("/")
-async def workspace_home():
-    return HTMLResponse(
-        """
+def render_module_shell(title: str, subtitle: str, body_html: str) -> str:
+    return f"""
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rebekko Webapps</title>
+    <title>{title}</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
     <style>
-        * { box-sizing: border-box; }
-        body {
+        * {{ box-sizing: border-box; }}
+        body {{
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-            background: #f4f7f8;
+            background: var(--brand-surface);
             color: #1f2933;
-        }
-        .topbar {
+        }}
+        .topbar {{
             position: sticky;
             top: 0;
             z-index: 10;
             background: rgba(255,255,255,0.92);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid #d9e2ec;
-        }
-        .topbar-inner {
-            max-width: 1040px;
+            border-bottom: 1px solid var(--brand-border);
+        }}
+        .topbar-inner {{
+            max-width: 1120px;
             margin: 0 auto;
             padding: 14px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 20px;
-        }
-        .brand {
+            flex-wrap: wrap;
+        }}
+        .brand {{
             display: flex;
             align-items: center;
             gap: 14px;
             text-decoration: none;
             color: inherit;
-        }
-        .brand img {
+        }}
+        .brand img {{
             height: 42px;
             width: auto;
             display: block;
-        }
-        .brand-text {
+        }}
+        .brand-text {{
             display: flex;
             flex-direction: column;
             gap: 2px;
-        }
-        .brand-title {
+        }}
+        .brand-title {{
             font-size: 14px;
             font-weight: 700;
             letter-spacing: 0.04em;
             text-transform: uppercase;
-            color: #102a43;
-        }
-        .brand-subtitle {
+            color: var(--brand-ink);
+        }}
+        .brand-subtitle {{
             font-size: 12px;
-            color: #52606d;
-        }
-        .nav-link {
+            color: var(--brand-muted);
+        }}
+        .nav {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }}
+        .nav a {{
             text-decoration: none;
             color: #155e75;
             font-weight: 600;
-        }
-        .nav-link:hover {
+        }}
+        .nav a:hover {{
             text-decoration: underline;
-        }
-        .page {
-            max-width: 1040px;
+        }}
+        .page {{
+            max-width: 1120px;
             margin: 0 auto;
-            padding: 48px 24px 80px;
-        }
-        .hero {
-            background: linear-gradient(135deg, #16324f 0%, #1f7a8c 100%);
+            padding: 40px 24px 72px;
+        }}
+        .hero {{
+            background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%);
             color: white;
             border-radius: 18px;
-            padding: 40px;
-            margin-bottom: 28px;
+            padding: 36px;
+            margin-bottom: 26px;
             box-shadow: 0 14px 30px rgba(22, 50, 79, 0.18);
-        }
-        .hero h1 {
-            margin: 0 0 12px;
-            font-size: 40px;
-        }
-        .hero p {
+        }}
+        .hero h1 {{
+            margin: 0 0 10px;
+            font-size: 36px;
+        }}
+        .hero p {{
             margin: 0;
-            font-size: 18px;
-            line-height: 1.5;
-            max-width: 720px;
-            opacity: 0.95;
-        }
-        .section-title {
-            margin: 0 0 14px;
-            font-size: 20px;
-        }
-        .apps-grid {
+            font-size: 17px;
+            line-height: 1.55;
+            max-width: 760px;
+            opacity: 0.96;
+        }}
+        .cards {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
-        }
-        .app-card {
+        }}
+        .card {{
             background: white;
             border-radius: 16px;
             padding: 24px;
+            border: 1px solid var(--brand-border);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }}
+        a.card {{
             text-decoration: none;
             color: inherit;
-            border: 1px solid #d9e2ec;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-        }
-        .app-card:hover {
+        }}
+        a.card:hover {{
             transform: translateY(-3px);
-            border-color: #1f7a8c;
-            box-shadow: 0 14px 28px rgba(31, 122, 140, 0.14);
-        }
-        .app-label {
+            border-color: var(--brand-pnl-blue);
+            box-shadow: 0 14px 28px rgba(0, 80, 144, 0.14);
+        }}
+        .card-label {{
             display: inline-block;
             margin-bottom: 10px;
             padding: 6px 10px;
             border-radius: 999px;
-            background: #dff3f6;
-            color: #155e75;
+            background: var(--brand-pnl-blue-soft);
+            color: var(--brand-pnl-blue);
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 0.04em;
             text-transform: uppercase;
-        }
-        .app-card h2 {
+        }}
+        .card h2 {{
             margin: 0 0 10px;
             font-size: 28px;
-        }
-        .app-card p {
+        }}
+        .card p {{
             margin: 0;
             line-height: 1.6;
-            color: #52606d;
-        }
+            color: var(--brand-muted);
+        }}
+        .placeholder-note {{
+            margin-top: 14px;
+            padding: 12px 14px;
+            background: var(--brand-pnl-green-soft);
+            color: var(--brand-green-dark, #0f5132);
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+        }}
     </style>
 </head>
 <body>
@@ -194,31 +207,46 @@ async def workspace_home():
                 <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
                 <div class="brand-text">
                     <span class="brand-title">Rebekko Webapps</span>
-                    <span class="brand-subtitle">Workspace applicativo</span>
+                    <span class="brand-subtitle">PNL Evolution</span>
                 </div>
             </a>
-            <a class="nav-link" href="/attendance">Apri Attendance</a>
+            <nav class="nav" aria-label="Workspace navigation">
+                <a href="/">Home</a>
+                <a href="/attendance">Attendance</a>
+            </nav>
         </div>
     </header>
     <main class="page">
         <section class="hero">
-            <h1>Rebekko Webapps</h1>
-            <p>Workspace applicativo per i servizi interni Rebekko. Da qui si accede ai moduli attivi, a partire da Attendance.</p>
+            <h1>{title}</h1>
+            <p>{subtitle}</p>
         </section>
+        {body_html}
+    </main>
+</body>
+</html>
+    """
+
+
+@app.get("/")
+async def workspace_home():
+    body_html = """
         <section>
-            <h2 class="section-title">Applicazioni disponibili</h2>
-            <div class="apps-grid">
-                <a class="app-card" href="/attendance">
-                    <span class="app-label">Disponibile</span>
+            <div class="cards">
+                <a class="card" href="/attendance">
+                    <span class="card-label">Disponibile</span>
                     <h2>Attendance</h2>
                     <p>Caricamento e analisi presenze su dati trackcc-like, con filtri, statistiche ed export.</p>
                 </a>
             </div>
         </section>
-    </main>
-</body>
-</html>
-        """,
+    """
+    return HTMLResponse(
+        render_module_shell(
+            "Rebekko Webapps",
+            "Workspace applicativo per i servizi interni Rebekko. Da qui si accede ai moduli attivi, a partire da Attendance.",
+            body_html
+        ),
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -226,8 +254,60 @@ async def workspace_home():
 @app.get("/attendance")
 @app.get("/attendance/")
 async def attendance_home():
+    body_html = """
+        <section>
+            <div class="cards">
+                <a class="card" href="/attendance/view">
+                    <span class="card-label">Attivo</span>
+                    <h2>Visualizzazione presenze</h2>
+                    <p>Apri la schermata attuale per caricare i file CSV trackcc-like, analizzare i dati e usare filtri ed export.</p>
+                </a>
+                <a class="card" href="/attendance/manage">
+                    <span class="card-label">Prossimo step</span>
+                    <h2>Gestione presenze</h2>
+                    <p>Area dedicata al flusso operativo di gestione. Per ora e' un placeholder pronto per lo sviluppo successivo.</p>
+                </a>
+            </div>
+        </section>
+    """
+    return HTMLResponse(
+        render_module_shell(
+            "Attendance",
+            "Scegli l'area di lavoro del modulo attendance.",
+            body_html
+        ),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/view")
+@app.get("/attendance/view/")
+async def attendance_view():
     return FileResponse(
         ATTENDANCE_INDEX_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/manage")
+@app.get("/attendance/manage/")
+async def attendance_manage():
+    body_html = """
+        <section>
+            <div class="card">
+                <span class="card-label">Placeholder</span>
+                <h2>Gestione presenze</h2>
+                <p>Questa sezione verra' sviluppata a breve. Lo spazio e' gia' predisposto per ospitare il flusso operativo di gestione presenze.</p>
+                <div class="placeholder-note">Per ora puoi continuare a usare "Visualizzazione presenze" dalla sezione Attendance.</div>
+            </div>
+        </section>
+    """
+    return HTMLResponse(
+        render_module_shell(
+            "Gestione presenze",
+            "Area in preparazione per il flusso di gestione operativo del modulo attendance.",
+            body_html
+        ),
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 

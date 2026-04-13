@@ -24,6 +24,9 @@ webapps/
 ├── attendance/               # Prima applicazione attiva
 ├── backend/
 │   └── main.py               # Backend FastAPI unico
+├── assets/
+│   ├── brand/                # Logo e asset visivi globali
+│   └── styles/brand.css      # Palette colore condivisa
 ├── requirements.txt          # Dipendenze condivise
 ├── .env.example              # Template configurazione locale
 ├── setup-local.bat           # Setup ambiente locale

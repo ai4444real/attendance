@@ -1,0 +1,14 @@
+:root {
+    --brand-pnl-blue: #005090;
+    --brand-pnl-blue-dark: #003c6c;
+    --brand-pnl-blue-soft: #e6f0f9;
+
+    --brand-pnl-green: #00a038;
+    --brand-pnl-green-dark: #007a2b;
+    --brand-pnl-green-soft: #e7f6ec;
+
+    --brand-ink: #102a43;
+    --brand-muted: #52606d;
+    --brand-surface: #f4f7f8;
+    --brand-border: #d9e2ec;
+}

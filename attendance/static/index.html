@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestione Presenze</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📊</text></svg>">
+    <link rel="stylesheet" href="/assets/styles/brand.css">
     <style>
         * {
             margin: 0;
@@ -130,7 +131,7 @@
         }
 
         .upload-btn {
-            background: #007bff;
+            background: var(--brand-pnl-blue);
             color: white;
             padding: 12px 24px;
             border: none;
@@ -141,7 +142,7 @@
         }
 
         .upload-btn:hover {
-            background: #0056b3;
+            background: var(--brand-pnl-blue-dark);
         }
 
         .stats {
@@ -544,12 +545,13 @@
             </a>
             <nav class="workspace-nav" aria-label="Workspace navigation">
                 <a class="workspace-link" href="/">Home</a>
-                <span class="workspace-module-badge">Attendance</span>
+                <a class="workspace-link" href="/attendance">Attendance</a>
+                <span class="workspace-module-badge">Visualizzazione presenze</span>
             </nav>
         </div>
     </header>
     <div class="container">
-        <h1>Gestione Presenze - Sistema Attendance</h1>
+        <h1>Visualizzazione presenze</h1>
 
         <div class="upload-section">
             <input type="file" id="csvFile" class="file-input" accept=".csv">
