@@ -5,6 +5,8 @@ Contenitore delle webapp del progetto Rebekko.
 ## Applicazioni
 
 - [attendance](attendance/README.md): importazione, normalizzazione e analisi delle presenze
+- [docs/DEPLOY_UBUNTU_SERVER.md](docs/DEPLOY_UBUNTU_SERVER.md): runbook del deploy su server Ubuntu
+- [infra/caddy/Caddyfile.example](infra/caddy/Caddyfile.example): esempio di routing pubblico con Caddy
 
 ## Root del workspace
 
@@ -14,7 +16,9 @@ Nella root di `webapps/` stanno solo gli elementi condivisi o di orchestrazione:
 - configurazione ambiente;
 - dipendenze Python;
 - script di avvio locale;
-- containerizzazione;
+- script di deploy;
+- configurazione infrastrutturale condivisa;
+- containerizzazione eventuale;
 - documentazione generale del workspace.
 
 ## Struttura
@@ -24,11 +28,17 @@ webapps/
 ├── attendance/               # Prima applicazione attiva
 ├── backend/
 │   └── main.py               # Backend FastAPI unico
+├── docs/
+│   └── DEPLOY_UBUNTU_SERVER.md
+├── infra/
+│   └── caddy/
+│       └── Caddyfile.example # Routing pubblico di riferimento
 ├── assets/
 │   ├── brand/                # Logo e asset visivi globali
 │   └── styles/brand.css      # Palette colore condivisa
 ├── requirements.txt          # Dipendenze condivise
 ├── .env.example              # Template configurazione locale
+├── deploy.sh                 # Deploy one-command sul server Ubuntu
 ├── setup-local.bat           # Setup ambiente locale
 ├── start-server.bat          # Avvio server locale
 └── .gitignore

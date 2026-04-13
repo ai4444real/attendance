@@ -1,0 +1,11 @@
+{
+    email admin@pnlevolution.com
+}
+
+automation.pnlevolution.com {
+    reverse_proxy localhost:5678
+}
+
+webapps.pnlevolution.com {
+    reverse_proxy 127.0.0.1:8080
+}

@@ -1,16 +1,16 @@
 @echo off
 REM ============================================================================
-REM Attendance System - Local Development Server
+REM Rebekko Webapps - Local Development Server
 REM ============================================================================
 REM
-REM Questo script avvia il server FastAPI in locale su http://localhost:8080
-REM Usa questo per testare modifiche prima del deploy su Render
+REM Questo script avvia il backend FastAPI del workspace in locale
+REM su http://localhost:8080
 REM
 REM ============================================================================
 
 echo.
 echo ========================================
-echo   Attendance System - Local Server
+echo   Rebekko Webapps - Local Server
 echo ========================================
 echo.
 
