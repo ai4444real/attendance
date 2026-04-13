@@ -1,8 +1,8 @@
 """
-Rebekko Attendance System - FastAPI Server
+Rebekko Webapps - FastAPI Server
 
-A professional web application for managing and analyzing school attendance data.
-This FastAPI server serves static files and provides API endpoints for future features.
+Single backend entry point for the Rebekko webapps workspace.
+At the moment it serves the Attendance module and its related APIs.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -14,8 +14,12 @@ import os
 import httpx
 from dotenv import load_dotenv
 
-# Load environment variables from .env file (for local development)
-load_dotenv()
+# Resolve workspace paths from the backend package location
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+WORKSPACE_DIR = os.path.dirname(BACKEND_DIR)
+
+# Load environment variables from the workspace .env file (for local development)
+load_dotenv(os.path.join(WORKSPACE_DIR, ".env"))
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -33,8 +37,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Attendance module paths
+ATTENDANCE_STATIC_DIR = os.path.join(WORKSPACE_DIR, "attendance", "static")
+ATTENDANCE_INDEX_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "index.html")
+ATTENDANCE_OAUTH_CALLBACK_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "oauth-callback.html")
+
+# Mount current module static files
+app.mount("/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), name="static")
 
 
 @app.get("/")
@@ -42,7 +51,7 @@ async def root():
     """
     Serve the main application page
     """
-    return FileResponse('static/index.html')
+    return FileResponse(ATTENDANCE_INDEX_FILE)
 
 
 @app.get("/oauth-callback")
@@ -51,7 +60,7 @@ async def oauth_callback():
     OAuth callback handler - serves the callback page that communicates with parent window
     """
     from fastapi.responses import FileResponse
-    response = FileResponse('static/oauth-callback.html')
+    response = FileResponse(ATTENDANCE_OAUTH_CALLBACK_FILE)
     # Fix COOP warning by allowing same-origin window access
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
     return response
@@ -185,7 +194,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
 
     uvicorn.run(
-        "app:app",
+        "backend.main:app",
         host="0.0.0.0",
         port=port,
         reload=True  # Auto-reload on code changes (development only)

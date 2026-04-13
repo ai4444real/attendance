@@ -7,16 +7,19 @@
   🚀 start-server.bat
      → Avvia il server locale su http://localhost:8080
      → Usa questo per testare modifiche in locale
+     → Si trova nella root `webapps\`
      → Doppio click per avviare
      → CTRL+C per fermare
 
   🔧 setup-local.bat
      → Setup iniziale (prima volta)
-     → Crea .env, installa dipendenze, guida configurazione
+     → Installa dipendenze e prepara la configurazione locale
+     → Si trova nella root `webapps\`
      → Esegui questo se è la prima volta che configuri l'ambiente locale
 
   📦 install-dependencies.bat
      → Installa o aggiorna le dipendenze Python
+     → Si trova nella root `webapps\`
      → Usa dopo aver aggiornato requirements.txt
 
 ================================================================================
@@ -24,7 +27,7 @@
 🎯 Quick Start (prima volta):
 
   1. Doppio click su: setup-local.bat
-  2. Segui le istruzioni per configurare .env e OAuth
+  2. Segui le istruzioni per configurare l'ambiente locale
   3. Doppio click su: start-server.bat
   4. Apri http://localhost:8080 nel browser
 
@@ -41,16 +44,16 @@
 
 📝 File importanti:
 
-  .env              → Variabili d'ambiente (SECRET, non committare!)
+  .env              → Variabili d'ambiente locali (opzionale, non committare!)
   .env.example      → Template per .env
-  LOCAL_SETUP.md    → Guida dettagliata setup locale
+  attendance\docs\LOCAL_SETUP.md    → Guida dettagliata setup locale
   requirements.txt  → Dipendenze Python
 
 ================================================================================
 
 🆘 Problemi comuni:
 
-  ❌ "File .env non trovato"
+  ❌ Ti serve una configurazione locale aggiuntiva
      → Esegui setup-local.bat oppure copia .env.example a .env
 
   ❌ "GOOGLE_CLIENT_SECRET not set"
@@ -74,6 +77,6 @@
 
 ================================================================================
 
-📚 Documentazione completa: LOCAL_SETUP.md
+📚 Documentazione completa: attendance\docs\LOCAL_SETUP.md
 
 ================================================================================

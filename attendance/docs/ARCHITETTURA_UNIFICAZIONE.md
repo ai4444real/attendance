@@ -17,9 +17,10 @@ Il principio guida e' questo:
 
 ## Stato attuale del repository
 
-### 1. Root: analisi presenze su formato "trackcc-like"
+### 1. Modulo attendance: analisi presenze su formato "trackcc-like"
 
-Nella root c'e' l'app principale servita da `app.py` e visualizzata tramite `static/index.html`.
+Nel modulo `attendance/` c'e' il frontend principale in `static/index.html`.
+Il backend FastAPI che oggi lo serve sta invece nella root del workspace `webapps/`, in `backend/main.py`.
 
 Oggi questa parte copre soprattutto:
 

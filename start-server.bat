@@ -14,20 +14,6 @@ echo   Attendance System - Local Server
 echo ========================================
 echo.
 
-REM Check if .env file exists
-if not exist .env (
-    echo [ERRORE] File .env non trovato!
-    echo.
-    echo Devi creare il file .env prima di avviare il server.
-    echo.
-    echo Segui questi passi:
-    echo   1. Copia .env.example a .env
-    echo   2. Modifica .env e inserisci il GOOGLE_CLIENT_SECRET da Render
-    echo.
-    pause
-    exit /b 1
-)
-
 REM Check if Python is installed
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -39,7 +25,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [OK] File .env trovato
+if exist .env (
+    echo [OK] File .env trovato
+) else (
+    echo [INFO] File .env non presente: avvio con configurazione di default
+)
 echo [OK] Python installato
 echo.
 
@@ -74,7 +64,7 @@ echo ========================================
 echo.
 
 REM Start the FastAPI server
-python app.py
+python -m backend.main
 
 REM If we get here, the server stopped
 echo.

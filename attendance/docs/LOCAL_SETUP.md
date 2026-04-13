@@ -17,7 +17,7 @@ Guida per eseguire l'applicazione Attendance System in locale per testing e svil
 
 ```bash
 git clone <repository-url>
-cd attendance
+cd webapps
 ```
 
 ### 2. Installa le dipendenze Python
@@ -88,7 +88,7 @@ http://localhost:8080/oauth-callback
 ### Metodo 1: Script principale (con auto-reload)
 
 ```bash
-python app.py
+python -m backend.main
 ```
 
 Il server partirà su: **http://localhost:8080**
@@ -96,7 +96,7 @@ Il server partirà su: **http://localhost:8080**
 ### Metodo 2: Uvicorn diretto
 
 ```bash
-uvicorn app:app --reload --host 0.0.0.0 --port 8080
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
 ---
@@ -160,20 +160,28 @@ lsof -i :8080
 ## 📁 Struttura del Progetto
 
 ```
-attendance/
-├── app.py                      # FastAPI server principale
-├── requirements.txt            # Dipendenze Python
+webapps/
+├── backend/
+│   ├── __init__.py             # Backend package
+│   └── main.py                 # FastAPI server principale del workspace
+├── requirements.txt            # Dipendenze Python condivise
 ├── .env                        # Variabili d'ambiente (NON committato)
-├── .env.example               # Template per .env
-├── static/
-│   ├── index.html             # Frontend principale
-│   ├── courses-config.js      # Configurazione corsi
-│   ├── js/
-│   │   ├── google-auth.js     # OAuth handler
-│   │   ├── google-calendar-api.js  # Calendar API wrapper
-│   │   └── oauth-config.js    # OAuth config loader
-│   └── oauth-callback.html    # OAuth callback page
-└── LOCAL_SETUP.md             # Questa guida
+├── .env.example                # Template per .env
+├── setup-local.bat             # Setup locale Windows
+├── start-server.bat            # Avvio server locale Windows
+└── attendance/
+    ├── docs/
+    │   └── LOCAL_SETUP.md      # Questa guida
+    ├── data/                   # File di lavoro e dataset storici
+    ├── adapter/                # Prototipo Zoom adapter
+    └── static/
+        ├── index.html          # Frontend principale del modulo
+        ├── courses-config.js   # Configurazione corsi
+        ├── js/
+        │   ├── google-auth.js  # OAuth handler
+        │   ├── google-calendar-api.js  # Calendar API wrapper
+        │   └── oauth-config.js # OAuth config loader
+        └── oauth-callback.html # OAuth callback page
 ```
 
 ---
