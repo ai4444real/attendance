@@ -56,12 +56,6 @@
   ❌ Ti serve una configurazione locale aggiuntiva
      → Esegui setup-local.bat oppure copia .env.example a .env
 
-  ❌ "GOOGLE_CLIENT_SECRET not set"
-     → Apri .env e incolla il secret da Render
-
-  ❌ "redirect_uri_mismatch"
-     → Verifica OAuth Console: http://localhost:8080/oauth-callback
-
   ❌ "Port 8080 already in use"
      → Chiudi altre applicazioni sulla porta 8080
      → Oppure cambia PORT nel file .env

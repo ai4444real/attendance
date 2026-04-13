@@ -7,7 +7,6 @@ Guida per eseguire l'applicazione Attendance System in locale per testing e svil
 - Python 3.9 o superiore
 - pip (package manager Python)
 - Git
-- Account Google Cloud con OAuth configurato
 
 ---
 
@@ -60,29 +59,6 @@ PORT=8080
 
 ⚠️ **IMPORTANTE**: Il file `.env` non viene committato su git (è in `.gitignore`). Non condividerlo mai!
 
-### 4. Configura Google OAuth Console
-
-Per permettere l'autenticazione da localhost:
-
-1. Vai su: https://console.cloud.google.com/apis/credentials
-2. Trova il tuo **OAuth 2.0 Client ID**
-3. Clicca per modificarlo
-4. Aggiungi questi URL:
-
-**Authorized JavaScript origins:**
-```
-http://localhost:8080
-```
-
-**Authorized redirect URIs:**
-```
-http://localhost:8080/oauth-callback
-```
-
-5. **Salva** le modifiche
-
----
-
 ## ▶️ Avvio del Server Locale
 
 ### Metodo 1: Script principale (con auto-reload)
@@ -105,19 +81,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
 
 1. Apri il browser e vai su: http://localhost:8080
 2. Dovresti vedere l'applicazione Attendance System
-3. Prova a connetterti a Google Calendar:
-   - Clicca "Connetti Google Calendar"
-   - Autorizza l'applicazione
-   - Se tutto funziona, vedrai "✅ Connesso!"
-
 ### Test delle nuove feature:
-
-#### Calendar Selection:
-1. Connetti Google Calendar
-2. Clicca "Mostra Calendari"
-3. Apri la console del browser (F12)
-4. Dovresti vedere tutti i calendari disponibili
-5. Copia un ID calendario e usa: `CalendarIntegration.selectCalendar("id")`
 
 #### Inactive Students Detection:
 1. Carica un file CSV
@@ -133,11 +97,6 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
 - Verifica che il file `.env` esista
 - Verifica che contenga il secret corretto
 - Riavvia il server dopo aver modificato `.env`
-
-### Errore OAuth: "redirect_uri_mismatch"
-- Controlla che `http://localhost:8080/oauth-callback` sia nelle Authorized redirect URIs
-- Verifica di non avere una porta diversa (es. 8000 invece di 8080)
-- Attendi qualche minuto dopo aver salvato le modifiche su Google Cloud Console
 
 ### Il server non parte
 ```bash
@@ -178,10 +137,7 @@ webapps/
         ├── index.html          # Frontend principale del modulo
         ├── courses-config.js   # Configurazione corsi
         ├── js/
-        │   ├── google-auth.js  # OAuth handler
-        │   ├── google-calendar-api.js  # Calendar API wrapper
-        │   └── oauth-config.js # OAuth config loader
-        └── oauth-callback.html # OAuth callback page
+        └── ...
 ```
 
 ---

@@ -5,13 +5,11 @@ Single backend entry point for the Rebekko webapps workspace.
 At the moment it serves the Attendance module and its related APIs.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import os
-import httpx
 from dotenv import load_dotenv
 
 # Resolve workspace paths from the backend package location
@@ -23,15 +21,15 @@ load_dotenv(os.path.join(WORKSPACE_DIR, ".env"))
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Rebekko Attendance System",
-    description="Sistema web per la gestione e l'analisi delle presenze scolastiche",
+    title="Rebekko Webapps",
+    description="Workspace backend per le webapp del progetto Rebekko",
     version="1.0.0"
 )
 
-# CORS middleware (for development and Google OAuth)
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual domains
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,151 +38,203 @@ app.add_middleware(
 # Attendance module paths
 ATTENDANCE_STATIC_DIR = os.path.join(WORKSPACE_DIR, "attendance", "static")
 ATTENDANCE_INDEX_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "index.html")
-ATTENDANCE_OAUTH_CALLBACK_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "oauth-callback.html")
+GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
 # Mount current module static files
-app.mount("/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), name="static")
+app.mount("/attendance/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), name="attendance-static")
+app.mount("/assets", StaticFiles(directory=GLOBAL_ASSETS_DIR), name="global-assets")
 
 
 @app.get("/")
-async def root():
-    """
-    Serve the main application page
-    """
-    return FileResponse(ATTENDANCE_INDEX_FILE)
+async def workspace_home():
+    return HTMLResponse(
+        """
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rebekko Webapps</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: #f4f7f8;
+            color: #1f2933;
+        }
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid #d9e2ec;
+        }
+        .topbar-inner {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+        .brand img {
+            height: 42px;
+            width: auto;
+            display: block;
+        }
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .brand-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #102a43;
+        }
+        .brand-subtitle {
+            font-size: 12px;
+            color: #52606d;
+        }
+        .nav-link {
+            text-decoration: none;
+            color: #155e75;
+            font-weight: 600;
+        }
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+        .page {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: 48px 24px 80px;
+        }
+        .hero {
+            background: linear-gradient(135deg, #16324f 0%, #1f7a8c 100%);
+            color: white;
+            border-radius: 18px;
+            padding: 40px;
+            margin-bottom: 28px;
+            box-shadow: 0 14px 30px rgba(22, 50, 79, 0.18);
+        }
+        .hero h1 {
+            margin: 0 0 12px;
+            font-size: 40px;
+        }
+        .hero p {
+            margin: 0;
+            font-size: 18px;
+            line-height: 1.5;
+            max-width: 720px;
+            opacity: 0.95;
+        }
+        .section-title {
+            margin: 0 0 14px;
+            font-size: 20px;
+        }
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .app-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            text-decoration: none;
+            color: inherit;
+            border: 1px solid #d9e2ec;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .app-card:hover {
+            transform: translateY(-3px);
+            border-color: #1f7a8c;
+            box-shadow: 0 14px 28px rgba(31, 122, 140, 0.14);
+        }
+        .app-label {
+            display: inline-block;
+            margin-bottom: 10px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #dff3f6;
+            color: #155e75;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .app-card h2 {
+            margin: 0 0 10px;
+            font-size: 28px;
+        }
+        .app-card p {
+            margin: 0;
+            line-height: 1.6;
+            color: #52606d;
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="brand" href="/">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="brand-text">
+                    <span class="brand-title">Rebekko Webapps</span>
+                    <span class="brand-subtitle">Workspace applicativo</span>
+                </div>
+            </a>
+            <a class="nav-link" href="/attendance">Apri Attendance</a>
+        </div>
+    </header>
+    <main class="page">
+        <section class="hero">
+            <h1>Rebekko Webapps</h1>
+            <p>Workspace applicativo per i servizi interni Rebekko. Da qui si accede ai moduli attivi, a partire da Attendance.</p>
+        </section>
+        <section>
+            <h2 class="section-title">Applicazioni disponibili</h2>
+            <div class="apps-grid">
+                <a class="app-card" href="/attendance">
+                    <span class="app-label">Disponibile</span>
+                    <h2>Attendance</h2>
+                    <p>Caricamento e analisi presenze su dati trackcc-like, con filtri, statistiche ed export.</p>
+                </a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
+        """,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
 
 
-@app.get("/oauth-callback")
-async def oauth_callback():
-    """
-    OAuth callback handler - serves the callback page that communicates with parent window
-    """
-    from fastapi.responses import FileResponse
-    response = FileResponse(ATTENDANCE_OAUTH_CALLBACK_FILE)
-    # Fix COOP warning by allowing same-origin window access
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
-    return response
+@app.get("/attendance")
+@app.get("/attendance/")
+async def attendance_home():
+    return FileResponse(
+        ATTENDANCE_INDEX_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
 
 
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint for monitoring
-    """
-    return {"status": "healthy", "service": "rebekko-attendance"}
-
-
-@app.get("/api/oauth/config")
-async def get_oauth_config():
-    """
-    Get public OAuth configuration (no secrets)
-    Frontend uses this to avoid hardcoding client ID
-    """
-    return {
-        "clientId": GOOGLE_CLIENT_ID,
-        "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
-        "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
-        "tokenEndpoint": "https://oauth2.googleapis.com/token",
-        "redirectUri": "/oauth-callback",
-        "usePKCE": True
-    }
-
-
-# Google OAuth Configuration (server-side only)
-# Client ID is public and can be hardcoded
-GOOGLE_CLIENT_ID = "572268474022-54j1dba72gm26n00oi42ijrhv3ielep1.apps.googleusercontent.com"
-# Client Secret MUST be set as environment variable on Render
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-
-if not GOOGLE_CLIENT_SECRET:
-    print("WARNING: GOOGLE_CLIENT_SECRET environment variable not set. OAuth will not work.")
-
-
-# Request models for OAuth endpoints
-class TokenExchangeRequest(BaseModel):
-    code: str
-    code_verifier: str
-    redirect_uri: str
-
-
-class TokenRefreshRequest(BaseModel):
-    refresh_token: str
-
-
-@app.post("/api/oauth/token")
-async def exchange_oauth_token(request: TokenExchangeRequest):
-    """
-    Exchange authorization code for access token.
-    Client secret is kept secure on the server side.
-    """
-    try:
-        # Debug logging
-        print(f"[DEBUG] Token exchange request:")
-        print(f"  - redirect_uri: {request.redirect_uri}")
-        print(f"  - client_id: {GOOGLE_CLIENT_ID}")
-        print(f"  - client_secret present: {bool(GOOGLE_CLIENT_SECRET)}")
-        print(f"  - client_secret length: {len(GOOGLE_CLIENT_SECRET) if GOOGLE_CLIENT_SECRET else 0}")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                GOOGLE_TOKEN_ENDPOINT,
-                data={
-                    "client_id": GOOGLE_CLIENT_ID,
-                    "client_secret": GOOGLE_CLIENT_SECRET,
-                    "code": request.code,
-                    "code_verifier": request.code_verifier,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": request.redirect_uri
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
-            )
-
-            if response.status_code != 200:
-                error_data = response.json()
-                print(f"[ERROR] Google OAuth error: {error_data}")
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=error_data
-                )
-
-            return response.json()
-
-    except httpx.HTTPError as e:
-        print(f"[ERROR] HTTP error during token exchange: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"OAuth token exchange failed: {str(e)}")
-
-
-@app.post("/api/oauth/refresh")
-async def refresh_oauth_token(request: TokenRefreshRequest):
-    """
-    Refresh an expired access token.
-    Client secret is kept secure on the server side.
-    """
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                GOOGLE_TOKEN_ENDPOINT,
-                data={
-                    "client_id": GOOGLE_CLIENT_ID,
-                    "client_secret": GOOGLE_CLIENT_SECRET,
-                    "refresh_token": request.refresh_token,
-                    "grant_type": "refresh_token"
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
-            )
-
-            if response.status_code != 200:
-                error_data = response.json()
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=error_data
-                )
-
-            return response.json()
-
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"OAuth token refresh failed: {str(e)}")
+    return {"status": "healthy", "service": "rebekko-webapps"}
 
 
 if __name__ == "__main__":

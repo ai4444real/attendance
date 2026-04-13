@@ -39,8 +39,7 @@ Capacita' attuali:
 - pulizia dati di presenza;
 - filtri per corso e studente;
 - evidenziazione studenti inattivi;
-- export CSV filtrato;
-- integrazione iniziale con Google Calendar.
+- export CSV filtrato.
 
 ### 2. Zoom adapter
 

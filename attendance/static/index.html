@@ -14,8 +14,93 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            margin: 0;
             padding: 20px;
             background: #f5f5f5;
+        }
+
+        .workspace-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            margin: -20px -20px 24px;
+            background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid #d9e2ec;
+        }
+
+        .workspace-header-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .workspace-brand img {
+            height: 42px;
+            width: auto;
+            display: block;
+        }
+
+        .workspace-brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .workspace-brand-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #102a43;
+        }
+
+        .workspace-brand-subtitle {
+            font-size: 12px;
+            color: #52606d;
+        }
+
+        .workspace-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-link {
+            text-decoration: none;
+            color: #155e75;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .workspace-link:hover {
+            text-decoration: underline;
+        }
+
+        .workspace-module-badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #dff3f6;
+            color: #155e75;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .container {
@@ -445,130 +530,26 @@
         }
         /* ======================================================================== */
 
-        /* Calendar Section */
-        .calendar-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 8px;
-            color: white;
-        }
-
-        .calendar-section h2 {
-            margin: 0 0 15px 0;
-            font-size: 18px;
-            cursor: pointer;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .calendar-section h2:hover {
-            opacity: 0.9;
-        }
-
-        .calendar-toggle-icon {
-            font-size: 20px;
-            transition: transform 0.3s;
-        }
-
-        .calendar-section.collapsed .calendar-toggle-icon {
-            transform: rotate(180deg);
-        }
-
-        .calendar-content {
-            transition: max-height 0.3s ease, opacity 0.3s ease;
-            max-height: 500px;
-            opacity: 1;
-            overflow: hidden;
-        }
-
-        .calendar-section.collapsed .calendar-content {
-            max-height: 0;
-            opacity: 0;
-        }
-
-        .calendar-section p {
-            margin: 0 0 15px 0;
-            opacity: 0.9;
-        }
-
-        .calendar-btn {
-            background: white;
-            color: #667eea;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s;
-            margin-right: 10px;
-        }
-
-        .calendar-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-
-        .calendar-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .calendar-btn.secondary {
-            background: transparent;
-            color: white;
-            border: 2px solid white;
-        }
-
-        .calendar-status {
-            margin-top: 15px;
-            padding: 10px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .calendar-status.success {
-            background: rgba(16,185,129,0.2);
-        }
-
-        .calendar-status.error {
-            background: rgba(239,68,68,0.2);
-        }
     </style>
 </head>
 <body>
+    <header class="workspace-header">
+        <div class="workspace-header-inner">
+            <a class="workspace-brand" href="/">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="workspace-brand-text">
+                    <span class="workspace-brand-title">Rebekko Webapps</span>
+                    <span class="workspace-brand-subtitle">PNL Evolution</span>
+                </div>
+            </a>
+            <nav class="workspace-nav" aria-label="Workspace navigation">
+                <a class="workspace-link" href="/">Home</a>
+                <span class="workspace-module-badge">Attendance</span>
+            </nav>
+        </div>
+    </header>
     <div class="container">
         <h1>Gestione Presenze - Sistema Attendance</h1>
-
-        <!-- Google Calendar Integration -->
-        <div class="calendar-section" id="calendarSection">
-            <h2 onclick="toggleCalendarSection()">
-                <span>📅 Google Calendar Integration</span>
-                <span class="calendar-toggle-icon">▼</span>
-            </h2>
-            <div class="calendar-content">
-                <p id="calendarDescription">Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.</p>
-                <div>
-                    <button class="calendar-btn" id="connectCalendarBtn" onclick="CalendarIntegration.connect()">
-                        Connetti Google Calendar
-                    </button>
-                    <button class="calendar-btn secondary" id="disconnectCalendarBtn" onclick="CalendarIntegration.disconnect()" style="display: none;">
-                        Disconnetti
-                    </button>
-                    <button class="calendar-btn secondary" id="listCalendarsBtn" onclick="CalendarIntegration.listCalendars()" style="display: none;">
-                        Mostra Calendari
-                    </button>
-                    <button class="calendar-btn" id="loadEventsBtn" onclick="CalendarIntegration.loadEvents()" style="display: none;">
-                        Carica Eventi
-                    </button>
-                </div>
-                <div class="calendar-status" id="calendarStatus" style="display: none;"></div>
-            </div>
-        </div>
 
         <div class="upload-section">
             <input type="file" id="csvFile" class="file-input" accept=".csv">
@@ -681,12 +662,7 @@
     </div>
 
     <!-- Courses Configuration (optional - if not present, defaults will be used) -->
-    <script src="/static/courses-config.js"></script>
-
-    <!-- Google OAuth and Calendar API -->
-    <script src="/static/js/oauth-config.js"></script>
-    <script src="/static/js/google-auth.js"></script>
-    <script src="/static/js/google-calendar-api.js"></script>
+    <script src="/attendance/static/courses-config.js"></script>
 
     <script>
         'use strict';
@@ -1927,169 +1903,6 @@
         };
 
         // ============================================================================
-        // CALENDAR INTEGRATION
-        // ============================================================================
-        const CalendarIntegration = {
-            auth: null,
-            calendar: null,
-            selectedCalendarId: 'primary', // Default to primary calendar
-
-            async init() {
-                try {
-                    // Load OAuth configuration from backend
-                    const config = await loadOAuthConfig();
-
-                    // Initialize OAuth
-                    this.auth = new GoogleOAuth(config);
-                    this.calendar = new GoogleCalendarAPI(this.auth);
-
-                    // Listen for auth events
-                    this.auth.on('authorized', () => {
-                        this._updateUI(true);
-                    });
-
-                    this.auth.on('unauthorized', () => {
-                        this._updateUI(false);
-                    });
-
-                    this.auth.on('error', (error) => {
-                        this._showStatus(`Errore: ${error.message}`, 'error');
-                    });
-
-                    // Update UI based on current auth status
-                    this._updateUI(this.auth.isAuthorized());
-                } catch (error) {
-                    console.error('Failed to initialize Calendar Integration:', error);
-                    this._showStatus('Errore caricamento configurazione OAuth', 'error');
-                }
-            },
-
-            async connect() {
-                try {
-                    this._showStatus('Connessione in corso...', '');
-                    await this.auth.authorize();
-                    this._showStatus('✅ Connesso! Puoi caricare gli eventi.', 'success');
-                } catch (error) {
-                    this._showStatus(`❌ Errore: ${error.message}`, 'error');
-                }
-            },
-
-            async disconnect() {
-                try {
-                    await this.auth.logout();
-                    this._showStatus('Disconnesso', '');
-                } catch (error) {
-                    this._showStatus(`Errore: ${error.message}`, 'error');
-                }
-            },
-
-            async listCalendars() {
-                try {
-                    this._showStatus('Caricamento calendari...', '');
-
-                    const calendars = await this.calendar.listCalendars();
-
-                    console.log('=== CALENDARI DISPONIBILI ===');
-                    console.table(calendars.map(cal => ({
-                        'Nome': cal.summary,
-                        'ID': cal.id,
-                        'Primario': cal.primary ? 'Sì' : 'No',
-                        'Accesso': cal.accessRole
-                    })));
-
-                    console.log('\n📋 Per selezionare un calendario, copia l\'ID e usa:');
-                    console.log('CalendarIntegration.selectCalendar("ID_DEL_CALENDARIO")');
-                    console.log('\nOppure per vedere i dettagli completi:');
-                    console.log('window.calendars');
-
-                    // Salva in una variabile globale per facile accesso
-                    window.calendars = calendars;
-
-                    this._showStatus(
-                        `✅ ${calendars.length} calendari trovati! Guarda la console per i dettagli.`,
-                        'success'
-                    );
-                } catch (error) {
-                    console.error('Errore nel caricamento dei calendari:', error);
-                    this._showStatus(`❌ Errore: ${error.message}`, 'error');
-                }
-            },
-
-            selectCalendar(calendarId) {
-                this.selectedCalendarId = calendarId;
-                const calendar = window.calendars?.find(c => c.id === calendarId);
-                const calendarName = calendar ? calendar.summary : calendarId;
-
-                console.log(`✅ Calendario selezionato: ${calendarName}`);
-                this._showStatus(
-                    `📅 Calendario selezionato: ${calendarName}`,
-                    'success'
-                );
-            },
-
-            async loadEvents() {
-                try {
-                    this._showStatus('Caricamento eventi in corso...', '');
-
-                    // Get events from last 6 months
-                    const endDate = new Date();
-                    const startDate = new Date();
-                    startDate.setMonth(startDate.getMonth() - 6);
-
-                    // Use selected calendar (default: 'primary')
-                    const calendarName = window.calendars?.find(c => c.id === this.selectedCalendarId)?.summary || this.selectedCalendarId;
-                    console.log(`📅 Caricamento eventi dal calendario: ${calendarName}`);
-
-                    const lessons = await this.calendar.getLessons(this.selectedCalendarId, startDate, endDate);
-
-                    this._showStatus(
-                        `✅ Caricati ${lessons.length} eventi da "${calendarName}"! (Prossima versione: integrazione con attendance)`,
-                        'success'
-                    );
-
-                    // Log events for debugging
-                    console.log('Calendar events loaded:', lessons);
-
-                    // TODO: Future integration with attendance data
-                    // For now, just show in console
-
-                } catch (error) {
-                    this._showStatus(`❌ Errore: ${error.message}`, 'error');
-                }
-            },
-
-            _updateUI(isAuthorized) {
-                const connectBtn = document.getElementById('connectCalendarBtn');
-                const disconnectBtn = document.getElementById('disconnectCalendarBtn');
-                const listCalendarsBtn = document.getElementById('listCalendarsBtn');
-                const loadEventsBtn = document.getElementById('loadEventsBtn');
-                const description = document.getElementById('calendarDescription');
-
-                if (isAuthorized) {
-                    connectBtn.style.display = 'none';
-                    disconnectBtn.style.display = 'inline-block';
-                    listCalendarsBtn.style.display = 'inline-block';
-                    loadEventsBtn.style.display = 'inline-block';
-                    description.textContent = '✅ Connesso al tuo Google Calendar';
-                } else {
-                    connectBtn.style.display = 'inline-block';
-                    disconnectBtn.style.display = 'none';
-                    listCalendarsBtn.style.display = 'none';
-                    loadEventsBtn.style.display = 'none';
-                    description.textContent = 'Connetti il tuo Google Calendar per importare automaticamente gli eventi delle lezioni.';
-                }
-            },
-
-            _showStatus(message, type) {
-                const statusDiv = document.getElementById('calendarStatus');
-                statusDiv.textContent = message;
-                statusDiv.className = 'calendar-status';
-                if (type) statusDiv.classList.add(type);
-                statusDiv.style.display = message ? 'block' : 'none';
-            }
-        };
-
-        // ============================================================================
         // INACTIVE STUDENTS DETECTION MODULE
         // Delete this entire module to remove the inactive students feature
         // ============================================================================
@@ -2497,30 +2310,12 @@
         // ============================================================================
 
         // ============================================================================
-        // CALENDAR SECTION TOGGLE
-        // ============================================================================
-        function toggleCalendarSection() {
-            const section = document.getElementById('calendarSection');
-            const isCollapsed = section.classList.toggle('collapsed');
-
-            // Save state to localStorage
-            localStorage.setItem('calendarSectionCollapsed', isCollapsed);
-        }
-
-        // ============================================================================
         // INITIALIZATION
         // ============================================================================
         document.addEventListener('DOMContentLoaded', () => {
             App.init();
-            CalendarIntegration.init();
             InactiveStudentsDetector.init();  // Initialize inactive students feature
             PersonTypeFilter.init();  // Initialize person type filter
-
-            // Restore calendar section collapsed state from localStorage
-            const wasCollapsed = localStorage.getItem('calendarSectionCollapsed') === 'true';
-            if (wasCollapsed) {
-                document.getElementById('calendarSection').classList.add('collapsed');
-            }
         });
     </script>
 </body>
