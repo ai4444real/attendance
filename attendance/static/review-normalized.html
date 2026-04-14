@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revisione normalizzazione</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: var(--brand-surface);
+            color: #1f2933;
+        }
+
+        .workspace-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--brand-border);
+        }
+
+        .workspace-header-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .workspace-brand img {
+            height: 42px;
+            width: auto;
+            display: block;
+        }
+
+        .workspace-brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .workspace-brand-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--brand-ink);
+        }
+
+        .workspace-brand-subtitle {
+            font-size: 12px;
+            color: var(--brand-muted);
+        }
+
+        .workspace-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-link {
+            text-decoration: none;
+            color: #155e75;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .workspace-link:hover { text-decoration: underline; }
+
+        .workspace-module-badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--brand-pnl-blue-soft);
+            color: var(--brand-pnl-blue);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .page {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px 20px 56px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 22px;
+            box-shadow: 0 14px 30px rgba(16, 42, 67, 0.16);
+        }
+
+        .hero h1 {
+            margin: 0 0 10px;
+            font-size: 36px;
+        }
+
+        .hero p {
+            margin: 0;
+            line-height: 1.6;
+            max-width: 860px;
+            font-size: 16px;
+        }
+
+        .upload-panel,
+        .detail-panel,
+        .filters-panel,
+        .issues-panel,
+        .table-panel,
+        .summary-card {
+            background: white;
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+        }
+
+        .upload-panel,
+        .detail-panel,
+        .filters-panel,
+        .issues-panel,
+        .table-panel {
+            padding: 22px;
+            margin-bottom: 18px;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--brand-border);
+            border-radius: 16px;
+            background: #fafcfd;
+            padding: 28px;
+            text-align: center;
+            transition: border-color 0.16s ease, background 0.16s ease;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: var(--brand-pnl-blue);
+            background: var(--brand-pnl-blue-soft);
+        }
+
+        .upload-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+            border: none;
+            border-radius: 10px;
+            padding: 12px 18px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: var(--brand-pnl-blue);
+            color: white;
+        }
+
+        .btn-primary:hover { background: var(--brand-pnl-blue-dark); }
+
+        .btn-secondary {
+            background: var(--brand-pnl-green-soft);
+            color: var(--brand-pnl-green-dark);
+        }
+
+        .btn-secondary:hover { background: #d9f0e3; }
+
+        .hint {
+            color: var(--brand-muted);
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .summary-card {
+            padding: 18px;
+        }
+
+        .summary-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--brand-muted);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .summary-value {
+            font-size: 30px;
+            font-weight: 800;
+            color: var(--brand-ink);
+        }
+
+        .summary-detail {
+            margin-top: 6px;
+            color: var(--brand-muted);
+            font-size: 13px;
+        }
+
+        .summary-card.warning { border-left: 6px solid #f59e0b; }
+        .summary-card.success { border-left: 6px solid var(--brand-pnl-green); }
+        .summary-card.info { border-left: 6px solid var(--brand-pnl-blue); }
+        .summary-card.alert { border-left: 6px solid #e11d48; }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--brand-ink);
+            margin: 0 0 12px;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            align-items: end;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--brand-ink);
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            border: 1px solid var(--brand-border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .field-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 42px;
+            font-size: 14px;
+            color: var(--brand-ink);
+        }
+
+        .issues-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+        }
+
+        .issue-box {
+            border: 1px solid var(--brand-border);
+            border-radius: 14px;
+            background: #fbfcfd;
+            padding: 16px;
+        }
+
+        .issue-box h3 {
+            margin: 0 0 8px;
+            font-size: 16px;
+            color: var(--brand-ink);
+        }
+
+        .issue-count {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .issue-box p {
+            margin: 0;
+            color: var(--brand-muted);
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .issue-box.warning { border-left: 5px solid #f59e0b; }
+        .issue-box.info { border-left: 5px solid var(--brand-pnl-blue); }
+        .issue-box.alert { border-left: 5px solid #e11d48; }
+        .issue-box.success { border-left: 5px solid var(--brand-pnl-green); }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+        }
+
+        .detail-item {
+            background: #f8fbfc;
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .detail-item .k {
+            display: block;
+            font-size: 12px;
+            color: var(--brand-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .detail-item .v {
+            font-size: 15px;
+            color: var(--brand-ink);
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .detail-empty {
+            color: var(--brand-muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .flag-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .flag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .flag.warning {
+            background: #fff4df;
+            color: #9a6700;
+        }
+
+        .flag.alert {
+            background: #ffe3e8;
+            color: #be123c;
+        }
+
+        .flag.info {
+            background: var(--brand-pnl-blue-soft);
+            color: var(--brand-pnl-blue);
+        }
+
+        .flag.success {
+            background: var(--brand-pnl-green-soft);
+            color: var(--brand-pnl-green-dark);
+        }
+
+        .table-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+            color: var(--brand-muted);
+            font-size: 14px;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            max-height: 68vh;
+            border: 1px solid var(--brand-border);
+            border-radius: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            background: white;
+        }
+
+        th,
+        td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #edf2f7;
+            vertical-align: top;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8fbfd;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--brand-muted);
+        }
+
+        tbody tr { cursor: pointer; }
+        tbody tr:hover { background: #f7fbfd; }
+        tbody tr.selected { background: #eef7fd; }
+        tbody tr.flagged { box-shadow: inset 4px 0 0 #f59e0b; }
+
+        .presence {
+            display: inline-block;
+            padding: 5px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .presence.presente { background: var(--brand-pnl-green-soft); color: var(--brand-pnl-green-dark); }
+        .presence.prima_meta { background: #e6f4ff; color: #0b6bcb; }
+        .presence.seconda_meta { background: #fff0da; color: #b45309; }
+        .presence.assente { background: #ffe3e8; color: #be123c; }
+
+        .muted { color: var(--brand-muted); }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 900px) {
+            .hero h1 { font-size: 28px; }
+            .page { padding-left: 14px; padding-right: 14px; }
+            .upload-panel,
+            .detail-panel,
+            .filters-panel,
+            .issues-panel,
+            .table-panel { padding: 16px; }
+            th, td { padding: 9px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="workspace-header">
+        <div class="workspace-header-inner">
+            <a class="workspace-brand" href="/">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="workspace-brand-text">
+                    <span class="workspace-brand-title">Rebekko Webapps</span>
+                    <span class="workspace-brand-subtitle">PNL Evolution</span>
+                </div>
+            </a>
+            <nav class="workspace-nav" aria-label="Workspace navigation">
+                <a class="workspace-link" href="/">Home</a>
+                <a class="workspace-link" href="/attendance">Attendance</a>
+                <a class="workspace-link" href="/attendance/manage">Gestione presenze</a>
+                <span class="workspace-module-badge">Revisione normalizzazione</span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page">
+        <section class="hero">
+            <h1>Revisione normalizzazione</h1>
+            <p>Carica un CSV o JSON già normalizzato dal motore Python. La vista evidenzia i casi borderline, i meeting con split non automatico, i record spezzati in molti segmenti e le anagrafiche da controllare a mano.</p>
+        </section>
+
+        <section class="upload-panel">
+            <h2 class="panel-title">Input</h2>
+            <div class="drop-zone" id="dropZone">
+                <div>Trascina qui un file normalizzato oppure clicca per selezionarlo.</div>
+                <div class="upload-actions">
+                    <button class="btn-primary" id="pickFileBtn">Apri file CSV o JSON</button>
+                    <button class="btn-secondary hidden" id="resetBtn">Svuota</button>
+                </div>
+                <div class="hint" id="fileHint">Formati supportati: CSV esportato dalla CLI, oppure JSON completo del risultato.</div>
+            </div>
+            <input type="file" id="fileInput" class="hidden" accept=".csv,.json,application/json,text/csv">
+        </section>
+
+        <section class="summary-grid hidden" id="summaryGrid"></section>
+
+        <section class="detail-panel hidden" id="detailPanel">
+            <h2 class="panel-title">Dettaglio record selezionato</h2>
+            <div class="detail-empty" id="detailEmpty">Seleziona una riga per vedere marker, percentuali, email e motivi per cui potrebbe meritare controllo manuale.</div>
+            <div class="detail-grid hidden" id="detailGrid"></div>
+            <div class="flag-list hidden" id="detailFlags"></div>
+        </section>
+
+        <section class="filters-panel hidden" id="filtersPanel">
+            <h2 class="panel-title">Filtri</h2>
+            <div class="filters-grid">
+                <div class="field">
+                    <label for="searchInput">Ricerca libera</label>
+                    <input id="searchInput" type="text" placeholder="Nome, cognome, email, meeting, corso">
+                </div>
+                <div class="field">
+                    <label for="courseSelect">Corso</label>
+                    <select id="courseSelect">
+                        <option value="">Tutti i corsi</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="presenceSelect">Presenza</label>
+                    <select id="presenceSelect">
+                        <option value="">Tutti gli esiti</option>
+                        <option value="presente">Presente</option>
+                        <option value="prima_meta">Prima metà</option>
+                        <option value="seconda_meta">Seconda metà</option>
+                        <option value="assente">Assente</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="borderlineMargin">Margine borderline</label>
+                    <select id="borderlineMargin">
+                        <option value="0.01">1%</option>
+                        <option value="0.02">2%</option>
+                        <option value="0.03" selected>3%</option>
+                        <option value="0.05">5%</option>
+                    </select>
+                </div>
+                <div class="field-inline">
+                    <input id="flaggedOnlyCheckbox" type="checkbox">
+                    <label for="flaggedOnlyCheckbox">Mostra solo record da rivedere</label>
+                </div>
+                <div class="field-inline">
+                    <input id="excludeAutoCheckbox" type="checkbox">
+                    <label for="excludeAutoCheckbox">Solo split non automatici</label>
+                </div>
+            </div>
+        </section>
+
+        <section class="issues-panel hidden" id="issuesPanel">
+            <h2 class="panel-title">Casi da guardare</h2>
+            <div class="issues-grid" id="issuesGrid"></div>
+        </section>
+
+        <section class="table-panel hidden" id="tablePanel">
+            <div class="table-meta">
+                <div id="tableMeta">Nessun dato caricato.</div>
+                <div class="muted">Clic su una riga per il dettaglio.</div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Flag</th>
+                            <th>Corso</th>
+                            <th>Data</th>
+                            <th>Persona</th>
+                            <th>Email</th>
+                            <th>Presenza</th>
+                            <th>1ª metà</th>
+                            <th>2ª metà</th>
+                            <th>Totale</th>
+                            <th>Segmenti</th>
+                            <th>Split</th>
+                            <th>Meeting</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/attendance/static/js/normalized-review.js"></script>
+</body>
+</html>

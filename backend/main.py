@@ -38,6 +38,7 @@ app.add_middleware(
 # Attendance module paths
 ATTENDANCE_STATIC_DIR = os.path.join(WORKSPACE_DIR, "attendance", "static")
 ATTENDANCE_INDEX_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "index.html")
+ATTENDANCE_REVIEW_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "review-normalized.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -269,6 +270,11 @@ async def attendance_home():
                     <h2>Gestione presenze</h2>
                     <p>Apri il flusso operativo Zoom: carica i report, lavora sui dati e esporta il formato normalizzato.</p>
                 </a>
+                <a class="card" href="/attendance/review">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Revisione normalizzazione</h2>
+                    <p>Carica un risultato normalizzato già prodotto e scorri i casi borderline, i meeting strani e i record da correggere.</p>
+                </a>
             </div>
         </section>
     """
@@ -287,6 +293,15 @@ async def attendance_home():
 async def attendance_view():
     return FileResponse(
         ATTENDANCE_INDEX_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/review")
+@app.get("/attendance/review/")
+async def attendance_review():
+    return FileResponse(
+        ATTENDANCE_REVIEW_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
