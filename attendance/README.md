@@ -70,6 +70,7 @@ attendance/
 ## Documentazione
 
 - [docs/ARCHITETTURA_UNIFICAZIONE.md](docs/ARCHITETTURA_UNIFICAZIONE.md): direzione architetturale e backlog
+- [docs/MIGRAZIONE_NORMALIZZAZIONE_PYTHON.md](docs/MIGRAZIONE_NORMALIZZAZIONE_PYTHON.md): piano incrementale di migrazione della logica Zoom in Python
 - [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md): setup locale
 - [docs/CLAUDE_INSTRUCTIONS.md](docs/CLAUDE_INSTRUCTIONS.md): note operative storiche del progetto
 - [docs/README-SCRIPTS.txt](docs/README-SCRIPTS.txt): guida rapida agli script Windows

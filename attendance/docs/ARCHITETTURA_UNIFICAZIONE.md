@@ -314,6 +314,7 @@ Attivita':
 
 - Creare una documentazione tecnica del formato interno con esempi reali.
 - Rendere l'output dell'adapter il formato canonico, oppure mapparlo esplicitamente al formato canonico.
+- Rendere espliciti nella UI della `Gestione presenze` i due marker temporali: `inizio effettivo` (blu, da cui parte il calcolo percentuale) e `pausa/split` (giallo, che divide prima e seconda parte della lezione).
 - Aggiungere endpoint `POST /api/imports/zoom-normalized`.
 - Aggiungere endpoint `GET /api/attendance`.
 - Aggiungere endpoint `GET /api/courses`.

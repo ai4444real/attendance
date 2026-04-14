@@ -3,7 +3,7 @@
 Runbook operativo del server Ubuntu su cui girano:
 
 - `n8n` come servizio pubblico su dominio;
-- `Rebekko Webapps` come backend FastAPI interno, pronto a essere pubblicato su un dominio dedicato.
+- `Rebekko Webapps` come servizio pubblico su dominio dedicato.
 
 Scopo del file:
 
@@ -64,21 +64,24 @@ automation.pnlevolution.com
 - modulo attivo oggi: `attendance`
 - servizio `systemd`: `rebekko-webapps`
 - ascolto interno: `127.0.0.1:8080`
+- dominio pubblico: `rebekko.pnlevolution.com`
+- reverse proxy pubblico: `Caddy`
 
 Routing attuale:
 
 ```text
-127.0.0.1:8080
+rebekko.pnlevolution.com
+  -> Caddy (:80/:443)
+  -> reverse_proxy 127.0.0.1:8080
   -> uvicorn
   -> FastAPI
-  -> Rebekko Webapps
 ```
 
 Nota importante:
 
-- `webapps` al momento non e' ancora esposta pubblicamente con un dominio dedicato;
 - `n8n` e `webapps` sono separati;
-- il deploy di `webapps` non deve rompere `automation.pnlevolution.com`.
+- il deploy di `webapps` non deve rompere `automation.pnlevolution.com`;
+- il routing pubblico reale e' gestito da `Caddy`.
 
 ## File di configurazione coinvolti
 
@@ -98,6 +101,10 @@ Configurazione osservata:
 ```caddy
 automation.pnlevolution.com {
     reverse_proxy localhost:5678
+}
+
+rebekko.pnlevolution.com {
+    reverse_proxy 127.0.0.1:8080
 }
 ```
 
@@ -295,6 +302,30 @@ Nota:
 - `n8n` richiede HTTPS per i secure cookie;
 - se `automation.pnlevolution.com` viene servito solo in HTTP, la UI segnala errore e non e' usabile.
 
+### Test pubblico Rebekko Webapps
+
+HTTP:
+
+```bash
+curl -I http://rebekko.pnlevolution.com
+```
+
+Risposta attesa:
+
+- `308 Permanent Redirect` verso HTTPS
+
+HTTPS:
+
+```bash
+curl https://rebekko.pnlevolution.com/health
+```
+
+Risposta attesa:
+
+```json
+{"status":"healthy","service":"rebekko-webapps"}
+```
+
 ## Nginx
 
 Stato desiderato attuale:
@@ -333,6 +364,7 @@ sudo systemctl status rebekko-webapps --no-pager
 
 ```bash
 curl http://127.0.0.1:8080/health
+curl https://rebekko.pnlevolution.com/health
 curl -s http://127.0.0.1:8080/ | head -c 120
 echo
 curl -s http://127.0.0.1:8080/attendance | head -c 120
@@ -401,6 +433,13 @@ curl -I http://automation.pnlevolution.com
 curl -I https://automation.pnlevolution.com
 ```
 
+### Caddy sta davvero servendo Rebekko Webapps?
+
+```bash
+curl -I http://rebekko.pnlevolution.com
+curl https://rebekko.pnlevolution.com/health
+```
+
 ### Docker ha ancora n8n in piedi?
 
 ```bash
@@ -410,8 +449,8 @@ docker inspect -f '{{ .HostConfig.RestartPolicy.Name }}' n8n-n8n-1
 
 ## Prossimi passi probabili
 
-- pubblicare `Rebekko Webapps` dietro `Caddy` con un proprio dominio o sottodominio;
 - mantenere `n8n` separato su `automation.pnlevolution.com`;
+- mantenere `webapps` separata su `rebekko.pnlevolution.com`;
 - introdurre `.env` reale quando entreranno database e integrazioni;
 - tenere sincronizzato il `Caddyfile` reale del server con `infra/caddy/Caddyfile.example`;
 - eventualmente dockerizzare `webapps` in futuro, se servirà davvero.

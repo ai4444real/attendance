@@ -1,0 +1,1 @@
+"""Attendance module test suite."""
