@@ -373,7 +373,7 @@ const NormalizedReviewApp = {
             <article class="issue-box info">
                 <h3>Split da controllare</h3>
                 <div class="issue-count">${nonAuto}</div>
-                <p>Meeting in cui il giallo non è uscito da un detector automatico, ma da `midpoint` o in futuro da correzione manuale.</p>
+                <p>Meeting in cui il giallo non è uscito da un detector automatico, ma da midpoint o in futuro da correzione manuale.</p>
             </article>
             <article class="issue-box alert">
                 <h3>Sessioni spezzate</h3>
