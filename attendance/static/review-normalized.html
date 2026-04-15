@@ -407,6 +407,255 @@
             border-radius: 14px;
         }
 
+        .course-group {
+            margin-bottom: 20px;
+            border: 1px solid var(--brand-border);
+            border-radius: 16px;
+            overflow: hidden;
+            background: white;
+        }
+
+        .course-group-header {
+            display: grid;
+            grid-template-columns: minmax(260px, 380px) 1fr;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8fbfd;
+            border-bottom: 1px solid var(--brand-border);
+            cursor: pointer;
+        }
+
+        .course-group-header:hover {
+            background: #f1f7fb;
+        }
+
+        .course-group-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .course-group-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--brand-ink);
+        }
+
+        .course-group-meta {
+            font-size: 13px;
+            color: var(--brand-muted);
+        }
+
+        .course-group-overview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 10px;
+            align-items: center;
+            justify-content: flex-start;
+            min-width: 0;
+        }
+
+        .lesson-person {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: white;
+            border: 1px solid var(--brand-border);
+        }
+
+        .lesson-person-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--brand-ink);
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .lesson-dots {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .lesson-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            display: inline-block;
+        }
+
+        .lesson-dot.positive {
+            background: var(--brand-pnl-green);
+        }
+
+        .lesson-dot.negative {
+            background: #e11d48;
+        }
+
+        .lesson-dot.warning {
+            background: #f59e0b;
+        }
+
+        .course-group-body {
+            display: none;
+            padding: 0 0 8px;
+        }
+
+        .course-group.expanded .course-group-body {
+            display: block;
+        }
+
+        .meeting-diagnostics {
+            margin: 12px 12px 14px;
+            padding: 14px;
+            border: 1px solid var(--brand-border);
+            border-radius: 14px;
+            background: #fbfdff;
+        }
+
+        .meeting-diagnostics.empty {
+            background: #f8fbfd;
+        }
+
+        .meeting-diagnostics-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .meeting-diagnostics-stats,
+        .meeting-diagnostics-summary {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .diag-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 8px 10px;
+            background: white;
+            border: 1px solid var(--brand-border);
+            border-radius: 10px;
+            min-width: 112px;
+        }
+
+        .diag-k {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--brand-muted);
+            font-weight: 700;
+        }
+
+        .diag-v {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--brand-ink);
+        }
+
+        .diag-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .diag-pill.success { background: var(--brand-pnl-green-soft); color: var(--brand-pnl-green-dark); }
+        .diag-pill.info { background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
+        .diag-pill.warning { background: #fff4df; color: #9a6700; }
+        .diag-pill.alert { background: #ffe3e8; color: #be123c; }
+
+        .meeting-diagnostics-note {
+            font-size: 13px;
+            color: var(--brand-muted);
+            margin-bottom: 12px;
+        }
+
+        .meeting-chart {
+            position: relative;
+            border: 1px solid var(--brand-border);
+            border-radius: 12px;
+            background: white;
+            padding: 14px 12px 38px;
+        }
+
+        .meeting-bars {
+            height: 96px;
+            display: flex;
+            align-items: end;
+            gap: 3px;
+            padding: 0 2px;
+        }
+
+        .meeting-bar {
+            flex: 1 1 0;
+            min-width: 6px;
+            border-radius: 4px 4px 0 0;
+            background: linear-gradient(180deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%);
+            opacity: 0.9;
+        }
+
+        .meeting-markers {
+            position: relative;
+            margin-top: 10px;
+            height: 46px;
+            border-top: 2px solid #e6edf3;
+        }
+
+        .meeting-marker {
+            position: absolute;
+            top: -2px;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            white-space: nowrap;
+        }
+
+        .meeting-marker::before {
+            content: "";
+            width: 2px;
+            height: 18px;
+            display: block;
+            border-radius: 999px;
+        }
+
+        .meeting-marker span {
+            font-size: 11px;
+            color: var(--brand-muted);
+            font-weight: 700;
+        }
+
+        .meeting-marker strong {
+            font-size: 12px;
+            color: var(--brand-ink);
+        }
+
+        .meeting-marker.start::before { background: var(--brand-pnl-blue); }
+        .meeting-marker.break::before { background: #f59e0b; }
+        .meeting-marker.end::before { background: #e11d48; }
+
+        .meeting-axis {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 12px;
+            color: var(--brand-muted);
+            margin-top: 4px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -454,6 +703,53 @@
 
         .muted { color: var(--brand-muted); }
 
+        .person-cell {
+            min-width: 320px;
+        }
+
+        .person-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--brand-ink);
+            margin-bottom: 4px;
+        }
+
+        .person-meta {
+            font-size: 12px;
+            color: var(--brand-muted);
+            line-height: 1.5;
+        }
+
+        .half-cell {
+            min-width: 180px;
+        }
+
+        .delta {
+            display: inline-block;
+            min-width: 52px;
+            font-size: 24px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+
+        .delta.positive { color: var(--brand-pnl-green-dark); }
+        .delta.negative { color: #be123c; }
+        .delta.neutral { color: #9a6700; }
+
+        .half-detail {
+            font-size: 12px;
+            color: var(--brand-muted);
+            line-height: 1.45;
+        }
+
+        .flag-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
         .hidden { display: none !important; }
 
         @media (max-width: 900px) {
@@ -465,6 +761,7 @@
             .issues-panel,
             .table-panel { padding: 16px; }
             th, td { padding: 9px 10px; }
+            .course-group-header { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -501,19 +798,12 @@
                     <button class="btn-primary" id="pickFileBtn">Apri file CSV o JSON</button>
                     <button class="btn-secondary hidden" id="resetBtn">Svuota</button>
                 </div>
-                <div class="hint" id="fileHint">Formati supportati: CSV esportato dalla CLI, oppure JSON completo del risultato.</div>
+                <div class="hint" id="fileHint">Formato consigliato: JSON v2 del motore Python. Il CSV resta solo come ingresso secondario leggibile da umani.</div>
             </div>
             <input type="file" id="fileInput" class="hidden" accept=".csv,.json,application/json,text/csv">
         </section>
 
         <section class="summary-grid hidden" id="summaryGrid"></section>
-
-        <section class="detail-panel hidden" id="detailPanel">
-            <h2 class="panel-title">Dettaglio record selezionato</h2>
-            <div class="detail-empty" id="detailEmpty">Seleziona una riga per vedere marker, percentuali, email e motivi per cui potrebbe meritare controllo manuale.</div>
-            <div class="detail-grid hidden" id="detailGrid"></div>
-            <div class="flag-list hidden" id="detailFlags"></div>
-        </section>
 
         <section class="filters-panel hidden" id="filtersPanel">
             <h2 class="panel-title">Filtri</h2>
@@ -572,23 +862,21 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Flag</th>
-                            <th>Corso</th>
-                            <th>Data</th>
                             <th>Persona</th>
-                            <th>Email</th>
-                            <th>Presenza</th>
-                            <th>1ª metà</th>
-                            <th>2ª metà</th>
-                            <th>Totale</th>
-                            <th>Segmenti</th>
-                            <th>Split</th>
-                            <th>Meeting</th>
+                            <th>Prima metà</th>
+                            <th>Seconda metà</th>
                         </tr>
                     </thead>
                     <tbody id="recordsBody"></tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="detail-panel hidden" id="detailPanel">
+            <h2 class="panel-title">Dettaglio record selezionato</h2>
+            <div class="detail-empty" id="detailEmpty">Seleziona una riga per vedere marker, percentuali, email e motivi per cui potrebbe meritare controllo manuale.</div>
+            <div class="detail-grid hidden" id="detailGrid"></div>
+            <div class="flag-list hidden" id="detailFlags"></div>
         </section>
     </main>
 

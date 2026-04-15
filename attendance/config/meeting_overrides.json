@@ -1,0 +1,24 @@
+{
+  "meeting_overrides": [
+    {
+      "course": "COACHING",
+      "date": "2025-01-14",
+      "meeting_id": "826 5053 1117",
+      "threshold": 0.75,
+      "trim_start_minutes": 18.1,
+      "trim_end_minutes": 19.7
+    },
+    {
+      "course": "BIAS",
+      "date": "2025-01-16",
+      "meeting_id": "896 1053 4856",
+      "trim_start_minutes": 27
+    },
+    {
+      "course": "BIAS",
+      "date": "2025-01-30",
+      "meeting_id": "896 1053 4856",
+      "trim_end_minutes": 11
+    }
+  ]
+}

@@ -103,10 +103,11 @@ def _build_meeting(rows: list[dict[str, str]], warnings: list[str]) -> ZoomMeeti
             )
             continue
 
-        first_name, last_name = _split_name(raw_name)
+        normalized_full_name = _normalize_display_name(raw_name)
+        first_name, last_name = _split_name(normalized_full_name)
         segments.append(
             ZoomSegment(
-                full_name=raw_name,
+                full_name=normalized_full_name,
                 first_name=first_name,
                 last_name=last_name,
                 email=email,
@@ -188,9 +189,15 @@ def _parse_zoom_datetime(value: str) -> datetime | None:
     )
 
 
-def _split_name(full_name: str) -> tuple[str, str]:
+def _normalize_display_name(full_name: str) -> str:
     clean = re.sub(r"\(Host\)", "", full_name, flags=re.IGNORECASE)
     clean = re.sub(r"\([^)]*\)", "", clean).strip()
+    clean = re.sub(r"\s+", " ", clean)
+    return clean
+
+
+def _split_name(full_name: str) -> tuple[str, str]:
+    clean = _normalize_display_name(full_name)
     parts = clean.split()
     if not parts:
         return "", ""

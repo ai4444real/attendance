@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+import json
 
 from backend.attendance_normalization.exporters import (
     build_default_output_path,
@@ -19,17 +20,31 @@ BIAS,Riunione,896 1053 4856,Andrea Di Gregorio,digregorio@pnlevolution.com,01/30
 
 
 class ExportersTests(unittest.TestCase):
-    def test_json_export_contains_records_and_selected_courses(self):
+    def test_json_export_uses_course_meeting_participant_structure(self):
         with TemporaryDirectory() as temp_dir:
             csv_path = Path(temp_dir) / "sample.csv"
             csv_path.write_text(CSV_SAMPLE, encoding="utf-8")
             result = normalize_zoom_csv_file(csv_path, threshold=0.8)
 
-        json_output = normalization_result_to_json(result)
+        payload = json.loads(normalization_result_to_json(result))
 
-        self.assertIn('"selected_courses"', json_output)
-        self.assertIn('"records"', json_output)
-        self.assertIn('"BIAS"', json_output)
+        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["kind"], "attendance_normalization")
+        self.assertEqual(payload["normalization"]["threshold"], 0.8)
+        self.assertEqual(payload["normalization"]["selected_courses"], ["BIAS"])
+        self.assertEqual(len(payload["courses"]), 1)
+        self.assertEqual(payload["courses"][0]["course"], "BIAS")
+        self.assertEqual(payload["courses"][0]["meeting_count"], 1)
+        self.assertEqual(len(payload["courses"][0]["meetings"]), 1)
+        self.assertEqual(payload["courses"][0]["meetings"][0]["participant_count"], 1)
+        self.assertIn("diagnostics", payload["courses"][0]["meetings"][0])
+        self.assertGreater(len(payload["courses"][0]["meetings"][0]["diagnostics"]["timeline"]), 0)
+        self.assertEqual(payload["courses"][0]["meetings"][0]["diagnostics"]["sampled_every_minutes"], 10.0)
+        self.assertEqual(payload["courses"][0]["meetings"][0]["threshold"], 0.8)
+        self.assertEqual(
+            payload["courses"][0]["meetings"][0]["participants"][0]["full_name"],
+            "Francesco Conte",
+        )
 
     def test_csv_export_contains_expected_headers_and_normalized_values(self):
         with TemporaryDirectory() as temp_dir:
@@ -40,6 +55,7 @@ class ExportersTests(unittest.TestCase):
         csv_output = normalization_result_to_csv(result)
 
         self.assertIn("Corso,Data,Nome,Cognome,Email,Presenza", csv_output)
+        self.assertIn("Threshold", csv_output)
         self.assertIn("BIAS", csv_output)
         self.assertIn("Francesco,Conte", csv_output)
 
@@ -57,7 +73,7 @@ class ExportersTests(unittest.TestCase):
 
             self.assertTrue(written_json.exists())
             self.assertTrue(written_csv.exists())
-            self.assertIn('"records"', written_json.read_text(encoding="utf-8"))
+            self.assertIn('"courses"', written_json.read_text(encoding="utf-8"))
             self.assertIn("Corso,Data,Nome,Cognome,Email,Presenza", written_csv.read_text(encoding="utf-8-sig"))
 
     def test_default_output_path_keeps_source_stem_and_extension(self):

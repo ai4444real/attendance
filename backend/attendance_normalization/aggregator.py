@@ -61,6 +61,7 @@ def aggregate_meeting(
     meeting: ZoomMeeting,
     effective_start: datetime,
     break_point: datetime,
+    effective_end: datetime | None = None,
 ) -> list[AttendanceAggregationRecord]:
     """Aggregate a single meeting into one record per participant.
 
@@ -71,11 +72,12 @@ def aggregate_meeting(
     if not meeting.segments:
         return []
 
+    effective_meeting_end = effective_end or meeting.end_time
     first_half_end = break_point
     second_half_start = break_point
 
     duration_first_half = _minutes_between(effective_start, first_half_end)
-    duration_second_half = _minutes_between(second_half_start, meeting.end_time)
+    duration_second_half = _minutes_between(second_half_start, effective_meeting_end)
 
     records: list[AttendanceAggregationRecord] = []
     for participant_segments in _group_by_participant(meeting.segments).values():
@@ -95,7 +97,7 @@ def aggregate_meeting(
                 segment.join_time,
                 segment.leave_time,
                 second_half_start,
-                meeting.end_time,
+                effective_meeting_end,
             )
 
         records.append(
@@ -104,7 +106,7 @@ def aggregate_meeting(
                 meeting_id=meeting.meeting_id,
                 date=meeting.start_time,
                 meeting_start=meeting.start_time,
-                meeting_end=meeting.end_time,
+                meeting_end=effective_meeting_end,
                 meeting_duration=meeting.duration_minutes,
                 first_name=first.first_name,
                 last_name=first.last_name,

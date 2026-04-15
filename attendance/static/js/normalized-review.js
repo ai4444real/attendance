@@ -4,6 +4,9 @@ const NormalizedReviewApp = {
     _rawRecords: [],
     _records: [],
     _filteredRecords: [],
+    _displayRecords: [],
+    _lessonMeta: new Map(),
+    _expandedLessons: new Set(),
     _selectedIndex: null,
     _filters: {
         search: '',
@@ -119,8 +122,9 @@ const NormalizedReviewApp = {
                 ? this._parseNormalizedJson(text)
                 : this._parseNormalizedCsv(text);
 
-            this._rawRecords = parsed;
-            this._records = this._annotateRecords(parsed);
+            this._lessonMeta = parsed.lessonMeta || new Map();
+            this._rawRecords = parsed.records;
+            this._records = this._annotateRecords(parsed.records);
             this._selectedIndex = null;
 
             this._els.fileHint.textContent = `${file.name} caricato. ${this._records.length} record pronti per la revisione.`;
@@ -149,9 +153,12 @@ const NormalizedReviewApp = {
         this._rawRecords = [];
         this._records = [];
         this._filteredRecords = [];
+        this._displayRecords = [];
+        this._lessonMeta = new Map();
+        this._expandedLessons = new Set();
         this._selectedIndex = null;
         this._els.fileInput.value = '';
-        this._els.fileHint.textContent = 'Formati supportati: CSV esportato dalla CLI, oppure JSON completo del risultato.';
+        this._els.fileHint.textContent = 'Formato consigliato: JSON v2 del motore Python. Il CSV resta solo come ingresso secondario leggibile da umani.';
         this._els.resetBtn.classList.add('hidden');
         this._els.summaryGrid.classList.add('hidden');
         this._els.filtersPanel.classList.add('hidden');
@@ -165,11 +172,54 @@ const NormalizedReviewApp = {
 
     _parseNormalizedJson(text) {
         const payload = JSON.parse(text);
-        const records = Array.isArray(payload.records) ? payload.records : payload;
-        if (!Array.isArray(records)) {
-            throw new Error('JSON non riconosciuto: manca un array di record.');
+        if (payload && payload.schema_version === 2 && Array.isArray(payload.courses)) {
+            return this._flattenStructuredJson(payload);
         }
-        return records.map((record, index) => this._normalizeRecordFromObject(record, index));
+        throw new Error('JSON non riconosciuto: serve il formato canonico schema_version 2.');
+    },
+
+    _flattenStructuredJson(payload) {
+        const records = [];
+        const lessonMeta = new Map();
+        let index = 0;
+
+        for (const course of payload.courses || []) {
+            for (const meeting of course.meetings || []) {
+                const lessonKey = this._lessonKeyFromParts(course.course, meeting.date);
+                lessonMeta.set(lessonKey, {
+                    course: course.course,
+                    date: meeting.date,
+                        meetingId: meeting.meeting_id,
+                        effectiveStart: meeting.effective_start,
+                        breakPoint: meeting.break_point,
+                        effectiveEnd: meeting.effective_end,
+                        breakSource: meeting.break_source,
+                        threshold: meeting.threshold,
+                        trimStartMinutes: meeting.trim_start_minutes ?? 0,
+                        trimEndMinutes: meeting.trim_end_minutes ?? 0,
+                        participantCount: meeting.participant_count ?? 0,
+                        summary: meeting.summary || {},
+                        diagnostics: meeting.diagnostics || null,
+                    });
+
+                for (const participant of meeting.participants || []) {
+                    records.push(this._normalizeRecordFromObject({
+                        course: course.course,
+                        date: meeting.date,
+                        meeting_id: meeting.meeting_id,
+                        effective_start: meeting.effective_start,
+                        break_point: meeting.break_point,
+                        effective_end: meeting.effective_end,
+                        threshold: meeting.threshold,
+                        trim_end_minutes: meeting.trim_end_minutes,
+                        break_source: meeting.break_source,
+                        ...participant,
+                    }, index++));
+                }
+            }
+        }
+
+        return { records, lessonMeta };
     },
 
     _parseNormalizedCsv(text) {
@@ -179,7 +229,7 @@ const NormalizedReviewApp = {
         }
 
         const headers = rows[0].map((value) => value.replace(/^\ufeff/, '').trim());
-        return rows.slice(1)
+        const records = rows.slice(1)
             .filter((row) => row.some((cell) => (cell || '').trim() !== ''))
             .map((row, index) => {
                 const record = {};
@@ -188,6 +238,11 @@ const NormalizedReviewApp = {
                 });
                 return this._normalizeRecordFromObject(record, index);
             });
+
+        return {
+            records,
+            lessonMeta: new Map(),
+        };
     },
 
     _normalizeRecordFromObject(raw, index) {
@@ -206,6 +261,10 @@ const NormalizedReviewApp = {
         const meetingId = raw['Meeting ID'] ?? raw.meeting_id ?? raw.meetingId ?? '';
         const effectiveStart = raw['Effective Start'] ?? raw.effective_start ?? raw.effectiveStart ?? '';
         const breakPoint = raw['Break Point'] ?? raw.break_point ?? raw.breakPoint ?? '';
+        const effectiveEnd = raw['Effective End'] ?? raw.effective_end ?? raw.effectiveEnd ?? '';
+        const threshold = this._toNumber(raw.Threshold ?? raw.threshold ?? raw.threshold_value ?? 0.8);
+        const trimStartMinutes = this._toNumber(raw['Trim Start Minutes'] ?? raw.trim_start_minutes ?? raw.trimStartMinutes);
+        const trimEndMinutes = this._toNumber(raw['Trim End Minutes'] ?? raw.trim_end_minutes ?? raw.trimEndMinutes);
         const breakSource = raw['Break Source'] ?? raw.break_source ?? raw.breakSource ?? '';
 
         return {
@@ -226,6 +285,10 @@ const NormalizedReviewApp = {
             meetingId,
             effectiveStart,
             breakPoint,
+            effectiveEnd,
+            threshold,
+            trimStartMinutes,
+            trimEndMinutes,
             breakSource,
         };
     },
@@ -244,8 +307,9 @@ const NormalizedReviewApp = {
         return records.map((record) => {
             const pctFirst = this._calcPct(record.minutesFirstHalf, record.durationFirstHalf);
             const pctSecond = this._calcPct(record.minutesSecondHalf, record.durationSecondHalf);
-            const nearFirst = this._isBorderline(pctFirst, record.durationFirstHalf);
-            const nearSecond = this._isBorderline(pctSecond, record.durationSecondHalf);
+            const threshold = record.threshold || 0.8;
+            const nearFirst = this._isBorderline(pctFirst, record.durationFirstHalf, threshold);
+            const nearSecond = this._isBorderline(pctSecond, record.durationSecondHalf, threshold);
             const duplicateKey = [
                 record.course.trim().toLowerCase(),
                 record.date.trim().toLowerCase(),
@@ -258,6 +322,7 @@ const NormalizedReviewApp = {
                     key: 'borderline',
                     tone: 'warning',
                     label: `Borderline ${nearFirst && nearSecond ? '1ª/2ª' : nearFirst ? '1ª' : '2ª'} metà`,
+                    review: true,
                 });
             }
             if (record.breakSource !== 'auto') {
@@ -265,6 +330,7 @@ const NormalizedReviewApp = {
                     key: 'split',
                     tone: 'info',
                     label: `Split ${record.breakSource || 'non auto'}`,
+                    review: true,
                 });
             }
             if (record.segmentCount > 2) {
@@ -272,6 +338,7 @@ const NormalizedReviewApp = {
                     key: 'segments',
                     tone: 'alert',
                     label: `${record.segmentCount} segmenti`,
+                    review: true,
                 });
             }
             if (!record.email) {
@@ -279,6 +346,7 @@ const NormalizedReviewApp = {
                     key: 'email',
                     tone: 'info',
                     label: 'Email assente',
+                    review: false,
                 });
             }
             if ((duplicateMap.get(duplicateKey) || 0) > 1) {
@@ -286,15 +354,19 @@ const NormalizedReviewApp = {
                     key: 'duplicate',
                     tone: 'alert',
                     label: 'Nome duplicato nello stesso meeting',
+                    review: true,
                 });
             }
+
+            const reviewFlags = flags.filter((flag) => flag.review !== false);
 
             return {
                 ...record,
                 pctFirst,
                 pctSecond,
                 flags,
-                isFlagged: flags.length > 0,
+                isFlagged: reviewFlags.length > 0,
+                reviewFlags,
                 duplicateCount: duplicateMap.get(duplicateKey) || 0,
             };
         });
@@ -419,40 +491,114 @@ const NormalizedReviewApp = {
     },
 
     _renderTable() {
-        const rows = this._filteredRecords.map((record, index) => {
-            const isSelected = index === this._selectedIndex;
-            const classes = [];
-            if (record.isFlagged) classes.push('flagged');
-            if (isSelected) classes.push('selected');
+        if (this._filteredRecords.length === 0) {
+            this._els.recordsBody.innerHTML = '<tr><td colspan="3" class="muted">Nessun record corrisponde ai filtri correnti.</td></tr>';
+            this._els.tableMeta.textContent = `0 record visibili su ${this._records.length}.`;
+            return;
+        }
 
-            return `
-                <tr class="${classes.join(' ')}" data-row-index="${index}">
-                    <td>${this._buildFlagHtml(record.flags)}</td>
-                    <td>${this._escapeHtml(record.course)}</td>
-                    <td>${this._escapeHtml(this._formatDate(record.date))}</td>
-                    <td>${this._escapeHtml(record.fullName || '(senza nome)')}</td>
-                    <td>${this._escapeHtml(record.email || '-')}</td>
-                    <td><span class="presence ${this._escapeAttr(record.presence)}">${this._escapeHtml(this._presenceLabel(record.presence))}</span></td>
-                    <td>${this._metricCell(record.minutesFirstHalf, record.durationFirstHalf, record.pctFirst)}</td>
-                    <td>${this._metricCell(record.minutesSecondHalf, record.durationSecondHalf, record.pctSecond)}</td>
-                    <td>${this._escapeHtml(record.totalMinutes.toFixed(1))} min</td>
-                    <td>${this._escapeHtml(String(record.segmentCount))}</td>
-                    <td>${this._escapeHtml(record.breakSource || '-')}</td>
-                    <td>${this._escapeHtml(record.meetingId || '-')}</td>
-                </tr>
+        const groups = this._groupByLesson(this._filteredRecords);
+        const orderedRecords = [];
+        let html = '';
+
+        for (const [lessonKey, lesson] of groups) {
+            const { course, date, records } = lesson;
+            const flaggedCount = records.filter((record) => record.isFlagged).length;
+            const lessonMeta = this._lessonMeta.get(lessonKey);
+            const rows = records.map((record) => {
+                const rowIndex = orderedRecords.push(record) - 1;
+                const isSelected = rowIndex === this._selectedIndex;
+                const classes = [];
+                if (record.isFlagged) classes.push('flagged');
+                if (isSelected) classes.push('selected');
+
+                return `
+                    <tr class="${classes.join(' ')}" data-row-index="${rowIndex}">
+                        <td class="person-cell">${this._buildPersonCell(record)}</td>
+                        <td class="half-cell">${this._buildHalfCell(record, 'first')}</td>
+                        <td class="half-cell">${this._buildHalfCell(record, 'second')}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            html += `
+                <div class="course-group ${this._expandedLessons.has(lessonKey) ? 'expanded' : ''}" data-lesson-key="${this._escapeAttr(lessonKey)}">
+                    <div class="course-group-header" data-lesson-key="${this._escapeAttr(lessonKey)}">
+                        <div class="course-group-summary">
+                            <div class="course-group-title">${this._escapeHtml(course || '(senza corso)')}</div>
+                            <div class="course-group-meta">${this._escapeHtml(this._formatDate(date))} · ${records.length} persone · ${flaggedCount} da rivedere</div>
+                        </div>
+                        <div class="course-group-overview">${records.map((record) => this._buildLessonPersonToken(record)).join('')}</div>
+                    </div>
+                    <div class="course-group-body">
+                    ${this._buildMeetingDiagnostics(lessonMeta, records)}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Persona</th>
+                                    <th>Prima metà</th>
+                                    <th>Seconda metà</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                    </div>
+                </div>
             `;
-        }).join('');
+        }
 
-        this._els.recordsBody.innerHTML = rows || '<tr><td colspan="12" class="muted">Nessun record corrisponde ai filtri correnti.</td></tr>';
+        this._displayRecords = orderedRecords;
+        this._els.recordsBody.innerHTML = `<tr><td colspan="3" style="padding:0;border:none;background:transparent;"><div>${html}</div></td></tr>`;
         this._els.tableMeta.textContent = `${this._filteredRecords.length} record visibili su ${this._records.length}.`;
+
+        this._els.recordsBody.querySelectorAll('.course-group-header').forEach((header) => {
+            header.addEventListener('click', () => {
+                const lessonKey = header.dataset.lessonKey;
+                if (this._expandedLessons.has(lessonKey)) {
+                    this._expandedLessons.delete(lessonKey);
+                } else {
+                    this._expandedLessons.add(lessonKey);
+                }
+                this._renderTable();
+            });
+        });
 
         this._els.recordsBody.querySelectorAll('tr[data-row-index]').forEach((row) => {
             row.addEventListener('click', () => {
                 this._selectedIndex = parseInt(row.dataset.rowIndex, 10);
+                const record = this._displayRecords[this._selectedIndex];
+                if (record) {
+                    this._expandedLessons.add(this._lessonKeyFor(record));
+                }
                 this._renderTable();
                 this._renderDetail();
+                this._els.detailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
+    },
+
+    _groupByLesson(records) {
+        const groups = new Map();
+        for (const record of records) {
+            const key = this._lessonKeyFor(record);
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    course: record.course || '',
+                    date: record.date || '',
+                    records: [],
+                });
+            }
+            groups.get(key).records.push(record);
+        }
+        return new Map(
+            [...groups.entries()].sort((a, b) => {
+                const left = `${a[1].course}|${a[1].date}`;
+                const right = `${b[1].course}|${b[1].date}`;
+                return left.localeCompare(right, 'it');
+            })
+        );
     },
 
     _syncSelectedRecord() {
@@ -461,14 +607,14 @@ const NormalizedReviewApp = {
             return;
         }
 
-        if (this._selectedIndex == null || this._selectedIndex >= this._filteredRecords.length) {
+        if (this._selectedIndex == null || this._selectedIndex >= this._displayRecords.length) {
             this._selectedIndex = 0;
         }
         this._renderDetail();
     },
 
     _renderDetail() {
-        const record = this._filteredRecords[this._selectedIndex];
+        const record = this._displayRecords[this._selectedIndex];
         if (!record) {
             this._clearDetail();
             return;
@@ -513,8 +659,171 @@ const NormalizedReviewApp = {
         return flags.map((flag) => `<span class="flag ${flag.tone}">${this._escapeHtml(flag.label)}</span>`).join(expanded ? '' : ' ');
     },
 
-    _metricCell(minutes, duration, pct) {
-        return `${minutes.toFixed(1)} / ${duration.toFixed(1)}<br><span class="muted">${this._formatPct(pct)}</span>`;
+    _buildPersonCell(record) {
+        const emailHtml = record.email ? ` (${this._escapeHtml(record.email)})` : '';
+        const flagsHtml = record.flags.length > 0
+            ? `<div class="flag-stack">${this._buildFlagHtml(record.flags)}</div>`
+            : '';
+
+        return `
+            <div class="person-name">${this._escapeHtml(record.fullName || '(senza nome)')}${emailHtml}</div>
+            <div class="person-meta">
+                ${this._escapeHtml(record.course)}<br>
+                ${this._escapeHtml(this._formatDate(record.date))} · ${this._escapeHtml(this._presenceLabel(record.presence))}
+            </div>
+            ${flagsHtml}
+        `;
+    },
+
+    _buildHalfCell(record, side) {
+        const pct = side === 'first' ? record.pctFirst : record.pctSecond;
+        const minutes = side === 'first' ? record.minutesFirstHalf : record.minutesSecondHalf;
+        const duration = side === 'first' ? record.durationFirstHalf : record.durationSecondHalf;
+        const threshold = record.threshold || 0.8;
+        const thresholdPct = Math.round(threshold * 100);
+        const deltaValue = Math.round((pct - threshold) * 100);
+        const deltaClass = deltaValue >= 0 ? 'positive' : 'negative';
+        const deltaText = `${deltaValue > 0 ? '+' : ''}${deltaValue}`;
+
+        return `
+            <div class="delta ${deltaClass}">${deltaText}</div>
+            <div class="half-detail">
+                ${this._formatPct(pct)} su ${thresholdPct}%<br>
+                ${minutes.toFixed(1)} / ${duration.toFixed(1)} min
+            </div>
+        `;
+    },
+
+    _buildLessonPersonToken(record) {
+        const tooltip = `${record.fullName || '(senza nome)'}${record.email ? ` (${record.email})` : ''}`;
+        const threshold = record.threshold || 0.8;
+        return `
+            <span class="lesson-person" title="${this._escapeAttr(tooltip)}">
+                <span class="lesson-person-name">${this._escapeHtml(record.fullName || '(senza nome)')}</span>
+                <span class="lesson-dots">
+                    <span class="lesson-dot ${this._dotClass(record.pctFirst, threshold)}"></span>
+                    <span class="lesson-dot ${this._dotClass(record.pctSecond, threshold)}"></span>
+                </span>
+            </span>
+        `;
+    },
+
+    _buildMeetingDiagnostics(lessonMeta, records) {
+        if (!lessonMeta) {
+            return `
+                <div class="meeting-diagnostics empty">
+                    <div class="meeting-diagnostics-note">
+                        Diagnostica meeting non disponibile: con il CSV vedi il risultato, ma non il profilo temporale della lezione. Per questo blocco conviene caricare il JSON v2.
+                    </div>
+                </div>
+            `;
+        }
+
+        const diagnostics = lessonMeta.diagnostics || {};
+        const timeline = diagnostics.timeline || [];
+        const peak = diagnostics.peak_active_count || Math.max(...timeline.map((point) => point.active_count), 1);
+        const bars = timeline.length > 0
+            ? timeline.map((point) => this._buildTimelineBar(point, peak)).join('')
+            : '<div class="meeting-diagnostics-note">Timeline non disponibile per questa lezione.</div>';
+
+        const markerStart = this._markerPosition(lessonMeta.effectiveStart, lessonMeta.effectiveStart, lessonMeta.effectiveEnd);
+        const markerBreak = this._markerPosition(lessonMeta.breakPoint, lessonMeta.effectiveStart, lessonMeta.effectiveEnd);
+        const markerEnd = this._markerPosition(lessonMeta.effectiveEnd, lessonMeta.effectiveStart, lessonMeta.effectiveEnd);
+        const trimStartMinutes = diagnostics.trim_start_minutes ?? lessonMeta.trimStartMinutes ?? 0;
+        const trimEndMinutes = diagnostics.trim_end_minutes ?? lessonMeta.trimEndMinutes ?? 0;
+        const thresholdPct = Math.round((lessonMeta.threshold || 0.8) * 100);
+        const summary = lessonMeta.summary || {};
+        const diagnosisText = lessonMeta.breakSource === 'auto'
+            ? 'Pausa rilevata automaticamente dal profilo dei presenti.'
+            : lessonMeta.breakSource === 'midpoint'
+                ? 'Pausa non trovata: il giallo è stato messo a metà esatta del tempo utile.'
+                : `Pausa impostata con criterio ${lessonMeta.breakSource}.`;
+
+        return `
+            <div class="meeting-diagnostics">
+                <div class="meeting-diagnostics-head">
+                    <div class="meeting-diagnostics-stats">
+                        <div class="diag-stat">
+                            <span class="diag-k">Meeting</span>
+                            <span class="diag-v">${this._escapeHtml(lessonMeta.meetingId || '-')}</span>
+                        </div>
+                        <div class="diag-stat">
+                            <span class="diag-k">Threshold</span>
+                            <span class="diag-v">${thresholdPct}%</span>
+                        </div>
+                        <div class="diag-stat">
+                            <span class="diag-k">Picco presenti</span>
+                            <span class="diag-v">${peak}</span>
+                        </div>
+                        <div class="diag-stat">
+                            <span class="diag-k">Ritardo inizio</span>
+                            <span class="diag-v">${trimStartMinutes > 0 ? `${trimStartMinutes} min` : 'no'}</span>
+                        </div>
+                        <div class="diag-stat">
+                            <span class="diag-k">Coda tagliata</span>
+                            <span class="diag-v">${trimEndMinutes > 0 ? `${trimEndMinutes} min` : 'no'}</span>
+                        </div>
+                    </div>
+                    <div class="meeting-diagnostics-summary">
+                        <span class="diag-pill success">Presente ${summary.presente || 0}</span>
+                        <span class="diag-pill info">1ª metà ${summary.prima_meta || 0}</span>
+                        <span class="diag-pill warning">2ª metà ${summary.seconda_meta || 0}</span>
+                        <span class="diag-pill alert">Assente ${summary.assente || 0}</span>
+                    </div>
+                </div>
+                <div class="meeting-diagnostics-note">${this._escapeHtml(diagnosisText)}</div>
+                <div class="meeting-chart">
+                    <div class="meeting-bars">${bars}</div>
+                    <div class="meeting-markers">
+                        <div class="meeting-marker start" style="left:${markerStart}%">
+                            <span>Inizio</span>
+                            <strong>${this._escapeHtml(this._formatTime(lessonMeta.effectiveStart))}</strong>
+                        </div>
+                        <div class="meeting-marker break" style="left:${markerBreak}%">
+                            <span>Pausa</span>
+                            <strong>${this._escapeHtml(this._formatTime(lessonMeta.breakPoint))}</strong>
+                        </div>
+                        <div class="meeting-marker end" style="left:${markerEnd}%">
+                            <span>Fine utile</span>
+                            <strong>${this._escapeHtml(this._formatTime(lessonMeta.effectiveEnd))}</strong>
+                        </div>
+                    </div>
+                    <div class="meeting-axis">
+                        <span>${this._escapeHtml(this._formatTime(lessonMeta.effectiveStart))}</span>
+                        <span>${this._escapeHtml(this._formatTime(lessonMeta.effectiveEnd))}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    _buildTimelineBar(point, peak) {
+        const ratio = peak > 0 ? point.active_count / peak : 0;
+        const height = Math.max(10, Math.round(ratio * 88));
+        const tooltip = `${this._formatDateTime(point.timestamp)} · ${point.active_count} presenti`;
+        return `<span class="meeting-bar" style="height:${height}px" title="${this._escapeAttr(tooltip)}"></span>`;
+    },
+
+    _markerPosition(value, start, end) {
+        const startMs = new Date(start).getTime();
+        const endMs = new Date(end).getTime();
+        const valueMs = new Date(value).getTime();
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || !Number.isFinite(valueMs)) {
+            return 0;
+        }
+        return Math.max(0, Math.min(100, ((valueMs - startMs) / (endMs - startMs)) * 100));
+    },
+
+    _dotClass(pct, threshold = 0.8) {
+        return pct >= threshold ? 'positive' : 'negative';
+    },
+
+    _lessonKeyFor(record) {
+        return `${record.course || ''}|${record.date || ''}`;
+    },
+
+    _lessonKeyFromParts(course, date) {
+        return `${course || ''}|${date || ''}`;
     },
 
     _calcPct(minutes, duration) {
@@ -522,9 +831,9 @@ const NormalizedReviewApp = {
         return minutes / duration;
     },
 
-    _isBorderline(pct, duration) {
+    _isBorderline(pct, duration, threshold = 0.8) {
         if (!duration || duration <= 0) return false;
-        return Math.abs(pct - 0.8) <= this._filters.borderlineMargin;
+        return pct < threshold && (threshold - pct) <= this._filters.borderlineMargin;
     },
 
     _toNumber(value) {
@@ -550,6 +859,13 @@ const NormalizedReviewApp = {
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return value;
         return date.toLocaleDateString('it-IT');
+    },
+
+    _formatTime(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
     },
 
     _formatDateTime(value) {

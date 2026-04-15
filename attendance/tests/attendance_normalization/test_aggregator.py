@@ -197,6 +197,40 @@ class AggregateMeetingTests(unittest.TestCase):
         self.assertEqual(record.duration_second_half, 30.0)
         self.assertEqual(record.total_minutes, 30.5)
 
+    def test_effective_end_trims_tail_minutes_after_the_real_lesson_end(self):
+        meeting = ZoomMeeting(
+            course="PNL Practicum",
+            meeting_id="m-006",
+            start_time=dt("2026-04-10T19:00:00"),
+            end_time=dt("2026-04-10T20:00:00"),
+            duration_minutes=60,
+            segments=[
+                ZoomSegment(
+                    first_name="Paolo",
+                    last_name="Neri",
+                    email="paolo@example.com",
+                    full_name="Paolo Neri",
+                    join_time=dt("2026-04-10T19:25:00"),
+                    leave_time=dt("2026-04-10T20:00:00"),
+                )
+            ],
+        )
+
+        records = aggregate_meeting(
+            meeting=meeting,
+            effective_start=dt("2026-04-10T19:00:00"),
+            break_point=dt("2026-04-10T19:30:00"),
+            effective_end=dt("2026-04-10T19:49:00"),
+        )
+
+        record = records[0]
+
+        self.assertEqual(record.minutes_first_half, 5.0)
+        self.assertEqual(record.minutes_second_half, 19.0)
+        self.assertEqual(record.duration_first_half, 30.0)
+        self.assertEqual(record.duration_second_half, 19.0)
+        self.assertEqual(record.meeting_end, dt("2026-04-10T19:49:00"))
+
 
 if __name__ == "__main__":
     unittest.main()
