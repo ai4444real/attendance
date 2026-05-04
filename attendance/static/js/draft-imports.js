@@ -431,6 +431,10 @@ const DraftImportsApp = {
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#39;');
     },
+
+    _escapeAttr(value) {
+        return this._escapeHtml(value);
+    },
 };
 
 document.addEventListener('DOMContentLoaded', () => {
