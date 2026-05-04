@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .models import ImportBatch, ImportBatchCreate, LessonDraft, PersistedDraftImport
+from .models import (
+    DraftBatchDetail,
+    ImportBatchCreate,
+    ImportBatchSummary,
+    LessonDraft,
+    PersistedDraftImport,
+)
 
 
 class AttendanceDraftImportRepository(Protocol):
@@ -16,3 +22,13 @@ class AttendanceDraftImportRepository(Protocol):
         lessons: list[LessonDraft],
     ) -> PersistedDraftImport:
         """Persist a full normalized draft import and return a summary."""
+
+
+class AttendanceDraftQueryRepository(Protocol):
+    """Read-only queries for draft attendance imports."""
+
+    def list_batches(self, limit: int = 20) -> list[ImportBatchSummary]:
+        """Return recent import batches with lightweight counters."""
+
+    def get_batch_detail(self, batch_id: int) -> DraftBatchDetail:
+        """Return one import batch with its lessons and participants."""
