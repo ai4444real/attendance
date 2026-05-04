@@ -27,10 +27,16 @@ Una volta loggato sul server:
 
 ```bash
 cd /opt/rebekko/webapps
-git pull origin main
 chmod +x deploy.sh
 ./deploy.sh
 ```
+
+`deploy.sh` fa gia' tutto lui:
+
+- `git pull --ff-only origin main`
+- install/update dei requirement nel virtualenv
+- restart del servizio `rebekko-webapps`
+- health check finale
 
 ## Verifica
 
