@@ -27,7 +27,6 @@ Una volta loggato sul server:
 
 ```bash
 cd /opt/rebekko/webapps
-chmod +x deploy.sh
 ./deploy.sh
 ```
 
@@ -36,7 +35,20 @@ chmod +x deploy.sh
 - `git pull --ff-only origin main`
 - install/update dei requirement nel virtualenv
 - restart del servizio `rebekko-webapps`
-- health check finale
+- health check locale con retry su `127.0.0.1:8080`
+- health check pubblico finale su `https://rebekko.pnlevolution.com/health`
+
+## Primo allineamento server
+
+Se il server e' rimasto indietro e `git pull` si ferma per una modifica locale a
+`deploy.sh`, fai una volta sola:
+
+```bash
+cd /opt/rebekko/webapps
+git checkout -- deploy.sh
+git pull --ff-only origin main
+./deploy.sh
+```
 
 ## Verifica
 

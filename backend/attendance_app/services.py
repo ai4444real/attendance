@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from backend.attendance_normalization.presence_rules import determine_presence_status
 from backend.attendance_normalization.service import NormalizationResult
 
 from .models import (
@@ -49,29 +50,41 @@ class AttendanceImportService:
         lesson_drafts: list[LessonDraft] = []
         for key, meeting in meeting_by_key.items():
             course, meeting_id, lesson_date = key
-            participants = []
+            participants_by_key: dict[str, LessonParticipantDraft] = {}
 
             for record in records_by_key.get(key, []):
                 full_name = f"{record.first_name} {record.last_name}".strip()
                 participant_key = record.email.strip().lower() or full_name.lower()
-                participants.append(
-                    LessonParticipantDraft(
-                        participant_key=participant_key,
-                        canonical_full_name=full_name,
-                        raw_full_name=full_name,
-                        email=record.email or None,
-                        segment_count=record.segment_count,
-                        minutes_first_half=record.minutes_first_half,
-                        minutes_second_half=record.minutes_second_half,
-                        duration_first_half=record.duration_first_half,
-                        duration_second_half=record.duration_second_half,
-                        total_minutes=record.total_minutes,
-                        calculated_presence_status=record.calculated_presence_status,
-                        final_presence_status=record.calculated_presence_status,
-                        flags=[],
-                        metadata={},
-                    )
+                participant_draft = LessonParticipantDraft(
+                    participant_key=participant_key,
+                    canonical_full_name=full_name,
+                    raw_full_name=full_name,
+                    email=record.email or None,
+                    segment_count=record.segment_count,
+                    minutes_first_half=record.minutes_first_half,
+                    minutes_second_half=record.minutes_second_half,
+                    duration_first_half=record.duration_first_half,
+                    duration_second_half=record.duration_second_half,
+                    total_minutes=record.total_minutes,
+                    calculated_presence_status=record.calculated_presence_status,
+                    final_presence_status=record.calculated_presence_status,
+                    flags=[],
+                    metadata={},
                 )
+                existing = participants_by_key.get(participant_key)
+                if existing is None:
+                    participants_by_key[participant_key] = participant_draft
+                else:
+                    participants_by_key[participant_key] = self._merge_participant_drafts(
+                        existing,
+                        participant_draft,
+                        threshold=meeting.threshold,
+                    )
+
+            participants = sorted(
+                participants_by_key.values(),
+                key=lambda participant: participant.canonical_full_name.lower(),
+            )
 
             lesson_drafts.append(
                 LessonDraft(
@@ -115,3 +128,54 @@ class AttendanceImportService:
             )
 
         return sorted(lesson_drafts, key=lambda lesson: (lesson.lesson_date, lesson.course_name, lesson.source_meeting_id))
+
+    def _merge_participant_drafts(
+        self,
+        left: LessonParticipantDraft,
+        right: LessonParticipantDraft,
+        threshold: float,
+    ) -> LessonParticipantDraft:
+        canonical_full_name = (
+            right.canonical_full_name
+            if len(right.canonical_full_name) > len(left.canonical_full_name)
+            else left.canonical_full_name
+        )
+        raw_full_name = (
+            right.raw_full_name
+            if (right.raw_full_name and len(right.raw_full_name) > len(left.raw_full_name or ""))
+            else left.raw_full_name
+        )
+        email = left.email or right.email
+        segment_count = left.segment_count + right.segment_count
+        minutes_first_half = left.minutes_first_half + right.minutes_first_half
+        minutes_second_half = left.minutes_second_half + right.minutes_second_half
+        duration_first_half = max(left.duration_first_half, right.duration_first_half)
+        duration_second_half = max(left.duration_second_half, right.duration_second_half)
+        total_minutes = left.total_minutes + right.total_minutes
+        calculated_presence_status = determine_presence_status(
+            minutes_first_half=minutes_first_half,
+            minutes_second_half=minutes_second_half,
+            duration_first_half=duration_first_half,
+            duration_second_half=duration_second_half,
+            threshold=threshold,
+        )
+        merged_flags = sorted(set(left.flags + right.flags))
+        merged_metadata = {**left.metadata, **right.metadata}
+        merged_metadata["merged_duplicate_participant_key"] = True
+
+        return LessonParticipantDraft(
+            participant_key=left.participant_key,
+            canonical_full_name=canonical_full_name,
+            raw_full_name=raw_full_name,
+            email=email,
+            segment_count=segment_count,
+            minutes_first_half=minutes_first_half,
+            minutes_second_half=minutes_second_half,
+            duration_first_half=duration_first_half,
+            duration_second_half=duration_second_half,
+            total_minutes=total_minutes,
+            calculated_presence_status=calculated_presence_status,
+            final_presence_status=calculated_presence_status,
+            flags=merged_flags,
+            metadata=merged_metadata,
+        )

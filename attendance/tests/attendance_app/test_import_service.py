@@ -130,6 +130,38 @@ class AttendanceImportServiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.persist_normalization_result(replace(self.batch, source_file_name="  "), self.result)
 
+    def test_persist_normalization_result_merges_duplicate_participant_keys_in_same_lesson(self) -> None:
+        duplicated = replace(
+            self.result,
+            records=[
+                self.result.records[0],
+                replace(
+                    self.result.records[0],
+                    first_name="Mario Andrea",
+                    minutes_first_half=1.0,
+                    minutes_second_half=0.5,
+                    total_minutes=1.5,
+                    segment_count=1,
+                ),
+            ],
+        )
+
+        persisted = self.service.persist_normalization_result(self.batch, duplicated)
+
+        self.assertEqual(1, persisted.lessons_created)
+        self.assertEqual(1, persisted.participants_created)
+        lesson = self.repository.last_lessons[0]
+        self.assertEqual(1, len(lesson.participants))
+        participant = lesson.participants[0]
+        self.assertEqual("mario@example.com", participant.participant_key)
+        self.assertEqual("Mario Andrea Rossi", participant.canonical_full_name)
+        self.assertEqual(45.0, participant.minutes_first_half)
+        self.assertEqual(45.5, participant.minutes_second_half)
+        self.assertEqual(90.5, participant.total_minutes)
+        self.assertEqual(3, participant.segment_count)
+        self.assertEqual("presente", participant.final_presence_status)
+        self.assertTrue(participant.metadata["merged_duplicate_participant_key"])
+
 
 if __name__ == "__main__":
     unittest.main()
