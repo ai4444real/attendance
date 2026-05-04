@@ -444,39 +444,61 @@ async def attendance_import_batch_detail(batch_id: int):
                 "status": lesson.status,
                 "is_ignored": lesson.is_ignored,
                 "threshold_ratio": lesson.threshold_ratio,
-                "meeting_start_at": lesson.meeting_start_at,
-                "meeting_end_at": lesson.meeting_end_at,
-                "effective_start_at": lesson.effective_start_at,
-                "break_point_at": lesson.break_point_at,
-                "effective_end_at": lesson.effective_end_at,
-                "break_source": lesson.break_source,
-                "effective_start_source": lesson.effective_start_source,
-                "effective_end_source": lesson.effective_end_source,
-                "warnings": lesson.warnings,
-                "diagnostics": lesson.diagnostics,
                 "summary": lesson.summary,
-                "participants": [
-                    {
-                        "id": participant.id,
-                        "canonical_full_name": participant.canonical_full_name,
-                        "email": participant.email,
-                        "segment_count": participant.segment_count,
-                        "minutes_first_half": participant.minutes_first_half,
-                        "minutes_second_half": participant.minutes_second_half,
-                        "duration_first_half": participant.duration_first_half,
-                        "duration_second_half": participant.duration_second_half,
-                        "total_minutes": participant.total_minutes,
-                        "calculated_presence_status": participant.calculated_presence_status,
-                        "manual_override_presence_status": participant.manual_override_presence_status,
-                        "final_presence_status": participant.final_presence_status,
-                        "flags": participant.flags,
-                        "metadata": participant.metadata,
-                    }
-                    for participant in lesson.participants
-                ],
             }
             for lesson in detail.lessons
         ],
+    }
+
+
+@app.get("/api/attendance/lessons/{lesson_id}")
+async def attendance_lesson_detail(lesson_id: int):
+    repository = PostgresAttendanceDraftQueryRepository()
+    try:
+        lesson = repository.get_lesson_detail(lesson_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "lesson": {
+            "id": lesson.id,
+            "course_name": lesson.course_name,
+            "lesson_date": lesson.lesson_date,
+            "source_meeting_id": lesson.source_meeting_id,
+            "status": lesson.status,
+            "is_ignored": lesson.is_ignored,
+            "threshold_ratio": lesson.threshold_ratio,
+            "meeting_start_at": lesson.meeting_start_at,
+            "meeting_end_at": lesson.meeting_end_at,
+            "effective_start_at": lesson.effective_start_at,
+            "break_point_at": lesson.break_point_at,
+            "effective_end_at": lesson.effective_end_at,
+            "break_source": lesson.break_source,
+            "effective_start_source": lesson.effective_start_source,
+            "effective_end_source": lesson.effective_end_source,
+            "warnings": lesson.warnings,
+            "diagnostics": lesson.diagnostics,
+            "summary": lesson.summary,
+            "participants": [
+                {
+                    "id": participant.id,
+                    "canonical_full_name": participant.canonical_full_name,
+                    "email": participant.email,
+                    "segment_count": participant.segment_count,
+                    "minutes_first_half": participant.minutes_first_half,
+                    "minutes_second_half": participant.minutes_second_half,
+                    "duration_first_half": participant.duration_first_half,
+                    "duration_second_half": participant.duration_second_half,
+                    "total_minutes": participant.total_minutes,
+                    "calculated_presence_status": participant.calculated_presence_status,
+                    "manual_override_presence_status": participant.manual_override_presence_status,
+                    "final_presence_status": participant.final_presence_status,
+                    "flags": participant.flags,
+                    "metadata": participant.metadata,
+                }
+                for participant in lesson.participants
+            ],
+        }
     }
 
 

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from backend.attendance_app.models import (
     DraftBatchDetail,
+    DraftLessonSummary,
     DraftLessonParticipantView,
     DraftLessonView,
     ImportBatchSummary,
@@ -102,6 +103,47 @@ class PostgresAttendanceDraftQueryRepository:
                         l.source_meeting_id,
                         l.status,
                         l.is_ignored,
+                        l.threshold_ratio
+                    FROM attendance_lessons AS l
+                    WHERE l.import_batch_id = %s
+                    ORDER BY l.lesson_date DESC, l.course_name ASC, l.id ASC
+                    """,
+                    (batch_id,),
+                )
+                lesson_rows = cursor.fetchall()
+
+                lessons: list[DraftLessonSummary] = []
+                for lesson_row in lesson_rows:
+                    lesson_id = int(lesson_row[0])
+                    summary = self._load_lesson_summary(cursor, lesson_id)
+
+                    lessons.append(
+                        DraftLessonSummary(
+                            id=lesson_id,
+                            course_name=str(lesson_row[1]),
+                            lesson_date=lesson_row[2].isoformat(),
+                            source_meeting_id=str(lesson_row[3]),
+                            status=str(lesson_row[4]),
+                            is_ignored=bool(lesson_row[5]),
+                            threshold_ratio=float(lesson_row[6]),
+                            summary=summary,
+                        )
+                    )
+
+        return DraftBatchDetail(batch=batch, lessons=lessons)
+
+    def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        l.id,
+                        l.course_name,
+                        l.lesson_date,
+                        l.source_meeting_id,
+                        l.status,
+                        l.is_ignored,
                         l.threshold_ratio,
                         l.meeting_start_at,
                         l.meeting_end_at,
@@ -114,93 +156,104 @@ class PostgresAttendanceDraftQueryRepository:
                         l.warnings_json,
                         l.diagnostics_json
                     FROM attendance_lessons AS l
-                    WHERE l.import_batch_id = %s
-                    ORDER BY l.lesson_date DESC, l.course_name ASC, l.id ASC
+                    WHERE l.id = %s
                     """,
-                    (batch_id,),
+                    (lesson_id,),
                 )
-                lesson_rows = cursor.fetchall()
+                lesson_row = cursor.fetchone()
+                if lesson_row is None:
+                    raise LookupError(f"Attendance lesson {lesson_id} not found.")
 
-                lessons: list[DraftLessonView] = []
-                for lesson_row in lesson_rows:
-                    lesson_id = int(lesson_row[0])
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            p.id,
-                            p.canonical_full_name,
-                            p.email,
-                            p.segment_count,
-                            p.minutes_first_half,
-                            p.minutes_second_half,
-                            p.duration_first_half,
-                            p.duration_second_half,
-                            p.total_minutes,
-                            p.calculated_presence_status,
-                            p.manual_override_presence_status,
-                            p.final_presence_status,
-                            p.flags_json,
-                            p.metadata_json
-                        FROM attendance_lesson_participants AS p
-                        WHERE p.lesson_id = %s
-                        ORDER BY p.canonical_full_name ASC
-                        """,
-                        (lesson_id,),
+                cursor.execute(
+                    """
+                    SELECT
+                        p.id,
+                        p.canonical_full_name,
+                        p.email,
+                        p.segment_count,
+                        p.minutes_first_half,
+                        p.minutes_second_half,
+                        p.duration_first_half,
+                        p.duration_second_half,
+                        p.total_minutes,
+                        p.calculated_presence_status,
+                        p.manual_override_presence_status,
+                        p.final_presence_status,
+                        p.flags_json,
+                        p.metadata_json
+                    FROM attendance_lesson_participants AS p
+                    WHERE p.lesson_id = %s
+                    ORDER BY p.canonical_full_name ASC
+                    """,
+                    (lesson_id,),
+                )
+                participant_rows = cursor.fetchall()
+                participants = [
+                    DraftLessonParticipantView(
+                        id=int(row[0]),
+                        canonical_full_name=str(row[1]),
+                        email=row[2],
+                        segment_count=int(row[3]),
+                        minutes_first_half=float(row[4]),
+                        minutes_second_half=float(row[5]),
+                        duration_first_half=float(row[6]),
+                        duration_second_half=float(row[7]),
+                        total_minutes=float(row[8]),
+                        calculated_presence_status=str(row[9]),
+                        manual_override_presence_status=row[10],
+                        final_presence_status=str(row[11]),
+                        flags=list(row[12] or []),
+                        metadata=dict(row[13] or {}),
                     )
-                    participant_rows = cursor.fetchall()
-                    participants = [
-                        DraftLessonParticipantView(
-                            id=int(row[0]),
-                            canonical_full_name=str(row[1]),
-                            email=row[2],
-                            segment_count=int(row[3]),
-                            minutes_first_half=float(row[4]),
-                            minutes_second_half=float(row[5]),
-                            duration_first_half=float(row[6]),
-                            duration_second_half=float(row[7]),
-                            total_minutes=float(row[8]),
-                            calculated_presence_status=str(row[9]),
-                            manual_override_presence_status=row[10],
-                            final_presence_status=str(row[11]),
-                            flags=list(row[12] or []),
-                            metadata=dict(row[13] or {}),
-                        )
-                        for row in participant_rows
-                    ]
+                    for row in participant_rows
+                ]
 
-                    summary = {
-                        "presente": sum(1 for participant in participants if participant.final_presence_status == "presente"),
-                        "prima_meta": sum(1 for participant in participants if participant.final_presence_status == "prima_meta"),
-                        "seconda_meta": sum(1 for participant in participants if participant.final_presence_status == "seconda_meta"),
-                        "assente": sum(1 for participant in participants if participant.final_presence_status == "assente"),
-                    }
+                summary = self._load_lesson_summary(cursor, lesson_id)
 
-                    lessons.append(
-                        DraftLessonView(
-                            id=lesson_id,
-                            course_name=str(lesson_row[1]),
-                            lesson_date=lesson_row[2].isoformat(),
-                            source_meeting_id=str(lesson_row[3]),
-                            status=str(lesson_row[4]),
-                            is_ignored=bool(lesson_row[5]),
-                            threshold_ratio=float(lesson_row[6]),
-                            meeting_start_at=_ensure_datetime(lesson_row[7]).isoformat(),
-                            meeting_end_at=_ensure_datetime(lesson_row[8]).isoformat(),
-                            effective_start_at=_ensure_datetime(lesson_row[9]).isoformat(),
-                            break_point_at=_optional_datetime_iso(lesson_row[10]),
-                            effective_end_at=_ensure_datetime(lesson_row[11]).isoformat(),
-                            break_source=str(lesson_row[12]),
-                            effective_start_source=str(lesson_row[13]),
-                            effective_end_source=str(lesson_row[14]),
-                            warnings=list(lesson_row[15] or []),
-                            diagnostics=dict(lesson_row[16] or {}),
-                            summary=summary,
-                            participants=participants,
-                        )
-                    )
+        return DraftLessonView(
+            id=int(lesson_row[0]),
+            course_name=str(lesson_row[1]),
+            lesson_date=lesson_row[2].isoformat(),
+            source_meeting_id=str(lesson_row[3]),
+            status=str(lesson_row[4]),
+            is_ignored=bool(lesson_row[5]),
+            threshold_ratio=float(lesson_row[6]),
+            meeting_start_at=_ensure_datetime(lesson_row[7]).isoformat(),
+            meeting_end_at=_ensure_datetime(lesson_row[8]).isoformat(),
+            effective_start_at=_ensure_datetime(lesson_row[9]).isoformat(),
+            break_point_at=_optional_datetime_iso(lesson_row[10]),
+            effective_end_at=_ensure_datetime(lesson_row[11]).isoformat(),
+            break_source=str(lesson_row[12]),
+            effective_start_source=str(lesson_row[13]),
+            effective_end_source=str(lesson_row[14]),
+            warnings=list(lesson_row[15] or []),
+            diagnostics=dict(lesson_row[16] or {}),
+            summary=summary,
+            participants=participants,
+        )
 
-        return DraftBatchDetail(batch=batch, lessons=lessons)
+    def _load_lesson_summary(self, cursor, lesson_id: int) -> dict[str, int]:
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE p.final_presence_status = 'presente') AS presente,
+                COUNT(*) FILTER (WHERE p.final_presence_status = 'prima_meta') AS prima_meta,
+                COUNT(*) FILTER (WHERE p.final_presence_status = 'seconda_meta') AS seconda_meta,
+                COUNT(*) FILTER (WHERE p.final_presence_status = 'assente') AS assente
+            FROM attendance_lesson_participants AS p
+            WHERE p.lesson_id = %s
+            """,
+            (lesson_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return {"presente": 0, "prima_meta": 0, "seconda_meta": 0, "assente": 0}
+        return {
+            "presente": int(row[0]),
+            "prima_meta": int(row[1]),
+            "seconda_meta": int(row[2]),
+            "assente": int(row[3]),
+        }
 
 
 def _ensure_datetime(value: object) -> datetime:

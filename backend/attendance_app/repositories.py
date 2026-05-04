@@ -6,6 +6,7 @@ from typing import Protocol
 
 from .models import (
     DraftBatchDetail,
+    DraftLessonView,
     ImportBatchCreate,
     ImportBatchSummary,
     LessonDraft,
@@ -31,4 +32,7 @@ class AttendanceDraftQueryRepository(Protocol):
         """Return recent import batches with lightweight counters."""
 
     def get_batch_detail(self, batch_id: int) -> DraftBatchDetail:
-        """Return one import batch with its lessons and participants."""
+        """Return one import batch with lightweight lesson summaries."""
+
+    def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
+        """Return one lesson with full participant detail."""

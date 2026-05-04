@@ -99,7 +99,16 @@
 
             <section class="panel">
                 <div id="batchSummary" class="summary-grid"></div>
-                <div id="lessonsContainer" class="lessons"></div>
+                <div class="layout" style="grid-template-columns: 320px minmax(0, 1fr); gap: 16px;">
+                    <div>
+                        <h2 class="panel-title">Lezioni del batch</h2>
+                        <div id="lessonList" class="batch-list"></div>
+                    </div>
+                    <div>
+                        <h2 class="panel-title">Dettaglio lezione</h2>
+                        <div id="lessonsContainer" class="lessons"></div>
+                    </div>
+                </div>
             </section>
         </section>
     </main>

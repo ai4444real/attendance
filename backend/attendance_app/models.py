@@ -129,6 +129,18 @@ class DraftLessonView:
 
 
 @dataclass(frozen=True)
+class DraftLessonSummary:
+    id: int
+    course_name: str
+    lesson_date: str
+    source_meeting_id: str
+    status: str
+    is_ignored: bool
+    threshold_ratio: float
+    summary: dict[str, int]
+
+
+@dataclass(frozen=True)
 class DraftBatchDetail:
     batch: ImportBatchSummary
-    lessons: list[DraftLessonView]
+    lessons: list[DraftLessonSummary]

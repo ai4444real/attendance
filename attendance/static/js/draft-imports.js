@@ -5,6 +5,7 @@ const DraftImportsApp = {
         this._els = {
             batchList: document.getElementById('batchList'),
             batchSummary: document.getElementById('batchSummary'),
+            lessonList: document.getElementById('lessonList'),
             lessonsContainer: document.getElementById('lessonsContainer'),
         };
 
@@ -14,6 +15,7 @@ const DraftImportsApp = {
     async _loadBatches() {
         this._els.batchList.innerHTML = '<div class="empty">Carico gli import batch...</div>';
         this._els.batchSummary.innerHTML = '';
+        this._els.lessonList.innerHTML = '';
         this._els.lessonsContainer.innerHTML = '<div class="empty">Seleziona un import batch.</div>';
 
         try {
@@ -62,8 +64,10 @@ const DraftImportsApp = {
 
     async _loadBatchDetail(batchId) {
         this._selectedBatchId = batchId;
+        this._selectedLessonId = null;
         this._renderBatchList();
         this._els.batchSummary.innerHTML = '';
+        this._els.lessonList.innerHTML = '<div class="empty">Carico la lista lezioni...</div>';
         this._els.lessonsContainer.innerHTML = '<div class="empty">Carico il dettaglio del batch...</div>';
 
         try {
@@ -74,7 +78,12 @@ const DraftImportsApp = {
             }
 
             this._renderBatchSummary(payload.batch);
-            this._renderLessons(payload.lessons || []);
+            this._renderLessonList(payload.lessons || []);
+            if ((payload.lessons || []).length > 0) {
+                await this._loadLessonDetail(payload.lessons[0].id);
+            } else {
+                this._els.lessonsContainer.innerHTML = '<div class="empty">Questo import batch non contiene lezioni.</div>';
+            }
         } catch (error) {
             console.error(error);
             this._els.lessonsContainer.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
@@ -98,73 +107,114 @@ const DraftImportsApp = {
         `).join('');
     },
 
-    _renderLessons(lessons) {
+    _renderLessonList(lessons) {
         if (lessons.length === 0) {
-            this._els.lessonsContainer.innerHTML = '<div class="empty">Questo import batch non contiene lezioni.</div>';
+            this._els.lessonList.innerHTML = '<div class="empty">Questo import batch non contiene lezioni.</div>';
             return;
         }
 
-        this._els.lessonsContainer.innerHTML = lessons.map((lesson) => {
-            const diagnostics = lesson.diagnostics || {};
+        this._currentLessons = lessons;
+        this._els.lessonList.innerHTML = lessons.map((lesson) => {
             const summary = lesson.summary || {};
             return `
-                <article class="lesson-card">
-                    <div class="lesson-head">
-                        <div>
-                            <h3 class="lesson-title">${this._escapeHtml(lesson.course_name)}</h3>
-                            <div class="lesson-subtitle">
-                                ${this._escapeHtml(lesson.lesson_date)} · meeting ${this._escapeHtml(lesson.source_meeting_id)} · lesson #${lesson.id}
-                            </div>
-                        </div>
-                        <div class="pill-row">
-                            <span class="pill green">Presente ${summary.presente || 0}</span>
-                            <span class="pill blue">1ª metà ${summary.prima_meta || 0}</span>
-                            <span class="pill yellow">2ª metà ${summary.seconda_meta || 0}</span>
-                            <span class="pill red">Assente ${summary.assente || 0}</span>
-                        </div>
+                <button class="batch-item${this._selectedLessonId === lesson.id ? ' active' : ''}" data-lesson-id="${lesson.id}" type="button">
+                    <div class="batch-title">${this._escapeHtml(lesson.course_name)}</div>
+                    <div class="batch-meta">
+                        ${this._escapeHtml(lesson.lesson_date)} · meeting ${this._escapeHtml(lesson.source_meeting_id)}<br>
+                        P ${summary.presente || 0} · 1ª ${summary.prima_meta || 0} · 2ª ${summary.seconda_meta || 0} · A ${summary.assente || 0}
                     </div>
-                    <div class="lesson-body">
-                        <div class="timeline-meta">
-                            ${this._mini('Threshold', `${Math.round((lesson.threshold_ratio || 0) * 100)}%`)}
-                            ${this._mini('Inizio utile', this._formatTime(lesson.effective_start_at))}
-                            ${this._mini('Pausa', lesson.break_point_at ? this._formatTime(lesson.break_point_at) : '—')}
-                            ${this._mini('Fine utile', this._formatTime(lesson.effective_end_at))}
-                            ${this._mini('Picco presenti', String(diagnostics.peak_active_count || 0))}
-                            ${this._mini('Sorgente', `${lesson.effective_start_source || 'default'} / ${lesson.effective_end_source || 'default'}`)}
-                        </div>
-                        <table class="participants-table">
-                            <thead>
-                                <tr>
-                                    <th>Persona</th>
-                                    <th>Prima metà</th>
-                                    <th>Seconda metà</th>
-                                    <th>Stato</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${(lesson.participants || []).map((participant) => `
-                                    <tr>
-                                        <td>
-                                            <strong>${this._escapeHtml(participant.canonical_full_name)}</strong><br>
-                                            <span class="hint">${this._escapeHtml(participant.email || 'senza email')}</span>
-                                        </td>
-                                        <td>
-                                            ${this._formatMinutes(participant.minutes_first_half)} / ${this._formatMinutes(participant.duration_first_half)} min
-                                        </td>
-                                        <td>
-                                            ${this._formatMinutes(participant.minutes_second_half)} / ${this._formatMinutes(participant.duration_second_half)} min
-                                        </td>
-                                        <td>
-                                            <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}">${this._escapeHtml(participant.final_presence_status)}</span>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </article>
+                </button>
             `;
         }).join('');
+
+        this._els.lessonList.querySelectorAll('[data-lesson-id]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const lessonId = Number(button.getAttribute('data-lesson-id'));
+                await this._loadLessonDetail(lessonId);
+            });
+        });
+    },
+
+    async _loadLessonDetail(lessonId) {
+        this._selectedLessonId = lessonId;
+        if (this._currentLessons) {
+            this._renderLessonList(this._currentLessons);
+        }
+        this._els.lessonsContainer.innerHTML = '<div class="empty">Carico la lezione...</div>';
+
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lessonId}`);
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Impossibile leggere il dettaglio della lezione.');
+            }
+            this._renderLessonDetail(payload.lesson);
+        } catch (error) {
+            console.error(error);
+            this._els.lessonsContainer.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
+        }
+    },
+
+    _renderLessonDetail(lesson) {
+        const diagnostics = lesson.diagnostics || {};
+        const summary = lesson.summary || {};
+        this._els.lessonsContainer.innerHTML = `
+            <article class="lesson-card">
+                <div class="lesson-head">
+                    <div>
+                        <h3 class="lesson-title">${this._escapeHtml(lesson.course_name)}</h3>
+                        <div class="lesson-subtitle">
+                            ${this._escapeHtml(lesson.lesson_date)} · meeting ${this._escapeHtml(lesson.source_meeting_id)} · lesson #${lesson.id}
+                        </div>
+                    </div>
+                    <div class="pill-row">
+                        <span class="pill green">Presente ${summary.presente || 0}</span>
+                        <span class="pill blue">1ª metà ${summary.prima_meta || 0}</span>
+                        <span class="pill yellow">2ª metà ${summary.seconda_meta || 0}</span>
+                        <span class="pill red">Assente ${summary.assente || 0}</span>
+                    </div>
+                </div>
+                <div class="lesson-body">
+                    <div class="timeline-meta">
+                        ${this._mini('Threshold', `${Math.round((lesson.threshold_ratio || 0) * 100)}%`)}
+                        ${this._mini('Inizio utile', this._formatTime(lesson.effective_start_at))}
+                        ${this._mini('Pausa', lesson.break_point_at ? this._formatTime(lesson.break_point_at) : '—')}
+                        ${this._mini('Fine utile', this._formatTime(lesson.effective_end_at))}
+                        ${this._mini('Picco presenti', String(diagnostics.peak_active_count || 0))}
+                        ${this._mini('Sorgente', `${lesson.effective_start_source || 'default'} / ${lesson.effective_end_source || 'default'}`)}
+                    </div>
+                    <table class="participants-table">
+                        <thead>
+                            <tr>
+                                <th>Persona</th>
+                                <th>Prima metà</th>
+                                <th>Seconda metà</th>
+                                <th>Stato</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(lesson.participants || []).map((participant) => `
+                                <tr>
+                                    <td>
+                                        <strong>${this._escapeHtml(participant.canonical_full_name)}</strong><br>
+                                        <span class="hint">${this._escapeHtml(participant.email || 'senza email')}</span>
+                                    </td>
+                                    <td>
+                                        ${this._formatMinutes(participant.minutes_first_half)} / ${this._formatMinutes(participant.duration_first_half)} min
+                                    </td>
+                                    <td>
+                                        ${this._formatMinutes(participant.minutes_second_half)} / ${this._formatMinutes(participant.duration_second_half)} min
+                                    </td>
+                                    <td>
+                                        <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}">${this._escapeHtml(participant.final_presence_status)}</span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        `;
     },
 
     _mini(label, value) {
