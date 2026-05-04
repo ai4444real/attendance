@@ -106,6 +106,20 @@ class DraftLessonParticipantView:
 
 
 @dataclass(frozen=True)
+class DraftReviewActionView:
+    id: int
+    lesson_id: int
+    participant_id: Optional[int]
+    action_type: str
+    payload: dict[str, Any]
+    created_by: Optional[str]
+    created_at: str
+    applied_at: Optional[str]
+    is_applied: bool
+    notes: Optional[str]
+
+
+@dataclass(frozen=True)
 class DraftLessonView:
     id: int
     course_name: str
@@ -126,6 +140,7 @@ class DraftLessonView:
     diagnostics: dict[str, Any]
     summary: dict[str, int]
     participants: list[DraftLessonParticipantView]
+    review_actions: list[DraftReviewActionView]
 
 
 @dataclass(frozen=True)

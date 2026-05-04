@@ -4,8 +4,13 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from backend.attendance_app.models import ImportBatch, ImportBatchCreate, PersistedDraftImport
-from backend.attendance_app.services import AttendanceImportService
+from backend.attendance_app.models import (
+    DraftReviewActionView,
+    ImportBatch,
+    ImportBatchCreate,
+    PersistedDraftImport,
+)
+from backend.attendance_app.services import AttendanceImportService, AttendanceReviewActionService
 from backend.attendance_normalization.service import (
     MeetingDiagnostic,
     NormalizationResult,
@@ -38,6 +43,26 @@ class FakeAttendanceDraftImportRepository:
             ),
             lessons_created=len(lessons),
             participants_created=sum(len(lesson.participants) for lesson in lessons),
+        )
+
+
+class FakeAttendanceReviewActionRepository:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def create_lesson_review_action(self, lesson_id, action_type, payload, **kwargs):
+        self.calls.append((lesson_id, action_type, payload, kwargs))
+        return DraftReviewActionView(
+            id=99,
+            lesson_id=lesson_id,
+            participant_id=None,
+            action_type=action_type,
+            payload=payload,
+            created_by=kwargs.get("created_by"),
+            created_at="2026-05-04T12:00:00+00:00",
+            applied_at=None,
+            is_applied=False,
+            notes=kwargs.get("notes"),
         )
 
 
@@ -161,6 +186,27 @@ class AttendanceImportServiceTest(unittest.TestCase):
         self.assertEqual(3, participant.segment_count)
         self.assertEqual("presente", participant.final_presence_status)
         self.assertTrue(participant.metadata["merged_duplicate_participant_key"])
+
+
+class AttendanceReviewActionServiceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.repository = FakeAttendanceReviewActionRepository()
+        self.service = AttendanceReviewActionService(self.repository)
+
+    def test_create_lesson_review_action_accepts_threshold_action(self) -> None:
+        action = self.service.create_lesson_review_action(
+            12,
+            "set_threshold_ratio",
+            {"threshold_ratio": 0.75},
+            created_by="test-ui",
+        )
+
+        self.assertEqual("set_threshold_ratio", action.action_type)
+        self.assertEqual(1, len(self.repository.calls))
+
+    def test_create_lesson_review_action_rejects_unknown_action(self) -> None:
+        with self.assertRaises(ValueError):
+            self.service.create_lesson_review_action(12, "explode_lesson", {"foo": "bar"})
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from typing import Protocol
 from .models import (
     DraftBatchDetail,
     DraftLessonView,
+    DraftReviewActionView,
     ImportBatchCreate,
     ImportBatchSummary,
     LessonDraft,
@@ -36,3 +37,19 @@ class AttendanceDraftQueryRepository(Protocol):
 
     def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
         """Return one lesson with full participant detail."""
+
+
+class AttendanceReviewActionRepository(Protocol):
+    """Write review actions for one draft lesson."""
+
+    def create_lesson_review_action(
+        self,
+        lesson_id: int,
+        action_type: str,
+        payload: dict,
+        *,
+        created_by: str | None = None,
+        notes: str | None = None,
+        participant_id: int | None = None,
+    ) -> DraftReviewActionView:
+        """Persist one review action and return the created row."""

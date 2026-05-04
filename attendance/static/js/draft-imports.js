@@ -153,6 +153,16 @@ const DraftImportsApp = {
     _renderLessonDetail(lesson) {
         const diagnostics = lesson.diagnostics || {};
         const summary = lesson.summary || {};
+        const timeline = diagnostics.timeline || [];
+        const peak = diagnostics.peak_active_count || Math.max(...timeline.map((point) => point.active_count), 1);
+        const bars = timeline.length > 0
+            ? timeline.map((point) => this._buildTimelineBar(point, peak)).join('')
+            : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
+        const diagnosisText = lesson.break_source === 'auto'
+            ? 'Pausa rilevata automaticamente dal profilo dei presenti.'
+            : lesson.break_source === 'midpoint'
+                ? 'Pausa non trovata: il giallo è stato messo a metà esatta del tempo utile.'
+                : `Pausa impostata con criterio ${lesson.break_source}.`;
         this._els.lessonsContainer.innerHTML = `
             <article class="lesson-card">
                 <div class="lesson-head">
@@ -170,6 +180,39 @@ const DraftImportsApp = {
                     </div>
                 </div>
                 <div class="lesson-body">
+                    <div class="meeting-diagnostics">
+                        <div class="meeting-diagnostics-note">${this._escapeHtml(diagnosisText)}</div>
+                        <div class="meeting-chart">
+                            <div class="meeting-bars">${bars}</div>
+                            <div class="meeting-markers">
+                                <div class="meeting-marker zoom-start" style="left:${this._markerPosition(lesson.meeting_start_at, lesson.meeting_start_at, lesson.meeting_end_at)}%">
+                                    <span>Inizio Zoom</span>
+                                    <strong>${this._escapeHtml(this._formatTime(lesson.meeting_start_at))}</strong>
+                                </div>
+                                <div class="meeting-marker start" style="left:${this._markerPosition(lesson.effective_start_at, lesson.meeting_start_at, lesson.meeting_end_at)}%">
+                                    <span>Inizio utile</span>
+                                    <strong>${this._escapeHtml(this._formatTime(lesson.effective_start_at))}</strong>
+                                </div>
+                                ${lesson.break_point_at ? `
+                                <div class="meeting-marker break" style="left:${this._markerPosition(lesson.break_point_at, lesson.meeting_start_at, lesson.meeting_end_at)}%">
+                                    <span>Pausa</span>
+                                    <strong>${this._escapeHtml(this._formatTime(lesson.break_point_at))}</strong>
+                                </div>` : ''}
+                                <div class="meeting-marker end" style="left:${this._markerPosition(lesson.effective_end_at, lesson.meeting_start_at, lesson.meeting_end_at)}%">
+                                    <span>Fine utile</span>
+                                    <strong>${this._escapeHtml(this._formatTime(lesson.effective_end_at))}</strong>
+                                </div>
+                                <div class="meeting-marker zoom-end" style="left:${this._markerPosition(lesson.meeting_end_at, lesson.meeting_start_at, lesson.meeting_end_at)}%">
+                                    <span>Fine Zoom</span>
+                                    <strong>${this._escapeHtml(this._formatTime(lesson.meeting_end_at))}</strong>
+                                </div>
+                            </div>
+                            <div class="meeting-axis">
+                                <span>${this._escapeHtml(this._formatTime(lesson.meeting_start_at))}</span>
+                                <span>${this._escapeHtml(this._formatTime(lesson.meeting_end_at))}</span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="timeline-meta">
                         ${this._mini('Threshold', `${Math.round((lesson.threshold_ratio || 0) * 100)}%`)}
                         ${this._mini('Inizio utile', this._formatTime(lesson.effective_start_at))}
@@ -178,6 +221,21 @@ const DraftImportsApp = {
                         ${this._mini('Picco presenti', String(diagnostics.peak_active_count || 0))}
                         ${this._mini('Sorgente', `${lesson.effective_start_source || 'default'} / ${lesson.effective_end_source || 'default'}`)}
                     </div>
+                    <section class="action-panel">
+                        <div class="action-panel-head">
+                            <h4 class="action-panel-title">Correzioni lezione</h4>
+                            <div class="action-buttons">
+                                <button type="button" class="action-button" data-action="set-threshold" data-lesson-id="${lesson.id}">Threshold</button>
+                                <button type="button" class="action-button" data-action="set-start" data-lesson-id="${lesson.id}">Inizio</button>
+                                <button type="button" class="action-button" data-action="set-break" data-lesson-id="${lesson.id}">Pausa</button>
+                                <button type="button" class="action-button" data-action="set-end" data-lesson-id="${lesson.id}">Fine</button>
+                            </div>
+                        </div>
+                        <div class="meeting-diagnostics-note">Le correzioni vengono registrate nel database come review action. Non ricalcolano ancora la lezione.</div>
+                        <div class="review-actions">
+                            ${this._renderReviewActions(lesson.review_actions || [])}
+                        </div>
+                    </section>
                     <table class="participants-table">
                         <thead>
                             <tr>
@@ -210,6 +268,129 @@ const DraftImportsApp = {
                 </div>
             </article>
         `;
+        this._wireLessonActionButtons(lesson);
+    },
+
+    _wireLessonActionButtons(lesson) {
+        this._els.lessonsContainer.querySelectorAll('[data-action]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const action = button.getAttribute('data-action');
+                if (action === 'set-threshold') {
+                    await this._promptAndSaveThreshold(lesson);
+                    return;
+                }
+                if (action === 'set-start' || action === 'set-break' || action === 'set-end') {
+                    await this._promptAndSaveMarker(lesson, action);
+                }
+            });
+        });
+    },
+
+    async _promptAndSaveThreshold(lesson) {
+        const current = `${Math.round((lesson.threshold_ratio || 0) * 100)}`;
+        const raw = window.prompt('Nuovo threshold (es. 75 oppure 0.75)', current);
+        if (raw === null) return;
+        const threshold = this._parseThresholdInput(raw);
+        if (threshold === null) {
+            window.alert('Threshold non valido.');
+            return;
+        }
+        await this._createLessonReviewAction(lesson.id, 'set_threshold_ratio', { threshold_ratio: threshold });
+    },
+
+    async _promptAndSaveMarker(lesson, action) {
+        const mapping = {
+            'set-start': { label: 'inizio utile', field: 'effective_start_at', type: 'set_effective_start' },
+            'set-break': { label: 'pausa', field: 'break_point_at', type: 'set_break_point' },
+            'set-end': { label: 'fine utile', field: 'effective_end_at', type: 'set_effective_end' },
+        };
+        const config = mapping[action];
+        const current = lesson[config.field] ? this._formatTime(lesson[config.field]) : '';
+        const raw = window.prompt(`Nuovo orario per ${config.label} (HH:MM)`, current);
+        if (raw === null) return;
+        const iso = this._buildIsoForLessonTime(lesson, raw);
+        if (!iso) {
+            window.alert('Orario non valido. Usa HH:MM.');
+            return;
+        }
+        await this._createLessonReviewAction(lesson.id, config.type, { at: iso });
+    },
+
+    async _createLessonReviewAction(lessonId, actionType, payload) {
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lessonId}/review-actions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action_type: actionType,
+                    payload,
+                    created_by: 'drafts-ui',
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || 'Impossibile salvare la correzione.');
+            }
+            await this._loadLessonDetail(lessonId);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
+    },
+
+    _renderReviewActions(actions) {
+        if (!actions.length) {
+            return '<div class="empty">Nessuna correzione registrata per questa lezione.</div>';
+        }
+
+        return actions.map((action) => `
+            <article class="review-action-item">
+                <div class="review-action-top">
+                    <span class="review-action-type">${this._escapeHtml(action.action_type)}</span>
+                    <span class="review-action-meta">${this._escapeHtml(this._formatDateTime(action.created_at))}${action.created_by ? ` · ${this._escapeHtml(action.created_by)}` : ''}</span>
+                </div>
+                <div class="review-action-payload">${this._escapeHtml(JSON.stringify(action.payload, null, 2))}</div>
+            </article>
+        `).join('');
+    },
+
+    _buildTimelineBar(point, peak) {
+        const ratio = peak > 0 ? point.active_count / peak : 0;
+        const height = Math.max(10, Math.round(ratio * 88));
+        const tooltip = `${this._formatDateTime(point.timestamp)} · ${point.active_count} presenti`;
+        return `<span class="meeting-bar" style="height:${height}px" title="${this._escapeAttr(tooltip)}"></span>`;
+    },
+
+    _markerPosition(value, start, end) {
+        const startMs = new Date(start).getTime();
+        const endMs = new Date(end).getTime();
+        const valueMs = new Date(value).getTime();
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || !Number.isFinite(valueMs)) {
+            return 0;
+        }
+        return Math.max(0, Math.min(100, ((valueMs - startMs) / (endMs - startMs)) * 100));
+    },
+
+    _buildIsoForLessonTime(lesson, hhmm) {
+        const match = String(hhmm || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (!match) return null;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+        const base = new Date(lesson.meeting_start_at);
+        if (Number.isNaN(base.getTime())) return null;
+        base.setHours(hours, minutes, 0, 0);
+        return base.toISOString();
+    },
+
+    _parseThresholdInput(value) {
+        const normalized = String(value ?? '').trim().replace(',', '.');
+        if (!normalized) return null;
+        let parsed = parseFloat(normalized);
+        if (!Number.isFinite(parsed) || parsed <= 0) return null;
+        if (parsed > 1) parsed = parsed / 100;
+        if (parsed <= 0 || parsed > 1) return null;
+        return parsed;
     },
 
     _mini(label, value) {

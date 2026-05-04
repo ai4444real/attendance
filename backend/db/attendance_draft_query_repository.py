@@ -8,6 +8,7 @@ from backend.attendance_app.models import (
     DraftBatchDetail,
     DraftLessonSummary,
     DraftLessonParticipantView,
+    DraftReviewActionView,
     DraftLessonView,
     ImportBatchSummary,
 )
@@ -208,6 +209,42 @@ class PostgresAttendanceDraftQueryRepository:
                     for row in participant_rows
                 ]
 
+                cursor.execute(
+                    """
+                    SELECT
+                        ra.id,
+                        ra.lesson_id,
+                        ra.participant_id,
+                        ra.action_type,
+                        ra.payload_json,
+                        ra.created_by,
+                        ra.created_at,
+                        ra.applied_at,
+                        ra.is_applied,
+                        ra.notes
+                    FROM attendance_review_actions AS ra
+                    WHERE ra.lesson_id = %s
+                    ORDER BY ra.created_at DESC, ra.id DESC
+                    """,
+                    (lesson_id,),
+                )
+                action_rows = cursor.fetchall()
+                review_actions = [
+                    DraftReviewActionView(
+                        id=int(row[0]),
+                        lesson_id=int(row[1]),
+                        participant_id=int(row[2]) if row[2] is not None else None,
+                        action_type=str(row[3]),
+                        payload=dict(row[4] or {}),
+                        created_by=row[5],
+                        created_at=_ensure_datetime(row[6]).isoformat(),
+                        applied_at=_optional_datetime_iso(row[7]),
+                        is_applied=bool(row[8]),
+                        notes=row[9],
+                    )
+                    for row in action_rows
+                ]
+
                 summary = self._load_lesson_summary(cursor, lesson_id)
 
         return DraftLessonView(
@@ -230,6 +267,7 @@ class PostgresAttendanceDraftQueryRepository:
             diagnostics=dict(lesson_row[16] or {}),
             summary=summary,
             participants=participants,
+            review_actions=review_actions,
         )
 
     def _load_lesson_summary(self, cursor, lesson_id: int) -> dict[str, int]:

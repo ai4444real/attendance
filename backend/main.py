@@ -17,9 +17,10 @@ from dotenv import load_dotenv
 
 from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_app.models import ImportBatchCreate
-from backend.attendance_app.services import AttendanceImportService
+from backend.attendance_app.services import AttendanceImportService, AttendanceReviewActionService
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
+from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
 
 # Resolve workspace paths from the backend package location
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -498,6 +499,58 @@ async def attendance_lesson_detail(lesson_id: int):
                 }
                 for participant in lesson.participants
             ],
+            "review_actions": [
+                {
+                    "id": action.id,
+                    "lesson_id": action.lesson_id,
+                    "participant_id": action.participant_id,
+                    "action_type": action.action_type,
+                    "payload": action.payload,
+                    "created_by": action.created_by,
+                    "created_at": action.created_at,
+                    "applied_at": action.applied_at,
+                    "is_applied": action.is_applied,
+                    "notes": action.notes,
+                }
+                for action in lesson.review_actions
+            ],
+        }
+    }
+
+
+@app.post("/api/attendance/lessons/{lesson_id}/review-actions")
+async def attendance_create_review_action(lesson_id: int, payload: dict):
+    action_type = str(payload.get("action_type") or "").strip()
+    action_payload = payload.get("payload") or {}
+    created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
+    notes = payload.get("notes")
+
+    service = AttendanceReviewActionService(PostgresAttendanceReviewActionRepository())
+    try:
+        action = service.create_lesson_review_action(
+            lesson_id,
+            action_type,
+            action_payload,
+            created_by=created_by,
+            notes=notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Creazione correzione fallita: {exc}") from exc
+
+    return {
+        "action": {
+            "id": action.id,
+            "lesson_id": action.lesson_id,
+            "participant_id": action.participant_id,
+            "action_type": action.action_type,
+            "payload": action.payload,
+            "created_by": action.created_by,
+            "created_at": action.created_at,
+            "applied_at": action.applied_at,
+            "is_applied": action.is_applied,
+            "notes": action.notes,
         }
     }
 

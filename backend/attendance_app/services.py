@@ -8,12 +8,13 @@ from backend.attendance_normalization.presence_rules import determine_presence_s
 from backend.attendance_normalization.service import NormalizationResult
 
 from .models import (
+    DraftReviewActionView,
     ImportBatchCreate,
     LessonDraft,
     LessonParticipantDraft,
     PersistedDraftImport,
 )
-from .repositories import AttendanceDraftImportRepository
+from .repositories import AttendanceDraftImportRepository, AttendanceReviewActionRepository
 
 
 class AttendanceImportService:
@@ -179,3 +180,54 @@ class AttendanceImportService:
             flags=merged_flags,
             metadata=merged_metadata,
         )
+
+
+class AttendanceReviewActionService:
+    """Use cases related to manual review actions on one lesson."""
+
+    _ALLOWED_ACTIONS = {
+        "set_threshold_ratio",
+        "set_effective_start",
+        "set_break_point",
+        "set_effective_end",
+    }
+
+    def __init__(self, repository: AttendanceReviewActionRepository) -> None:
+        self._repository = repository
+
+    def create_lesson_review_action(
+        self,
+        lesson_id: int,
+        action_type: str,
+        payload: dict,
+        *,
+        created_by: str | None = None,
+        notes: str | None = None,
+        participant_id: int | None = None,
+    ) -> DraftReviewActionView:
+        if lesson_id <= 0:
+            raise ValueError("lesson_id must be positive")
+        if action_type not in self._ALLOWED_ACTIONS:
+            raise ValueError(f"Unsupported review action: {action_type}")
+        if not isinstance(payload, dict) or not payload:
+            raise ValueError("payload is required")
+        self._validate_payload(action_type, payload)
+        return self._repository.create_lesson_review_action(
+            lesson_id,
+            action_type,
+            payload,
+            created_by=created_by,
+            notes=notes,
+            participant_id=participant_id,
+        )
+
+    def _validate_payload(self, action_type: str, payload: dict) -> None:
+        if action_type == "set_threshold_ratio":
+            threshold = payload.get("threshold_ratio")
+            if not isinstance(threshold, (int, float)) or threshold <= 0 or threshold > 1:
+                raise ValueError("threshold_ratio must be a number between 0 and 1")
+            return
+
+        timestamp = payload.get("at")
+        if not isinstance(timestamp, str) or "T" not in timestamp:
+            raise ValueError("payload.at must be an ISO datetime string")
