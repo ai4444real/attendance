@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importa Zoom</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: var(--brand-surface);
+            color: #1f2933;
+        }
+
+        .workspace-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--brand-border);
+        }
+
+        .workspace-header-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .workspace-brand img {
+            height: 42px;
+            width: auto;
+            display: block;
+        }
+
+        .workspace-brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .workspace-brand-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--brand-ink);
+        }
+
+        .workspace-brand-subtitle {
+            font-size: 12px;
+            color: var(--brand-muted);
+        }
+
+        .workspace-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .workspace-link {
+            text-decoration: none;
+            color: #155e75;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .workspace-link:hover { text-decoration: underline; }
+
+        .workspace-module-badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--brand-pnl-blue-soft);
+            color: var(--brand-pnl-blue);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .page {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 24px 20px 56px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 22px;
+            box-shadow: 0 14px 30px rgba(16, 42, 67, 0.16);
+        }
+
+        .hero h1 {
+            margin: 0 0 10px;
+            font-size: 36px;
+        }
+
+        .hero p {
+            margin: 0;
+            line-height: 1.6;
+            max-width: 860px;
+            font-size: 16px;
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+            padding: 22px;
+            margin-bottom: 18px;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--brand-ink);
+            margin: 0 0 12px;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--brand-border);
+            border-radius: 16px;
+            background: #fafcfd;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: var(--brand-pnl-blue);
+            background: var(--brand-pnl-blue-soft);
+        }
+
+        .drop-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--brand-ink);
+            margin-bottom: 8px;
+        }
+
+        .drop-copy {
+            color: var(--brand-muted);
+            line-height: 1.6;
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        .upload-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+            border: none;
+            border-radius: 10px;
+            padding: 12px 18px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: var(--brand-pnl-blue);
+            color: white;
+        }
+
+        .btn-primary:hover { background: var(--brand-pnl-blue-dark); }
+
+        .btn-secondary {
+            background: var(--brand-pnl-green-soft);
+            color: var(--brand-pnl-green-dark);
+        }
+
+        .btn-secondary:hover { background: #d9f0e3; }
+
+        .btn-primary[disabled],
+        .btn-secondary[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .hint {
+            color: var(--brand-muted);
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .summary-card {
+            background: white;
+            border: 1px solid var(--brand-border);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+        }
+
+        .summary-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--brand-muted);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .summary-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--brand-ink);
+        }
+
+        .summary-detail {
+            margin-top: 6px;
+            color: var(--brand-muted);
+            font-size: 13px;
+        }
+
+        .status-line {
+            margin-top: 14px;
+            min-height: 24px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-line.error { color: #b42318; }
+        .status-line.success { color: var(--brand-pnl-green-dark); }
+        .status-line.info { color: #155e75; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <header class="workspace-header">
+        <div class="workspace-header-inner">
+            <a class="workspace-brand" href="/">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="workspace-brand-text">
+                    <span class="workspace-brand-title">Rebekko Webapps</span>
+                    <span class="workspace-brand-subtitle">PNL Evolution</span>
+                </div>
+            </a>
+            <nav class="workspace-nav" aria-label="Workspace navigation">
+                <a class="workspace-link" href="/">Home</a>
+                <a class="workspace-link" href="/attendance">Attendance</a>
+                <span class="workspace-module-badge">Importa Zoom</span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page">
+        <section class="hero">
+            <h1>Importa Zoom</h1>
+            <p>Carica il CSV Zoom grezzo dell’ultimo periodo. Il backend lo normalizza e ti porta direttamente nella revisione del risultato, senza passaggi intermedi inutili.</p>
+        </section>
+
+        <section class="panel">
+            <h2 class="panel-title">Caricamento file</h2>
+            <div id="dropZone" class="drop-zone">
+                <div class="drop-title">CSV Zoom grezzo</div>
+                <p class="drop-copy">
+                    Trascina qui il report Zoom oppure scegli un file dal disco. Il backend lo normalizza e lo salva come <strong>draft</strong> nel database, pronto per la revisione vera nel passo successivo.
+                </p>
+                <div class="upload-actions">
+                    <button id="pickFileBtn" class="btn-primary" type="button">Scegli file Zoom</button>
+                    <button id="reviewLastBtn" class="btn-secondary" type="button">Apri revisione esistente</button>
+                </div>
+                <input id="fileInput" type="file" accept=".csv,text/csv" class="hidden">
+            </div>
+            <div id="statusLine" class="status-line info">Nessun file caricato.</div>
+        </section>
+
+        <section id="summaryPanel" class="hidden">
+            <div class="summary-grid" id="summaryGrid"></div>
+        </section>
+    </main>
+
+    <script src="/attendance/static/js/import-zoom.js"></script>
+</body>
+</html>

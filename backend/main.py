@@ -5,12 +5,20 @@ Single backend entry point for the Rebekko webapps workspace.
 At the moment it serves the Attendance module and its related APIs.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import tempfile
+from pathlib import Path
+
 from dotenv import load_dotenv
+
+from backend.attendance_normalization.service import normalize_zoom_csv_file
+from backend.attendance_app.models import ImportBatchCreate
+from backend.attendance_app.services import AttendanceImportService
+from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
 
 # Resolve workspace paths from the backend package location
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +47,7 @@ app.add_middleware(
 ATTENDANCE_STATIC_DIR = os.path.join(WORKSPACE_DIR, "attendance", "static")
 ATTENDANCE_INDEX_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "index.html")
 ATTENDANCE_REVIEW_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "review-normalized.html")
+ATTENDANCE_IMPORT_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "import-zoom.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -270,6 +279,11 @@ async def attendance_home():
                     <h2>Gestione presenze</h2>
                     <p>Apri il flusso operativo Zoom: carica i report, lavora sui dati e esporta il formato normalizzato.</p>
                 </a>
+                <a class="card" href="/attendance/import">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Importa Zoom</h2>
+                    <p>Carica il CSV Zoom grezzo, lascia che il backend lo normalizzi e passa subito alla revisione del risultato.</p>
+                </a>
                 <a class="card" href="/attendance/review">
                     <span class="card-label">Nuovo</span>
                     <h2>Revisione normalizzazione</h2>
@@ -306,9 +320,65 @@ async def attendance_review():
     )
 
 
+@app.get("/attendance/import")
+@app.get("/attendance/import/")
+async def attendance_import():
+    return FileResponse(
+        ATTENDANCE_IMPORT_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
 @app.get("/attendance/manage")
 async def attendance_manage():
     return RedirectResponse(url="/attendance/manage/", status_code=307)
+
+
+@app.post("/api/attendance/import-draft")
+async def attendance_import_draft(file: UploadFile = File(...)):
+    filename = file.filename or ""
+    if not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Serve un file CSV Zoom.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Il file caricato è vuoto.")
+
+    temp_path: str | None = None
+    try:
+        suffix = Path(filename).suffix or ".csv"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        result = normalize_zoom_csv_file(temp_path)
+        service = AttendanceImportService(PostgresAttendanceDraftImportRepository())
+        persisted = service.persist_normalization_result(
+            ImportBatchCreate(
+                source_system="zoom",
+                source_file_name=filename,
+                source_file_path=filename,
+                imported_by="manual-upload",
+            ),
+            result,
+        )
+        return {
+            "batch_id": persisted.batch.id,
+            "status": persisted.batch.status,
+            "source_file_name": persisted.batch.source_file_name,
+            "lessons_created": persisted.lessons_created,
+            "participants_created": persisted.participants_created,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Import draft fallito: {exc}") from exc
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
 
 @app.get("/health")

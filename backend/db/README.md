@@ -11,8 +11,11 @@ Obiettivo:
 Struttura prevista:
 - `config.py`: lettura configurazione DB (`DATABASE_URL`)
 - `connection.py`: connessione e helper di basso livello
-- `repositories/`: accesso ai dati per dominio
 - `migrations/` o equivalente, se in futuro serviranno migrazioni automatiche
+
+Implementazioni attuali:
+- `attendance_draft_import_repository.py`: persistenza PostgreSQL del draft
+  import (`import_batch`, `lessons`, `participants`)
 
 Per ora lo schema SQL vive in `sql/schema/`.
 
@@ -21,3 +24,8 @@ Primo schema previsto:
 - `attendance_lessons`
 - `attendance_lesson_participants`
 - `attendance_review_actions`
+
+Regola architetturale:
+- i contratti repository stanno fuori da `backend/db`
+- `backend/db` contiene solo implementazioni concrete
+- se domani cambia il database, deve cambiare qui e non nella logica applicativa
