@@ -415,6 +415,9 @@ class AttendanceDraftRecalculationService:
 
     def _build_zoom_meeting(self, lesson: DraftLessonView) -> ZoomMeeting:
         segments: list[ZoomSegment] = []
+        lesson_start = datetime.fromisoformat(lesson.meeting_start_at)
+        lesson_end = datetime.fromisoformat(lesson.meeting_end_at)
+        target_tz = lesson_start.tzinfo
         for participant in lesson.participants:
             participant_segments = participant.metadata.get("segments") or []
             first_name = participant.metadata.get("first_name") or participant.canonical_full_name.split(" ")[0]
@@ -428,18 +431,16 @@ class AttendanceDraftRecalculationService:
                         last_name=last_name,
                         email=participant.email or "",
                         full_name=participant.canonical_full_name,
-                        join_time=datetime.fromisoformat(segment[0]),
-                        leave_time=datetime.fromisoformat(segment[1]),
+                        join_time=self._coerce_segment_datetime(segment[0], target_tz),
+                        leave_time=self._coerce_segment_datetime(segment[1], target_tz),
                     )
                 )
-        start = datetime.fromisoformat(lesson.meeting_start_at)
-        end = datetime.fromisoformat(lesson.meeting_end_at)
         return ZoomMeeting(
             course=lesson.course_name,
             meeting_id=lesson.source_meeting_id,
-            start_time=start,
-            end_time=end,
-            duration_minutes=(end - start).total_seconds() / 60,
+            start_time=lesson_start,
+            end_time=lesson_end,
+            duration_minutes=(lesson_end - lesson_start).total_seconds() / 60,
             segments=segments,
         )
 
@@ -459,3 +460,11 @@ class AttendanceDraftRecalculationService:
         if candidate > max_break:
             return max_break
         return candidate
+
+    def _coerce_segment_datetime(self, value: str, target_tz) -> datetime:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None and target_tz is not None:
+            return parsed.replace(tzinfo=target_tz)
+        if parsed.tzinfo is not None and target_tz is None:
+            return parsed.replace(tzinfo=None)
+        return parsed

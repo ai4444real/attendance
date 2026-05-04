@@ -5,12 +5,18 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from backend.attendance_app.models import (
+    DraftLessonParticipantView,
+    DraftLessonView,
     DraftReviewActionView,
     ImportBatch,
     ImportBatchCreate,
     PersistedDraftImport,
 )
-from backend.attendance_app.services import AttendanceImportService, AttendanceReviewActionService
+from backend.attendance_app.services import (
+    AttendanceDraftRecalculationService,
+    AttendanceImportService,
+    AttendanceReviewActionService,
+)
 from backend.attendance_normalization.service import (
     MeetingDiagnostic,
     NormalizationResult,
@@ -64,6 +70,22 @@ class FakeAttendanceReviewActionRepository:
             is_applied=False,
             notes=kwargs.get("notes"),
         )
+
+
+class FakeAttendanceDraftQueryRepository:
+    def __init__(self, lesson: DraftLessonView) -> None:
+        self.lesson = lesson
+
+    def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
+        return self.lesson
+
+
+class FakeAttendanceDraftMutationRepository:
+    def __init__(self) -> None:
+        self.last_update = None
+
+    def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
+        self.last_update = kwargs
 
 
 class AttendanceImportServiceTest(unittest.TestCase):
@@ -207,6 +229,61 @@ class AttendanceReviewActionServiceTest(unittest.TestCase):
     def test_create_lesson_review_action_rejects_unknown_action(self) -> None:
         with self.assertRaises(ValueError):
             self.service.create_lesson_review_action(12, "explode_lesson", {"foo": "bar"})
+
+
+class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
+    def test_recalculate_lesson_accepts_naive_segment_datetimes_with_aware_markers(self) -> None:
+        lesson = DraftLessonView(
+            id=50,
+            course_name="MASTER",
+            lesson_date="2026-02-09",
+            source_meeting_id="886 5440 3922",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-02-09T19:54:00+00:00",
+            meeting_end_at="2026-02-09T23:06:00+00:00",
+            effective_start_at="2026-02-09T20:00:00+00:00",
+            break_point_at="2026-02-09T21:33:00+00:00",
+            effective_end_at="2026-02-09T23:06:00+00:00",
+            break_source="midpoint",
+            effective_start_source="snap",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 1, "prima_meta": 0, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=1,
+                    canonical_full_name="Mario Rossi",
+                    email="mario@example.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=0.0,
+                    duration_second_half=0.0,
+                    total_minutes=0.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    flags=[],
+                    metadata={
+                        "first_name": "Mario",
+                        "last_name": "Rossi",
+                        "segments": [["2026-02-09T20:00:00", "2026-02-09T22:40:00"]],
+                    },
+                )
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(50)
+
+        self.assertIsNotNone(mutation.last_update)
+        self.assertEqual(1, len(mutation.last_update["participants"]))
 
 
 if __name__ == "__main__":
