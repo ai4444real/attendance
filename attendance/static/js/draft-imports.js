@@ -221,21 +221,24 @@ const DraftImportsApp = {
                         ${this._mini('Picco presenti', String(diagnostics.peak_active_count || 0))}
                         ${this._mini('Sorgente', `${lesson.effective_start_source || 'default'} / ${lesson.effective_end_source || 'default'}`)}
                     </div>
-                    <section class="action-panel">
-                        <div class="action-panel-head">
+                    <details class="action-panel">
+                        <summary class="action-panel-head">
                             <h4 class="action-panel-title">Correzioni lezione</h4>
+                            <span class="action-panel-state">Apri / chiudi</span>
+                        </summary>
+                        <div class="action-panel-body">
                             <div class="action-buttons">
                                 <button type="button" class="action-button" data-action="set-threshold" data-lesson-id="${lesson.id}">Threshold</button>
                                 <button type="button" class="action-button" data-action="set-start" data-lesson-id="${lesson.id}">Inizio</button>
                                 <button type="button" class="action-button" data-action="set-break" data-lesson-id="${lesson.id}">Pausa</button>
                                 <button type="button" class="action-button" data-action="set-end" data-lesson-id="${lesson.id}">Fine</button>
                             </div>
+                            <div class="meeting-diagnostics-note">Le correzioni vengono registrate nel database come review action e aggiornano il draft. Per i vecchi import senza segmenti grezzi, i marker richiedono un reimport.</div>
+                            <div class="review-actions">
+                                ${this._renderReviewActions(lesson.review_actions || [])}
+                            </div>
                         </div>
-                        <div class="meeting-diagnostics-note">Le correzioni vengono registrate nel database come review action e aggiornano il draft. Per i vecchi import senza segmenti grezzi, i marker richiedono un reimport.</div>
-                        <div class="review-actions">
-                            ${this._renderReviewActions(lesson.review_actions || [])}
-                        </div>
-                    </section>
+                    </details>
                     <table class="participants-table">
                         <thead>
                             <tr>
@@ -343,15 +346,21 @@ const DraftImportsApp = {
             return '<div class="empty">Nessuna correzione registrata per questa lezione.</div>';
         }
 
-        return actions.map((action) => `
-            <article class="review-action-item">
+        const activeTypes = new Set();
+        return actions.map((action) => {
+            const isActive = !activeTypes.has(action.action_type);
+            if (isActive) activeTypes.add(action.action_type);
+            return `
+            <article class="review-action-item${isActive ? ' active' : ''}">
+                ${isActive ? '<div class="review-action-badge">Attiva nel draft</div>' : ''}
                 <div class="review-action-top">
                     <span class="review-action-type">${this._escapeHtml(action.action_type)}</span>
                     <span class="review-action-meta">${this._escapeHtml(this._formatDateTime(action.created_at))}${action.created_by ? ` · ${this._escapeHtml(action.created_by)}` : ''}</span>
                 </div>
                 <div class="review-action-payload">${this._escapeHtml(JSON.stringify(action.payload, null, 2))}</div>
             </article>
-        `).join('');
+        `;
+        }).join('');
     },
 
     _buildTimelineBar(point, peak, referenceValue) {
