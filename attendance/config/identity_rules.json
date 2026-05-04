@@ -11,6 +11,38 @@
         "gabriele. novello",
         "gabriele. novello ( gabrielenovello )"
       ]
+    },
+    {
+      "canonical": {
+        "first_name": "Viviana",
+        "last_name": "Spagnoli",
+        "full_name": "Viviana Spagnoli"
+      },
+      "aliases": [
+        "Viviana",
+        "IPhone Di Viviana Spagnoli",
+        "Viviana.spagnoli"
+      ]
+    },
+    {
+      "canonical": {
+        "first_name": "Rosalba",
+        "last_name": "Rossi",
+        "full_name": "Rosalba Rossi"
+      },
+      "aliases": [
+        "ROSI"
+      ]
+    },
+    {
+      "canonical": {
+        "first_name": "Luca",
+        "last_name": "Tidone",
+        "full_name": "Luca Tidone"
+      },
+      "aliases": [
+        "Luca T."
+      ]
     }
   ]
 }

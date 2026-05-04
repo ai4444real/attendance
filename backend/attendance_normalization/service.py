@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import ceil
 from pathlib import Path
 
 from .aggregator import AttendanceAggregationRecord, aggregate_meeting
@@ -16,6 +17,7 @@ from .zoom_parser import parse_zoom_csv_file
 
 MIN_MEETING_DURATION_MINUTES = 20.0
 MIN_RECORD_TOTAL_MINUTES = 5.0
+MIN_BREAK_EDGE_MINUTES = 5.0
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,8 @@ class MeetingDiagnostic:
     course: str
     meeting_id: str
     date: str
+    meeting_start: str
+    meeting_end: str
     effective_start: str
     break_point: str
     effective_end: str
@@ -60,6 +64,11 @@ class MeetingDiagnostic:
     threshold: float
     trim_start_minutes: float
     trim_end_minutes: float
+    effective_start_source: str
+    effective_end_source: str
+    suggested_effective_start: str | None
+    suggested_effective_end: str | None
+    suggestion_confidence: str | None
     participant_count: int
     peak_active_count: int
     sampled_every_minutes: float
@@ -106,26 +115,27 @@ def normalize_zoom_csv_file(
             continue
 
         kept_meetings_count += 1
-        effective_start = snap_effective_start(meeting.start_time, meeting.end_time)
+        base_effective_start = snap_effective_start(meeting.start_time, meeting.end_time)
         meeting_override = meeting_overrides.find_for(meeting)
+        suggested_start, suggested_end, suggestion_confidence = _suggest_effective_bounds(meeting)
         effective_start, effective_end, time_override_info = apply_effective_time_overrides(
             meeting,
-            effective_start,
+            base_effective_start,
             meeting_override,
+            suggested_start=suggested_start if suggestion_confidence == "high" else None,
+            suggested_end=suggested_end if suggestion_confidence == "high" else None,
         )
         meeting_threshold = float(meeting_override.threshold) if (
             meeting_override is not None and meeting_override.threshold is not None
         ) else threshold
 
         detected_break = detect_break_window(meeting)
-        if detected_break is not None:
-            break_point = detected_break.break_start + (
-                detected_break.break_end - detected_break.break_start
-            ) / 2
-            break_source = "auto"
-        else:
-            break_point = effective_start + (meeting.end_time - effective_start) / 2
-            break_source = "midpoint"
+        break_point, break_source = _resolve_break_point(
+            effective_start=effective_start,
+            effective_end=effective_end,
+            detected_break=detected_break,
+            midpoint_end=meeting.end_time,
+        )
 
         aggregated = aggregate_meeting(
             meeting=meeting,
@@ -144,6 +154,11 @@ def normalize_zoom_csv_file(
                 threshold=meeting_threshold,
                 trim_start_minutes=time_override_info["trim_start_minutes"],
                 trim_end_minutes=time_override_info["trim_end_minutes"],
+                effective_start_source=time_override_info["effective_start_source"],
+                effective_end_source=time_override_info["effective_end_source"],
+                suggested_effective_start=suggested_start,
+                suggested_effective_end=suggested_end,
+                suggestion_confidence=suggestion_confidence,
             )
         )
 
@@ -236,8 +251,13 @@ def _build_meeting_diagnostic(
     threshold: float,
     trim_start_minutes: float,
     trim_end_minutes: float,
+    effective_start_source: str,
+    effective_end_source: str,
+    suggested_effective_start: datetime | None,
+    suggested_effective_end: datetime | None,
+    suggestion_confidence: str | None,
 ) -> MeetingDiagnostic:
-    timeline = _build_timeline(meeting, effective_start, effective_end)
+    timeline = _build_timeline(meeting, meeting.start_time, meeting.end_time)
     peak_active_count = max((point.active_count for point in timeline), default=0)
     participant_count = len(_participant_keys(meeting))
 
@@ -245,6 +265,8 @@ def _build_meeting_diagnostic(
         course=meeting.course,
         meeting_id=meeting.meeting_id,
         date=meeting.start_time.date().isoformat(),
+        meeting_start=meeting.start_time.isoformat(),
+        meeting_end=meeting.end_time.isoformat(),
         effective_start=effective_start.isoformat(),
         break_point=break_point.isoformat(),
         effective_end=effective_end.isoformat(),
@@ -252,6 +274,11 @@ def _build_meeting_diagnostic(
         threshold=threshold,
         trim_start_minutes=trim_start_minutes,
         trim_end_minutes=trim_end_minutes,
+        effective_start_source=effective_start_source,
+        effective_end_source=effective_end_source,
+        suggested_effective_start=suggested_effective_start.isoformat() if suggested_effective_start is not None else None,
+        suggested_effective_end=suggested_effective_end.isoformat() if suggested_effective_end is not None else None,
+        suggestion_confidence=suggestion_confidence,
         participant_count=participant_count,
         peak_active_count=peak_active_count,
         sampled_every_minutes=10.0,
@@ -261,35 +288,35 @@ def _build_meeting_diagnostic(
 
 def _build_timeline(
     meeting,
-    effective_start: datetime,
-    effective_end: datetime,
+    window_start: datetime,
+    window_end: datetime,
     step_minutes: float = 10.0,
 ) -> list[TimelinePoint]:
-    if effective_end <= effective_start:
+    if window_end <= window_start:
         return [
             TimelinePoint(
-                timestamp=effective_start.isoformat(),
+                timestamp=window_start.isoformat(),
                 active_count=0,
             )
         ]
 
     step = timedelta(minutes=step_minutes)
-    current = effective_start
+    current = window_start
     points: list[TimelinePoint] = []
 
-    while current < effective_end:
+    while current < window_end:
         points.append(
             TimelinePoint(
                 timestamp=current.isoformat(),
-                active_count=_count_active_participants(meeting, current, effective_end),
+                active_count=_count_active_participants(meeting, current, window_end),
             )
         )
         current += step
 
     points.append(
         TimelinePoint(
-            timestamp=effective_end.isoformat(),
-            active_count=_count_active_participants(meeting, effective_end, effective_end),
+            timestamp=window_end.isoformat(),
+            active_count=_count_active_participants(meeting, window_end, window_end),
         )
     )
     return points
@@ -311,3 +338,127 @@ def _participant_keys(meeting) -> set[str]:
         segment.email or segment.full_name
         for segment in meeting.segments
     }
+
+
+def _resolve_break_point(
+    effective_start: datetime,
+    effective_end: datetime,
+    detected_break,
+    midpoint_end: datetime,
+) -> tuple[datetime, str]:
+    midpoint = effective_start + (midpoint_end - effective_start) / 2
+    if midpoint >= effective_end:
+        midpoint = effective_start + (effective_end - effective_start) / 2
+
+    if detected_break is None:
+        return midpoint, "midpoint"
+
+    candidate = detected_break.break_start + (
+        detected_break.break_end - detected_break.break_start
+    ) / 2
+
+    if _minutes_between(effective_start, candidate) < MIN_BREAK_EDGE_MINUTES:
+        return midpoint, "midpoint"
+    if _minutes_between(candidate, effective_end) < MIN_BREAK_EDGE_MINUTES:
+        return midpoint, "midpoint"
+
+    return candidate, "auto"
+
+
+def _suggest_effective_bounds(meeting) -> tuple[datetime | None, datetime | None, str | None]:
+    if not meeting.segments:
+        return None, None, None
+
+    counts = _build_minute_counts(meeting)
+    if not counts:
+        return None, None, None
+
+    peak = max(count for _, count in counts)
+    if peak < 3:
+        return None, None, None
+
+    active_cutoff = max(3, ceil(peak * 0.75))
+    sustained_minutes = 15
+    minimum_trim_minutes = 12
+    first_run = _find_first_sustained_run(counts, active_cutoff, sustained_minutes)
+    last_run = _find_last_sustained_run(counts, active_cutoff, sustained_minutes)
+
+    if first_run is None or last_run is None:
+        return None, None, None
+
+    suggested_start = first_run[0]
+    suggested_end = last_run[1] + timedelta(minutes=1)
+
+    start_trim = (suggested_start - meeting.start_time).total_seconds() / 60
+    end_trim = (meeting.end_time - suggested_end).total_seconds() / 60
+
+    if start_trim < minimum_trim_minutes:
+        suggested_start = None
+    if end_trim < minimum_trim_minutes:
+        suggested_end = None
+
+    if suggested_start is None and suggested_end is None:
+        return None, None, None
+
+    confidence = "high" if max(start_trim, end_trim) >= 20 else "medium"
+    return suggested_start, suggested_end, confidence
+
+
+def _build_minute_counts(meeting) -> list[tuple[datetime, int]]:
+    start = meeting.start_time.replace(second=0, microsecond=0)
+    end = meeting.end_time.replace(second=0, microsecond=0)
+    if end < start:
+        return []
+
+    points: list[tuple[datetime, int]] = []
+    current = start
+    while current <= end:
+        points.append((current, _count_active_participants(meeting, current, meeting.end_time)))
+        current += timedelta(minutes=1)
+    return points
+
+
+def _minutes_between(start: datetime, end: datetime) -> float:
+    return (end - start).total_seconds() / 60
+
+
+def _find_first_sustained_run(
+    counts: list[tuple[datetime, int]],
+    cutoff: int,
+    min_minutes: int,
+) -> tuple[datetime, datetime] | None:
+    run_start: datetime | None = None
+    run_length = 0
+
+    for point_time, count in counts:
+        if count >= cutoff:
+            if run_start is None:
+                run_start = point_time
+            run_length += 1
+            if run_length >= min_minutes:
+                return run_start, point_time
+        else:
+            run_start = None
+            run_length = 0
+    return None
+
+
+def _find_last_sustained_run(
+    counts: list[tuple[datetime, int]],
+    cutoff: int,
+    min_minutes: int,
+) -> tuple[datetime, datetime] | None:
+    run_end: datetime | None = None
+    run_length = 0
+
+    for point_time, count in reversed(counts):
+        if count >= cutoff:
+            if run_end is None:
+                run_end = point_time
+            run_length += 1
+            if run_length >= min_minutes:
+                return point_time, run_end
+        else:
+            run_end = None
+            run_length = 0
+    return None

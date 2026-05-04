@@ -69,6 +69,8 @@ def apply_effective_time_overrides(
     meeting: ZoomMeeting,
     effective_start: datetime,
     override: MeetingOverride | None,
+    suggested_start: datetime | None = None,
+    suggested_end: datetime | None = None,
 ) -> tuple[datetime, datetime, dict]:
     adjusted_start = effective_start
     adjusted_end = meeting.end_time
@@ -79,22 +81,27 @@ def apply_effective_time_overrides(
         "effective_end_source": "meeting_end",
     }
 
-    if override is None:
-        return adjusted_start, adjusted_end, applied
-
-    if override.trim_start_minutes is not None:
+    if override is not None and override.trim_start_minutes is not None:
         trimmed_start = adjusted_start + timedelta(minutes=override.trim_start_minutes)
         if trimmed_start < adjusted_end:
             adjusted_start = trimmed_start
             applied["trim_start_minutes"] = float(override.trim_start_minutes)
             applied["effective_start_source"] = "trim_start_minutes"
+    elif suggested_start is not None and suggested_start > adjusted_start and suggested_start < adjusted_end:
+        adjusted_start = suggested_start
+        applied["trim_start_minutes"] = round((suggested_start - effective_start).total_seconds() / 60, 1)
+        applied["effective_start_source"] = "auto_suggest"
 
-    if override.trim_end_minutes is not None:
+    if override is not None and override.trim_end_minutes is not None:
         trimmed_end = meeting.end_time - timedelta(minutes=override.trim_end_minutes)
         if trimmed_end > adjusted_start:
             adjusted_end = trimmed_end
             applied["trim_end_minutes"] = float(override.trim_end_minutes)
             applied["effective_end_source"] = "trim_end_minutes"
+    elif suggested_end is not None and suggested_end < adjusted_end and suggested_end > adjusted_start:
+        adjusted_end = suggested_end
+        applied["trim_end_minutes"] = round((meeting.end_time - suggested_end).total_seconds() / 60, 1)
+        applied["effective_end_source"] = "auto_suggest"
 
     return adjusted_start, adjusted_end, applied
 

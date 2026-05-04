@@ -5,6 +5,7 @@ Contenitore delle webapp del progetto Rebekko.
 ## Applicazioni
 
 - [attendance](attendance/README.md): importazione, normalizzazione e analisi delle presenze
+- [docs/deploy.md](docs/deploy.md): promemoria corto per login e deploy
 - [docs/DEPLOY_UBUNTU_SERVER.md](docs/DEPLOY_UBUNTU_SERVER.md): runbook del deploy su server Ubuntu
 - [infra/caddy/Caddyfile.example](infra/caddy/Caddyfile.example): esempio di routing pubblico con Caddy
 

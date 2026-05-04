@@ -124,7 +124,6 @@
         }
 
         .upload-panel,
-        .detail-panel,
         .filters-panel,
         .issues-panel,
         .table-panel,
@@ -136,7 +135,6 @@
         }
 
         .upload-panel,
-        .detail-panel,
         .filters-panel,
         .issues-panel,
         .table-panel {
@@ -317,41 +315,6 @@
         .issue-box.alert { border-left: 5px solid #e11d48; }
         .issue-box.success { border-left: 5px solid var(--brand-pnl-green); }
 
-        .detail-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 14px;
-        }
-
-        .detail-item {
-            background: #f8fbfc;
-            border-radius: 12px;
-            padding: 12px 14px;
-        }
-
-        .detail-item .k {
-            display: block;
-            font-size: 12px;
-            color: var(--brand-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 6px;
-            font-weight: 700;
-        }
-
-        .detail-item .v {
-            font-size: 15px;
-            color: var(--brand-ink);
-            font-weight: 600;
-            word-break: break-word;
-        }
-
-        .detail-empty {
-            color: var(--brand-muted);
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
         .flag-list {
             display: flex;
             gap: 8px;
@@ -400,6 +363,21 @@
             font-size: 14px;
         }
 
+        .meta-action-button {
+            border: 1px solid var(--brand-border);
+            background: white;
+            color: var(--brand-pnl-blue);
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .meta-action-button:hover {
+            background: var(--brand-pnl-blue-soft);
+        }
+
         .table-wrap {
             overflow: auto;
             max-height: 68vh;
@@ -417,7 +395,7 @@
 
         .course-group-header {
             display: grid;
-            grid-template-columns: minmax(260px, 380px) 1fr;
+            grid-template-columns: minmax(260px, 380px) auto 1fr;
             gap: 12px;
             padding: 14px 16px;
             background: #f8fbfd;
@@ -453,6 +431,29 @@
             align-items: center;
             justify-content: flex-start;
             min-width: 0;
+        }
+
+        .course-group-actions {
+            display: flex;
+            align-items: start;
+            justify-content: flex-end;
+        }
+
+        .lesson-ignore-button {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #f1b8c3;
+            background: #fff4f6;
+            color: #be123c;
+            border-radius: 999px;
+            font-size: 20px;
+            line-height: 1;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .lesson-ignore-button:hover {
+            background: #ffe3e8;
         }
 
         .lesson-person {
@@ -495,6 +496,12 @@
 
         .lesson-dot.negative {
             background: #e11d48;
+        }
+
+        .lesson-dot.borderline {
+            background: #e11d48;
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 3px #fff4df;
         }
 
         .lesson-dot.warning {
@@ -562,6 +569,61 @@
             color: var(--brand-ink);
         }
 
+        .diag-button {
+            border: none;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+            font: inherit;
+            color: var(--brand-pnl-blue);
+            font-weight: 800;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-thickness: 2px;
+            text-underline-offset: 3px;
+        }
+
+        .diag-button:hover {
+            color: var(--brand-pnl-blue-dark);
+        }
+
+        .marker-edit-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 0 0 12px;
+            padding: 10px;
+            border: 1px solid var(--brand-border);
+            border-radius: 12px;
+            background: white;
+        }
+
+        .marker-edit-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--brand-muted);
+            font-weight: 800;
+            margin-right: 4px;
+        }
+
+        .marker-action-button {
+            border: 1px solid var(--brand-border);
+            background: white;
+            color: var(--brand-pnl-blue);
+            border-radius: 999px;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .marker-action-button:hover {
+            background: var(--brand-pnl-blue-soft);
+            border-color: var(--brand-pnl-blue);
+        }
+
         .diag-pill {
             display: inline-flex;
             align-items: center;
@@ -582,12 +644,23 @@
             margin-bottom: 12px;
         }
 
+        .meeting-diagnostics-note.picking-note {
+            color: var(--brand-pnl-blue);
+            font-weight: 700;
+        }
+
         .meeting-chart {
             position: relative;
             border: 1px solid var(--brand-border);
             border-radius: 12px;
             background: white;
             padding: 14px 12px 38px;
+        }
+
+        .meeting-chart.picking {
+            cursor: crosshair;
+            border-color: var(--brand-pnl-blue);
+            box-shadow: 0 0 0 3px var(--brand-pnl-blue-soft);
         }
 
         .meeting-bars {
@@ -643,6 +716,16 @@
             color: var(--brand-ink);
         }
 
+        .meeting-marker.draggable {
+            cursor: ew-resize;
+        }
+
+        .meeting-marker.draggable strong {
+            text-decoration: underline;
+            text-decoration-style: dashed;
+            text-underline-offset: 3px;
+        }
+
         .meeting-marker.start::before { background: var(--brand-pnl-blue); }
         .meeting-marker.break::before { background: #f59e0b; }
         .meeting-marker.end::before { background: #e11d48; }
@@ -654,6 +737,47 @@
             font-size: 12px;
             color: var(--brand-muted);
             margin-top: 4px;
+        }
+
+        .marker-proposal {
+            margin-top: 12px;
+            border: 1px dashed var(--brand-border);
+            border-radius: 12px;
+            padding: 12px;
+            background: #f8fbfd;
+            font-size: 13px;
+            color: var(--brand-muted);
+        }
+
+        .marker-proposal.active {
+            border-style: solid;
+            background: #fffdf7;
+        }
+
+        .marker-proposal-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            color: var(--brand-ink);
+            margin-bottom: 6px;
+        }
+
+        .marker-proposal-copy {
+            color: var(--brand-ink);
+            margin-bottom: 8px;
+        }
+
+        .marker-proposal-code {
+            margin: 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid var(--brand-border);
+            border-radius: 10px;
+            overflow: auto;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #334155;
         }
 
         table {
@@ -682,9 +806,7 @@
             color: var(--brand-muted);
         }
 
-        tbody tr { cursor: pointer; }
         tbody tr:hover { background: #f7fbfd; }
-        tbody tr.selected { background: #eef7fd; }
         tbody tr.flagged { box-shadow: inset 4px 0 0 #f59e0b; }
 
         .presence {
@@ -756,12 +878,12 @@
             .hero h1 { font-size: 28px; }
             .page { padding-left: 14px; padding-right: 14px; }
             .upload-panel,
-            .detail-panel,
             .filters-panel,
             .issues-panel,
             .table-panel { padding: 16px; }
             th, td { padding: 9px 10px; }
             .course-group-header { grid-template-columns: 1fr; }
+            .course-group-actions { justify-content: flex-start; }
         }
     </style>
 </head>
@@ -856,7 +978,7 @@
         <section class="table-panel hidden" id="tablePanel">
             <div class="table-meta">
                 <div id="tableMeta">Nessun dato caricato.</div>
-                <div class="muted">Clic su una riga per il dettaglio.</div>
+                <div class="muted">Vista compatta per corso e lezione.</div>
             </div>
             <div class="table-wrap">
                 <table>
@@ -870,13 +992,6 @@
                     <tbody id="recordsBody"></tbody>
                 </table>
             </div>
-        </section>
-
-        <section class="detail-panel hidden" id="detailPanel">
-            <h2 class="panel-title">Dettaglio record selezionato</h2>
-            <div class="detail-empty" id="detailEmpty">Seleziona una riga per vedere marker, percentuali, email e motivi per cui potrebbe meritare controllo manuale.</div>
-            <div class="detail-grid hidden" id="detailGrid"></div>
-            <div class="flag-list hidden" id="detailFlags"></div>
         </section>
     </main>
 

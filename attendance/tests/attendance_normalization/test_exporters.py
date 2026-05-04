@@ -40,6 +40,13 @@ class ExportersTests(unittest.TestCase):
         self.assertIn("diagnostics", payload["courses"][0]["meetings"][0])
         self.assertGreater(len(payload["courses"][0]["meetings"][0]["diagnostics"]["timeline"]), 0)
         self.assertEqual(payload["courses"][0]["meetings"][0]["diagnostics"]["sampled_every_minutes"], 10.0)
+        self.assertIn("suggested_effective_start", payload["courses"][0]["meetings"][0]["diagnostics"])
+        self.assertIn("suggested_effective_end", payload["courses"][0]["meetings"][0]["diagnostics"])
+        self.assertIn("suggestion_confidence", payload["courses"][0]["meetings"][0]["diagnostics"])
+        self.assertIn("effective_start_source", payload["courses"][0]["meetings"][0]["diagnostics"])
+        self.assertIn("effective_end_source", payload["courses"][0]["meetings"][0]["diagnostics"])
+        self.assertIn("meeting_start", payload["courses"][0]["meetings"][0]["diagnostics"])
+        self.assertIn("meeting_end", payload["courses"][0]["meetings"][0]["diagnostics"])
         self.assertEqual(payload["courses"][0]["meetings"][0]["threshold"], 0.8)
         self.assertEqual(
             payload["courses"][0]["meetings"][0]["participants"][0]["full_name"],

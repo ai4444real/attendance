@@ -210,11 +210,18 @@ def _build_meeting_diagnostics_payload(diagnostic) -> dict:
         }
 
     return {
+        "meeting_start": diagnostic.meeting_start,
+        "meeting_end": diagnostic.meeting_end,
         "participant_count": diagnostic.participant_count,
         "peak_active_count": diagnostic.peak_active_count,
         "sampled_every_minutes": diagnostic.sampled_every_minutes,
         "trim_start_minutes": diagnostic.trim_start_minutes,
         "trim_end_minutes": diagnostic.trim_end_minutes,
+        "effective_start_source": diagnostic.effective_start_source,
+        "effective_end_source": diagnostic.effective_end_source,
+        "suggested_effective_start": diagnostic.suggested_effective_start,
+        "suggested_effective_end": diagnostic.suggested_effective_end,
+        "suggestion_confidence": diagnostic.suggestion_confidence,
         "timeline": [
             {
                 "timestamp": point.timestamp,

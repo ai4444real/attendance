@@ -4,6 +4,8 @@ import unittest
 import json
 
 from backend.attendance_normalization.service import normalize_zoom_csv_file
+from backend.attendance_normalization.service import _resolve_break_point
+from backend.attendance_normalization.temporal_markers import BreakWindow
 
 
 CSV_SAMPLE = """Argomento,Digita,ID,Nome organizzatore,E-mail organizzatore,Ora di inizio,Ora di fine,Partecipanti,Durata (minuti),Minuti totali dei partecipanti,Reparto,Gruppo,Origine,Visualizzatori unici,Max visualizzazioni simultanee,Ora di creazione,Nome (nome originale),E-mail,Ora di ingresso,Ora di uscita,Durata (minuti),Guest,Risposta di esclusione di responsabilità per la registrazione,In sala d’attesa
@@ -33,8 +35,72 @@ COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/202
 COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:41:56 PM,01/14/2025 10:39:44 PM,4,238,620,,,Zoom,-,-,05/27/2022 07:17:47 PM,Nadia Gerli,,01/14/2025 07:24:41 PM,01/14/2025 08:24:22 PM,60,Sì,,No
 """
 
+CSV_SAMPLE_WITH_CLEAR_DELAY_AND_TAIL = """Argomento,Digita,ID,Nome organizzatore,E-mail organizzatore,Ora di inizio,Ora di fine,Partecipanti,Durata (minuti),Minuti totali dei partecipanti,Reparto,Gruppo,Origine,Visualizzatori unici,Max visualizzazioni simultanee,Ora di creazione,Nome (nome originale),E-mail,Ora di ingresso,Ora di uscita,Durata (minuti),Guest,Risposta di esclusione di responsabilità per la registrazione,In sala d’attesa
+COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,5,262,900,,,Zoom,-,-,05/27/2022 07:17:47 PM,Irene Bazzani (Host),bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,262,No,,No
+COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,5,262,900,,,Zoom,-,-,05/27/2022 07:17:47 PM,Persona Uno,,01/14/2025 06:57:00 PM,01/14/2025 10:42:00 PM,225,Sì,,No
+COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,5,262,900,,,Zoom,-,-,05/27/2022 07:17:47 PM,Persona Due,,01/14/2025 06:58:00 PM,01/14/2025 10:41:00 PM,223,Sì,,No
+COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,5,262,900,,,Zoom,-,-,05/27/2022 07:17:47 PM,Persona Tre,,01/14/2025 06:59:00 PM,01/14/2025 10:40:00 PM,221,Sì,,No
+COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,5,262,900,,,Zoom,-,-,05/27/2022 07:17:47 PM,Persona Quattro,,01/14/2025 07:00:00 PM,01/14/2025 10:39:00 PM,219,Sì,,No
+"""
+
 
 class NormalizationServiceTests(unittest.TestCase):
+    def test_degrades_detected_break_to_midpoint_when_too_close_to_effective_end(self):
+        from datetime import datetime
+
+        effective_start = datetime.fromisoformat("2025-01-29T21:03:00")
+        effective_end = datetime.fromisoformat("2025-01-29T22:23:00")
+        detected_break = BreakWindow(
+            break_start=datetime.fromisoformat("2025-01-29T22:22:50"),
+            break_end=datetime.fromisoformat("2025-01-29T22:23:00"),
+        )
+
+        break_point, break_source = _resolve_break_point(
+            effective_start=effective_start,
+            effective_end=effective_end,
+            detected_break=detected_break,
+            midpoint_end=datetime.fromisoformat("2025-01-29T22:58:17"),
+        )
+
+        self.assertEqual(break_source, "midpoint")
+        self.assertEqual(break_point.isoformat(), "2025-01-29T22:00:38.500000")
+
+    def test_keeps_detected_break_when_it_is_well_inside_effective_window(self):
+        from datetime import datetime
+
+        effective_start = datetime.fromisoformat("2025-01-29T21:03:00")
+        effective_end = datetime.fromisoformat("2025-01-29T22:23:00")
+        detected_break = BreakWindow(
+            break_start=datetime.fromisoformat("2025-01-29T21:39:00"),
+            break_end=datetime.fromisoformat("2025-01-29T21:45:00"),
+        )
+
+        break_point, break_source = _resolve_break_point(
+            effective_start=effective_start,
+            effective_end=effective_end,
+            detected_break=detected_break,
+            midpoint_end=datetime.fromisoformat("2025-01-29T22:58:17"),
+        )
+
+        self.assertEqual(break_source, "auto")
+        self.assertEqual(break_point.isoformat(), "2025-01-29T21:42:00")
+
+    def test_midpoint_fallback_stays_inside_effective_window_when_end_is_auto_trimmed(self):
+        from datetime import datetime
+
+        effective_start = datetime.fromisoformat("2025-01-13T19:00:00")
+        effective_end = datetime.fromisoformat("2025-01-13T20:29:00")
+
+        break_point, break_source = _resolve_break_point(
+            effective_start=effective_start,
+            effective_end=effective_end,
+            detected_break=None,
+            midpoint_end=datetime.fromisoformat("2025-01-13T22:33:15"),
+        )
+
+        self.assertEqual(break_source, "midpoint")
+        self.assertEqual(break_point.isoformat(), "2025-01-13T19:44:30")
+
     def test_normalizes_only_preselected_uppercase_courses(self):
         with TemporaryDirectory() as temp_dir:
             csv_path = Path(temp_dir) / "sample.csv"
@@ -152,6 +218,10 @@ class NormalizationServiceTests(unittest.TestCase):
         self.assertEqual(record.duration_second_half, 37.7)
         self.assertEqual(result.meetings[0].effective_end, "2025-01-30T20:26:29")
         self.assertEqual(result.meetings[0].trim_end_minutes, 11)
+        self.assertEqual(result.meetings[0].meeting_start, "2025-01-30T18:54:02")
+        self.assertEqual(result.meetings[0].meeting_end, "2025-01-30T20:37:29")
+        self.assertEqual(result.meetings[0].timeline[0].timestamp, "2025-01-30T18:54:02")
+        self.assertEqual(result.meetings[0].timeline[-1].timestamp, "2025-01-30T20:37:29")
 
     def test_applies_trim_start_minutes_meeting_override(self):
         with TemporaryDirectory() as temp_dir:
@@ -233,6 +303,72 @@ class NormalizationServiceTests(unittest.TestCase):
         self.assertEqual(record.first_name, "Nadia")
         self.assertEqual(record.last_name, "Gerli")
         self.assertEqual(record.segment_count, 2)
+
+    def test_suggests_effective_start_and_end_from_attendance_profile(self):
+        with TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "sample.csv"
+            csv_path.write_text(CSV_SAMPLE_WITH_CLEAR_DELAY_AND_TAIL, encoding="utf-8")
+            overrides_path = Path(temp_dir) / "meeting_overrides.json"
+            overrides_path.write_text(json.dumps({"meeting_overrides": []}), encoding="utf-8")
+
+            result = normalize_zoom_csv_file(
+                csv_path,
+                threshold=0.8,
+                meeting_overrides_path=overrides_path,
+            )
+
+        diagnostic = result.meetings[0]
+        self.assertEqual(diagnostic.suggestion_confidence, "high")
+        self.assertEqual(diagnostic.suggested_effective_start, "2025-01-14T18:59:00")
+        self.assertEqual(diagnostic.suggested_effective_end, "2025-01-14T22:40:00")
+        self.assertEqual(diagnostic.effective_start, "2025-01-14T18:59:00")
+        self.assertEqual(diagnostic.effective_end, "2025-01-14T22:40:00")
+        self.assertEqual(diagnostic.effective_start_source, "auto_suggest")
+        self.assertEqual(diagnostic.effective_end_source, "auto_suggest")
+
+    def test_does_not_suggest_bounds_when_profile_is_already_flat(self):
+        with TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "sample.csv"
+            csv_path.write_text(CSV_SAMPLE, encoding="utf-8")
+
+            result = normalize_zoom_csv_file(csv_path, threshold=0.8)
+
+        diagnostic = result.meetings[0]
+        self.assertIsNone(diagnostic.suggested_effective_start)
+        self.assertIsNone(diagnostic.suggested_effective_end)
+        self.assertIsNone(diagnostic.suggestion_confidence)
+
+    def test_manual_time_override_wins_over_auto_suggest(self):
+        with TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "sample.csv"
+            csv_path.write_text(CSV_SAMPLE_WITH_CLEAR_DELAY_AND_TAIL, encoding="utf-8")
+            overrides_path = Path(temp_dir) / "meeting_overrides.json"
+            overrides_path.write_text(
+                json.dumps(
+                    {
+                        "meeting_overrides": [
+                            {
+                                "course": "COACHING",
+                                "date": "2025-01-14",
+                                "meeting_id": "826 5053 1117",
+                                "trim_start_minutes": 30,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = normalize_zoom_csv_file(
+                csv_path,
+                threshold=0.8,
+                meeting_overrides_path=overrides_path,
+            )
+
+        diagnostic = result.meetings[0]
+        self.assertEqual(diagnostic.suggested_effective_start, "2025-01-14T18:59:00")
+        self.assertEqual(diagnostic.effective_start, "2025-01-14T19:08:00")
+        self.assertEqual(diagnostic.effective_start_source, "trim_start_minutes")
 
 
 if __name__ == "__main__":
