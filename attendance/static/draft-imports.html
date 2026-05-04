@@ -90,13 +90,13 @@
             <p>Vista compatta appoggiata al database. Scegli un import batch e scorri lezioni e partecipanti già persistiti, senza passare dal JSON locale.</p>
         </section>
 
-        <section class="layout">
-            <aside class="panel">
-                <h2 class="panel-title">Import batch</h2>
-                <p class="hint">I batch arrivano dal database. Clicca un import per vedere sotto le lezioni salvate come draft.</p>
-                <div id="batchList" class="batch-list"></div>
-            </aside>
+        <section class="panel" style="margin-bottom: 18px;">
+            <h2 class="panel-title">Import batch</h2>
+            <p class="hint">Scegli il batch corrente e lavora sulle sue lezioni. La vista operativa resta centrata sulla singola lezione.</p>
+            <div id="batchList" class="batch-list" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));"></div>
+        </section>
 
+        <section class="layout">
             <section class="panel">
                 <div id="batchSummary" class="summary-grid"></div>
                 <div class="layout" style="grid-template-columns: 320px minmax(0, 1fr); gap: 16px;">
