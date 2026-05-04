@@ -109,6 +109,73 @@ Questo separa bene i ruoli:
 - una persona importa e consolida;
 - un'altra persona consulta e ragiona sui dati consolidati.
 
+## Workflow operativo 2026 desiderato
+
+La direzione emersa dall'uso reale e' piu' concreta di quella iniziale.
+
+Il flusso desiderato non e' solo:
+
+- `importa -> normalizza -> analizza`
+
+ma:
+
+1. caricare il file Zoom grezzo;
+2. farlo elaborare automaticamente dal motore Python;
+3. aprire il risultato nella UI `Revisione normalizzazione`;
+4. correggere lezioni, marker, threshold e casi speciali;
+5. inviare il risultato consolidato al server;
+6. considerare quelle presenze come "ufficiali";
+7. continuare a permettere correzioni manuali successive, ma su dati ormai persistiti.
+
+Questo introduce una distinzione importante:
+
+- prima dell'invio al server: stato di lavoro / revisione;
+- dopo l'invio al server: stato ufficiale, ma ancora correggibile con audit.
+
+## Problema attuale emerso nella review UI
+
+Oggi alcune operazioni di review esistono, ma sono solo "proposte":
+
+- spostamento marker;
+- override di threshold;
+- suggerimenti automatici;
+- esclusione locale di lezioni.
+
+In pratica:
+
+- la UI produce il JSON della correzione;
+- ma non applica ancora davvero il ricalcolo completo nel modo in cui lavorera' il sistema finale.
+
+Questo e' utile per esplorare il modello, ma non basta per il workflow finale.
+
+Serve un passaggio intermedio chiaro:
+
+- vedere una singola lezione;
+- applicare una correzione;
+- vedere subito l'effetto della correzione;
+- confermare e passare alla lezione successiva.
+
+## Evoluzione UX desiderata per la review
+
+La review attuale mostra molte lezioni insieme. Questo e' utile per scoprire pattern,
+ma diventa lenta e poco leggibile quando si entra davvero nel lavoro di correzione.
+
+La direzione desiderata e':
+
+- colonna sinistra: lista lezioni/corsi filtrabile;
+- area centrale: dettaglio della singola lezione selezionata;
+- editing locale dei marker e delle regole;
+- ricalcolo visibile del risultato sulla sola lezione corrente;
+- conferma finale del risultato corretto;
+- comando "manda al server" / "ufficializza".
+
+Questo non elimina la vista d'insieme, ma introduce una modalita' piu' adatta alla revisione operativa.
+
+In breve:
+
+- vista globale per scoprire anomalie;
+- vista singola lezione per correggere davvero.
+
 ## Formato interno: direzione consigliata
 
 Il repository oggi usa implicitamente almeno due forme di dato:
@@ -270,6 +337,7 @@ Obiettivo:
 Attivita':
 
 - schema PostgreSQL;
+- installazione PostgreSQL sul server Linux Infomaniak;
 - endpoint di ingestione;
 - gestione import batch;
 - deduplica base;
@@ -315,6 +383,16 @@ Attivita':
 - Creare una documentazione tecnica del formato interno con esempi reali.
 - Rendere l'output dell'adapter il formato canonico, oppure mapparlo esplicitamente al formato canonico.
 - Rendere espliciti nella UI della `Gestione presenze` i due marker temporali: `inizio effettivo` (blu, da cui parte il calcolo percentuale) e `pausa/split` (giallo, che divide prima e seconda parte della lezione).
+- Separare nella review i concetti di:
+  - proposta di correzione;
+  - correzione applicata localmente;
+  - correzione persistita sul server.
+- Superare la review "tutte le lezioni insieme" con una UX master-detail:
+  - lista lezioni filtrabile a sinistra;
+  - dettaglio della lezione al centro;
+  - correzioni live sulla sola lezione attiva.
+- Applicare davvero in tempo reale, almeno localmente, le correzioni di marker/threshold sulla lezione selezionata.
+- Preparare il comando finale "manda al server" / "ufficializza" per una o piu' lezioni revisionate.
 - Aggiungere endpoint `POST /api/imports/zoom-normalized`.
 - Aggiungere endpoint `GET /api/attendance`.
 - Aggiungere endpoint `GET /api/courses`.
@@ -323,6 +401,7 @@ Attivita':
 - Gestire deduplica e conflitti.
 - Portare l'analisi della root a usare il backend.
 - Mantenere export CSV dalla UI per controllo umano.
+- Consentire override manuale finale persona-per-persona dopo l'ufficializzazione, per i casi eccezionali.
 
 ### C. Backlog database
 
@@ -330,6 +409,8 @@ Attivita':
 - Creare database dedicato all'applicazione.
 - Definire tabella `attendance_records`.
 - Definire tabella `import_batches`.
+- Definire tabella o struttura per le `review_actions` / `meeting_overrides`.
+- Definire tabella o struttura per lo stato di ufficializzazione di un import o di una singola lezione.
 - Aggiungere indici su corso, data, email, meeting id.
 - Definire una unique key pragmatica per i doppioni.
 - Preparare backup e dump periodici.
@@ -375,10 +456,10 @@ Per evitare dispersione, le scelte migliori in questa fase mi sembrano:
 
 Il prossimo passo sensato non e' ancora "deployare tutto", ma:
 
-1. fissare il formato interno canonico;
-2. definire lo schema PostgreSQL minimo;
-3. decidere come l'adapter inviera' i dati al backend;
-4. poi preparare il server Linux.
+1. preparare PostgreSQL sul server Linux;
+2. definire lo schema minimo per import batch, record normalizzati e override di review;
+3. trasformare la review in una modalita' per singola lezione con correzioni applicate live;
+4. decidere il payload "manda al server" che rende ufficiale una lezione o un import.
 
 ## Nota finale
 
