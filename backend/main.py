@@ -18,7 +18,9 @@ from dotenv import load_dotenv
 from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_app.models import ImportBatchCreate
 from backend.attendance_app.services import AttendanceImportService, AttendanceReviewActionService
+from backend.attendance_app.services import AttendanceDraftRecalculationService
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
+from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
 
@@ -524,6 +526,19 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
     action_payload = payload.get("payload") or {}
     created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
     notes = payload.get("notes")
+    query_repository = PostgresAttendanceDraftQueryRepository()
+
+    if action_type in {"set_effective_start", "set_break_point", "set_effective_end"}:
+        lesson = query_repository.get_lesson_detail(lesson_id)
+        has_segments = all(
+            isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
+            for participant in lesson.participants
+        )
+        if not has_segments:
+            raise HTTPException(
+                status_code=400,
+                detail="Questa lezione arriva da un import vecchio senza segmenti grezzi: reimporta il batch per correggere inizio, pausa o fine.",
+            )
 
     service = AttendanceReviewActionService(PostgresAttendanceReviewActionRepository())
     try:
@@ -534,6 +549,10 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
             created_by=created_by,
             notes=notes,
         )
+        recalculated_lesson = AttendanceDraftRecalculationService(
+            query_repository,
+            PostgresAttendanceDraftMutationRepository(),
+        ).recalculate_lesson(lesson_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -551,7 +570,8 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
             "applied_at": action.applied_at,
             "is_applied": action.is_applied,
             "notes": action.notes,
-        }
+        },
+        "lesson_id": recalculated_lesson.id,
     }
 
 

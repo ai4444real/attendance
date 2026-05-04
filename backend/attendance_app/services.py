@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timedelta
 
+from backend.attendance_normalization.aggregator import ZoomMeeting, ZoomSegment, aggregate_meeting
 from backend.attendance_normalization.presence_rules import determine_presence_status
 from backend.attendance_normalization.service import NormalizationResult
 
 from .models import (
+    DraftLessonView,
     DraftReviewActionView,
     ImportBatchCreate,
     LessonDraft,
     LessonParticipantDraft,
     PersistedDraftImport,
 )
-from .repositories import AttendanceDraftImportRepository, AttendanceReviewActionRepository
+from .repositories import (
+    AttendanceDraftImportRepository,
+    AttendanceDraftMutationRepository,
+    AttendanceDraftQueryRepository,
+    AttendanceReviewActionRepository,
+)
 
 
 class AttendanceImportService:
@@ -70,7 +78,11 @@ class AttendanceImportService:
                     calculated_presence_status=record.calculated_presence_status,
                     final_presence_status=record.calculated_presence_status,
                     flags=[],
-                    metadata={},
+                    metadata={
+                        "first_name": record.first_name,
+                        "last_name": record.last_name,
+                        "segments": list(record.segments),
+                    },
                 )
                 existing = participants_by_key.get(participant_key)
                 if existing is None:
@@ -163,6 +175,11 @@ class AttendanceImportService:
         merged_flags = sorted(set(left.flags + right.flags))
         merged_metadata = {**left.metadata, **right.metadata}
         merged_metadata["merged_duplicate_participant_key"] = True
+        left_segments = list(left.metadata.get("segments", []))
+        right_segments = list(right.metadata.get("segments", []))
+        merged_metadata["segments"] = left_segments + right_segments
+        merged_metadata["first_name"] = merged_metadata.get("first_name") or left.canonical_full_name.split(" ")[0]
+        merged_metadata["last_name"] = merged_metadata.get("last_name") or " ".join(left.canonical_full_name.split(" ")[1:])
 
         return LessonParticipantDraft(
             participant_key=left.participant_key,
@@ -231,3 +248,214 @@ class AttendanceReviewActionService:
         timestamp = payload.get("at")
         if not isinstance(timestamp, str) or "T" not in timestamp:
             raise ValueError("payload.at must be an ISO datetime string")
+
+
+class AttendanceDraftRecalculationService:
+    """Recompute one draft lesson from persisted segments and review actions."""
+
+    def __init__(
+        self,
+        query_repository: AttendanceDraftQueryRepository,
+        mutation_repository: AttendanceDraftMutationRepository,
+    ) -> None:
+        self._query_repository = query_repository
+        self._mutation_repository = mutation_repository
+
+    def recalculate_lesson(self, lesson_id: int) -> DraftLessonView:
+        lesson = self._query_repository.get_lesson_detail(lesson_id)
+        action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
+
+        threshold_ratio = lesson.threshold_ratio
+        effective_start_at = lesson.effective_start_at
+        break_point_at = lesson.break_point_at
+        effective_end_at = lesson.effective_end_at
+        break_source = lesson.break_source
+        effective_start_source = lesson.effective_start_source
+        effective_end_source = lesson.effective_end_source
+
+        for action in action_sequence:
+            payload = action.payload or {}
+            if action.action_type == "set_threshold_ratio":
+                threshold_ratio = float(payload["threshold_ratio"])
+            elif action.action_type == "set_effective_start":
+                effective_start_at = str(payload["at"])
+                effective_start_source = "review_action"
+            elif action.action_type == "set_break_point":
+                break_point_at = str(payload["at"])
+                break_source = "manual"
+            elif action.action_type == "set_effective_end":
+                effective_end_at = str(payload["at"])
+                effective_end_source = "review_action"
+
+        participants_have_segments = all(
+            isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
+            for participant in lesson.participants
+        )
+
+        if participants_have_segments:
+            participants = self._recalculate_from_segments(
+                lesson,
+                threshold_ratio=threshold_ratio,
+                effective_start_at=effective_start_at,
+                break_point_at=break_point_at,
+                effective_end_at=effective_end_at,
+            )
+        else:
+            participants = self._recalculate_threshold_only(
+                lesson,
+                threshold_ratio=threshold_ratio,
+            )
+
+        diagnostics = dict(lesson.diagnostics or {})
+        diagnostics["threshold_ratio"] = threshold_ratio
+        diagnostics["effective_start"] = effective_start_at
+        diagnostics["break_point"] = break_point_at
+        diagnostics["effective_end"] = effective_end_at
+        diagnostics["recalculated_from_review_actions"] = True
+        diagnostics["recalculation_mode"] = "segments" if participants_have_segments else "threshold_only"
+
+        self._mutation_repository.update_lesson_after_recalculation(
+            lesson,
+            threshold_ratio=threshold_ratio,
+            effective_start_at=effective_start_at,
+            break_point_at=break_point_at,
+            effective_end_at=effective_end_at,
+            break_source=break_source,
+            effective_start_source=effective_start_source,
+            effective_end_source=effective_end_source,
+            diagnostics=diagnostics,
+            participants=participants,
+        )
+
+        return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _recalculate_from_segments(
+        self,
+        lesson: DraftLessonView,
+        *,
+        threshold_ratio: float,
+        effective_start_at: str,
+        break_point_at: str | None,
+        effective_end_at: str,
+    ) -> list[dict]:
+        meeting = self._build_zoom_meeting(lesson)
+        effective_start = datetime.fromisoformat(effective_start_at)
+        effective_end = datetime.fromisoformat(effective_end_at)
+        break_point = datetime.fromisoformat(break_point_at) if break_point_at else None
+        break_point = self._resolve_break_point(effective_start, effective_end, break_point)
+
+        aggregated = aggregate_meeting(
+            meeting=meeting,
+            effective_start=effective_start,
+            break_point=break_point,
+            effective_end=effective_end,
+        )
+        records_by_key = {
+            (record.email.strip().lower() or record.full_name.lower()): record
+            for record in aggregated
+        }
+
+        updates: list[dict] = []
+        for participant in lesson.participants:
+            participant_key = participant.email.strip().lower() if participant.email else participant.canonical_full_name.lower()
+            record = records_by_key.get(participant_key)
+            if record is None:
+                continue
+            calculated = determine_presence_status(
+                minutes_first_half=record.minutes_first_half,
+                minutes_second_half=record.minutes_second_half,
+                duration_first_half=record.duration_first_half,
+                duration_second_half=record.duration_second_half,
+                threshold=threshold_ratio,
+            )
+            final = participant.manual_override_presence_status or calculated
+            updates.append(
+                {
+                    "id": participant.id,
+                    "minutes_first_half": record.minutes_first_half,
+                    "minutes_second_half": record.minutes_second_half,
+                    "duration_first_half": record.duration_first_half,
+                    "duration_second_half": record.duration_second_half,
+                    "total_minutes": record.total_minutes,
+                    "calculated_presence_status": calculated,
+                    "final_presence_status": final,
+                }
+            )
+        return updates
+
+    def _recalculate_threshold_only(
+        self,
+        lesson: DraftLessonView,
+        *,
+        threshold_ratio: float,
+    ) -> list[dict]:
+        updates: list[dict] = []
+        for participant in lesson.participants:
+            calculated = determine_presence_status(
+                minutes_first_half=participant.minutes_first_half,
+                minutes_second_half=participant.minutes_second_half,
+                duration_first_half=participant.duration_first_half,
+                duration_second_half=participant.duration_second_half,
+                threshold=threshold_ratio,
+            )
+            final = participant.manual_override_presence_status or calculated
+            updates.append(
+                {
+                    "id": participant.id,
+                    "minutes_first_half": participant.minutes_first_half,
+                    "minutes_second_half": participant.minutes_second_half,
+                    "duration_first_half": participant.duration_first_half,
+                    "duration_second_half": participant.duration_second_half,
+                    "total_minutes": participant.total_minutes,
+                    "calculated_presence_status": calculated,
+                    "final_presence_status": final,
+                }
+            )
+        return updates
+
+    def _build_zoom_meeting(self, lesson: DraftLessonView) -> ZoomMeeting:
+        segments: list[ZoomSegment] = []
+        for participant in lesson.participants:
+            participant_segments = participant.metadata.get("segments") or []
+            first_name = participant.metadata.get("first_name") or participant.canonical_full_name.split(" ")[0]
+            last_name = participant.metadata.get("last_name") or " ".join(participant.canonical_full_name.split(" ")[1:])
+            for segment in participant_segments:
+                if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                    continue
+                segments.append(
+                    ZoomSegment(
+                        first_name=first_name,
+                        last_name=last_name,
+                        email=participant.email or "",
+                        full_name=participant.canonical_full_name,
+                        join_time=datetime.fromisoformat(segment[0]),
+                        leave_time=datetime.fromisoformat(segment[1]),
+                    )
+                )
+        start = datetime.fromisoformat(lesson.meeting_start_at)
+        end = datetime.fromisoformat(lesson.meeting_end_at)
+        return ZoomMeeting(
+            course=lesson.course_name,
+            meeting_id=lesson.source_meeting_id,
+            start_time=start,
+            end_time=end,
+            duration_minutes=(end - start).total_seconds() / 60,
+            segments=segments,
+        )
+
+    def _resolve_break_point(
+        self,
+        effective_start: datetime,
+        effective_end: datetime,
+        break_point: datetime | None,
+    ) -> datetime:
+        candidate = break_point or (effective_start + (effective_end - effective_start) / 2)
+        min_break = effective_start + timedelta(minutes=5)
+        max_break = effective_end - timedelta(minutes=5)
+        if max_break <= min_break:
+            return effective_start + (effective_end - effective_start) / 2
+        if candidate < min_break:
+            return min_break
+        if candidate > max_break:
+            return max_break
+        return candidate

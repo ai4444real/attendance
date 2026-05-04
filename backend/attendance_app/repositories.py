@@ -53,3 +53,23 @@ class AttendanceReviewActionRepository(Protocol):
         participant_id: int | None = None,
     ) -> DraftReviewActionView:
         """Persist one review action and return the created row."""
+
+
+class AttendanceDraftMutationRepository(Protocol):
+    """Update one lesson draft after recomputation."""
+
+    def update_lesson_after_recalculation(
+        self,
+        lesson: DraftLessonView,
+        *,
+        threshold_ratio: float,
+        effective_start_at: str,
+        break_point_at: str | None,
+        effective_end_at: str,
+        break_source: str,
+        effective_start_source: str,
+        effective_end_source: str,
+        diagnostics: dict,
+        participants: list[dict],
+    ) -> None:
+        """Persist recalculated lesson and participant values."""

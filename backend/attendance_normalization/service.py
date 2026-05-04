@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
@@ -42,6 +42,7 @@ class NormalizedAttendanceRecord:
     threshold: float
     trim_start_minutes: float
     trim_end_minutes: float
+    segments: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -228,6 +229,10 @@ def _to_normalized_record(
         threshold=threshold,
         trim_start_minutes=trim_start_minutes,
         trim_end_minutes=trim_end_minutes,
+        segments=[
+            (start.isoformat(), end.isoformat())
+            for start, end in record.segments
+        ],
     )
 
 
