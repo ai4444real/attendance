@@ -156,7 +156,7 @@ const DraftImportsApp = {
         const timeline = diagnostics.timeline || [];
         const peak = diagnostics.peak_active_count || Math.max(...timeline.map((point) => point.active_count), 1);
         const bars = timeline.length > 0
-            ? timeline.map((point) => this._buildTimelineBar(point, peak)).join('')
+            ? timeline.map((point) => this._buildTimelineBar(point, peak, lesson.meeting_start_at)).join('')
             : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
         const diagnosisText = lesson.break_source === 'auto'
             ? 'Pausa rilevata automaticamente dal profilo dei presenti.'
@@ -231,7 +231,7 @@ const DraftImportsApp = {
                                 <button type="button" class="action-button" data-action="set-end" data-lesson-id="${lesson.id}">Fine</button>
                             </div>
                         </div>
-                        <div class="meeting-diagnostics-note">Le correzioni vengono registrate nel database come review action. Non ricalcolano ancora la lezione.</div>
+                        <div class="meeting-diagnostics-note">Le correzioni vengono registrate nel database come review action e aggiornano il draft. Per i vecchi import senza segmenti grezzi, i marker richiedono un reimport.</div>
                         <div class="review-actions">
                             ${this._renderReviewActions(lesson.review_actions || [])}
                         </div>
@@ -354,10 +354,10 @@ const DraftImportsApp = {
         `).join('');
     },
 
-    _buildTimelineBar(point, peak) {
+    _buildTimelineBar(point, peak, referenceValue) {
         const ratio = peak > 0 ? point.active_count / peak : 0;
         const height = Math.max(10, Math.round(ratio * 88));
-        const tooltip = `${this._formatDateTime(point.timestamp)} · ${point.active_count} presenti`;
+        const tooltip = `${this._formatDateTime(point.timestamp, referenceValue)} · ${point.active_count} presenti`;
         return `<span class="meeting-bar" style="height:${height}px" title="${this._escapeAttr(tooltip)}"></span>`;
     },
 
@@ -402,8 +402,9 @@ const DraftImportsApp = {
         `;
     },
 
-    _formatDateTime(value) {
-        return new Date(value).toLocaleString('it-CH', {
+    _formatDateTime(value, referenceValue = null) {
+        const date = this._coerceDateWithReference(value, referenceValue);
+        return date.toLocaleString('it-CH', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -412,11 +413,27 @@ const DraftImportsApp = {
         });
     },
 
-    _formatTime(value) {
-        return new Date(value).toLocaleTimeString('it-CH', {
+    _formatTime(value, referenceValue = null) {
+        const date = this._coerceDateWithReference(value, referenceValue);
+        return date.toLocaleTimeString('it-CH', {
             hour: '2-digit',
             minute: '2-digit',
         });
+    },
+
+    _coerceDateWithReference(value, referenceValue = null) {
+        const raw = String(value ?? '');
+        const hasExplicitOffset = /(?:Z|[+\-]\d{2}:\d{2})$/.test(raw);
+        if (hasExplicitOffset || !referenceValue) {
+            return new Date(raw);
+        }
+
+        const reference = String(referenceValue ?? '');
+        const offsetMatch = reference.match(/(Z|[+\-]\d{2}:\d{2})$/);
+        if (!offsetMatch) {
+            return new Date(raw);
+        }
+        return new Date(`${raw}${offsetMatch[1]}`);
     },
 
     _formatMinutes(value) {
