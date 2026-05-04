@@ -23,7 +23,7 @@
         .hero { background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%); color: white; border-radius: 20px; padding: 30px; margin-bottom: 22px; box-shadow: 0 14px 30px rgba(16, 42, 67, 0.16); }
         .hero h1 { margin: 0 0 10px; font-size: 36px; }
         .hero p { margin: 0; line-height: 1.6; max-width: 860px; font-size: 16px; }
-        .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; }
+        .workspace-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
         .panel { background: white; border: 1px solid var(--brand-border); border-radius: 18px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); padding: 20px; }
         .panel-title { font-size: 18px; font-weight: 800; color: var(--brand-ink); margin: 0 0 12px; }
         .hint { color: var(--brand-muted); font-size: 14px; line-height: 1.6; }
@@ -33,6 +33,10 @@
         .batch-item.active { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); }
         .batch-title { font-size: 15px; font-weight: 800; color: var(--brand-ink); margin-bottom: 6px; }
         .batch-meta { font-size: 13px; color: var(--brand-muted); line-height: 1.5; }
+        .batch-strip { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--brand-pnl-blue); border-radius: 14px; background: var(--brand-pnl-blue-soft); }
+        .batch-strip-title { font-size: 14px; font-weight: 800; color: var(--brand-ink); }
+        .batch-strip-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--brand-muted); }
+        .batch-strip-meta strong { color: var(--brand-ink); font-size: 13px; }
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
         .summary-card { background: white; border: 1px solid var(--brand-border); border-radius: 16px; padding: 16px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); }
         .summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-muted); margin-bottom: 8px; font-weight: 700; }
@@ -62,7 +66,7 @@
         .presence-tag.seconda_meta { background: #fff2d9; color: #946200; }
         .presence-tag.assente { background: #fde7ec; color: #b42318; }
         .empty { padding: 24px; border: 1px dashed var(--brand-border); border-radius: 16px; color: var(--brand-muted); background: #fafcfd; }
-        @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+        @media (max-width: 1100px) { .workspace-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -96,10 +100,9 @@
             <div id="batchList" class="batch-list" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));"></div>
         </section>
 
-        <section class="layout">
-            <section class="panel">
-                <div id="batchSummary" class="summary-grid"></div>
-                <div class="layout" style="grid-template-columns: 320px minmax(0, 1fr); gap: 16px;">
+        <section class="panel">
+            <div id="batchSummary" class="batch-strip"></div>
+            <div class="workspace-grid" style="margin-top: 16px;">
                     <div>
                         <h2 class="panel-title">Lezioni del batch</h2>
                         <div id="lessonList" class="batch-list"></div>
@@ -108,8 +111,7 @@
                         <h2 class="panel-title">Dettaglio lezione</h2>
                         <div id="lessonsContainer" class="lessons"></div>
                     </div>
-                </div>
-            </section>
+            </div>
         </section>
     </main>
 

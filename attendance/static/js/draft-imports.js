@@ -91,20 +91,15 @@ const DraftImportsApp = {
     },
 
     _renderBatchSummary(batch) {
-        const cards = [
-            ['Batch', `#${batch.id}`, batch.source_file_name],
-            ['Stato', batch.status, batch.source_system],
-            ['Lezioni', String(batch.lessons_count), 'draft nel DB'],
-            ['Partecipanti', String(batch.participants_count), this._formatDateTime(batch.created_at)],
-        ];
-
-        this._els.batchSummary.innerHTML = cards.map(([label, value, detail]) => `
-            <article class="summary-card">
-                <div class="summary-label">${this._escapeHtml(label)}</div>
-                <div class="summary-value">${this._escapeHtml(value)}</div>
-                <div class="hint">${this._escapeHtml(detail)}</div>
-            </article>
-        `).join('');
+        this._els.batchSummary.innerHTML = `
+            <div class="batch-strip-title">#${this._escapeHtml(batch.id)} · ${this._escapeHtml(batch.source_file_name)}</div>
+            <div class="batch-strip-meta">
+                <span><strong>${this._escapeHtml(batch.status)}</strong> · ${this._escapeHtml(batch.source_system)}</span>
+                <span><strong>${this._escapeHtml(batch.lessons_count)}</strong> lezioni</span>
+                <span><strong>${this._escapeHtml(batch.participants_count)}</strong> partecipanti</span>
+                <span>${this._escapeHtml(this._formatDateTime(batch.created_at))}</span>
+            </div>
+        `;
     },
 
     _renderLessonList(lessons) {
