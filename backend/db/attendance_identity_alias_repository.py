@@ -20,7 +20,9 @@ class PostgresAttendanceIdentityAliasRepository:
                     SELECT
                         id,
                         canonical_full_name,
+                        canonical_email,
                         alias_full_name,
+                        alias_type,
                         created_by,
                         created_at,
                         is_active,
@@ -36,11 +38,13 @@ class PostgresAttendanceIdentityAliasRepository:
             AttendanceIdentityAlias(
                 id=int(row[0]),
                 canonical_full_name=str(row[1]),
-                alias_full_name=str(row[2]),
-                created_by=row[3],
-                created_at=_ensure_datetime(row[4]),
-                is_active=bool(row[5]),
-                notes=row[6],
+                canonical_email=row[2],
+                alias_value=str(row[3]),
+                alias_type=str(row[4]),
+                created_by=row[5],
+                created_at=_ensure_datetime(row[6]),
+                is_active=bool(row[7]),
+                notes=row[8],
             )
             for row in rows
         ]
@@ -49,11 +53,13 @@ class PostgresAttendanceIdentityAliasRepository:
         self,
         *,
         canonical_full_name: str,
-        alias_full_name: str,
+        canonical_email: str | None = None,
+        alias_value: str,
+        alias_type: str = "full_name",
         created_by: str | None = None,
         notes: str | None = None,
     ) -> AttendanceIdentityAlias:
-        normalized_alias = _normalize_key(alias_full_name)
+        normalized_alias = _normalize_key(alias_value) if alias_type == "full_name" else _normalize_email(alias_value)
         normalized_canonical = _normalize_key(canonical_full_name)
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
@@ -61,17 +67,20 @@ class PostgresAttendanceIdentityAliasRepository:
                     """
                     INSERT INTO attendance_identity_aliases (
                         canonical_full_name,
+                        canonical_email,
                         alias_full_name,
+                        alias_type,
                         normalized_canonical_key,
                         normalized_alias_key,
                         created_by,
                         notes,
                         is_active
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, TRUE)
-                    ON CONFLICT (normalized_alias_key)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                    ON CONFLICT (alias_type, normalized_alias_key)
                     DO UPDATE SET
                         canonical_full_name = EXCLUDED.canonical_full_name,
+                        canonical_email = EXCLUDED.canonical_email,
                         normalized_canonical_key = EXCLUDED.normalized_canonical_key,
                         created_by = EXCLUDED.created_by,
                         notes = EXCLUDED.notes,
@@ -79,7 +88,9 @@ class PostgresAttendanceIdentityAliasRepository:
                     RETURNING
                         id,
                         canonical_full_name,
+                        canonical_email,
                         alias_full_name,
+                        alias_type,
                         created_by,
                         created_at,
                         is_active,
@@ -87,7 +98,9 @@ class PostgresAttendanceIdentityAliasRepository:
                     """,
                     (
                         canonical_full_name,
-                        alias_full_name,
+                        canonical_email,
+                        alias_value,
+                        alias_type,
                         normalized_canonical,
                         normalized_alias,
                         created_by,
@@ -103,16 +116,22 @@ class PostgresAttendanceIdentityAliasRepository:
         return AttendanceIdentityAlias(
             id=int(row[0]),
             canonical_full_name=str(row[1]),
-            alias_full_name=str(row[2]),
-            created_by=row[3],
-            created_at=_ensure_datetime(row[4]),
-            is_active=bool(row[5]),
-            notes=row[6],
+            canonical_email=row[2],
+            alias_value=str(row[3]),
+            alias_type=str(row[4]),
+            created_by=row[5],
+            created_at=_ensure_datetime(row[6]),
+            is_active=bool(row[7]),
+            notes=row[8],
         )
 
 
 def _normalize_key(value: str) -> str:
     return " ".join((value or "").strip().casefold().split())
+
+
+def _normalize_email(value: str) -> str:
+    return (value or "").strip().casefold()
 
 
 def _ensure_datetime(value: object) -> datetime:

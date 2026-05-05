@@ -14,6 +14,7 @@ Query utili gia' pronte:
 Migrazioni schema attendance attuali:
 - `schema/001_initial_schema.sql`
 - `schema/002_attendance_identity_aliases.sql`
+- `schema/003_attendance_identity_alias_types.sql`
 
 Il database target è unico: `rebekko`.
 I domini applicativi convivono nello stesso database con naming esplicito, ad

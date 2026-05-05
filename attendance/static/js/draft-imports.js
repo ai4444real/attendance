@@ -316,11 +316,11 @@ const DraftImportsApp = {
                                 <div class="alias-merge-grid">
                                     <select id="aliasCanonicalSelect">
                                         <option value="">Identità canonica</option>
-                                        ${participants.map((participant) => `<option value="${participant.id}">${this._escapeHtml(participant.canonical_full_name)}</option>`).join('')}
+                                        ${participants.map((participant) => `<option value="${participant.id}">${this._escapeHtml(this._participantOptionLabel(participant))}</option>`).join('')}
                                     </select>
                                     <select id="aliasSourceSelect">
                                         <option value="">Alias da unire</option>
-                                        ${participants.map((participant) => `<option value="${participant.id}">${this._escapeHtml(participant.canonical_full_name)}</option>`).join('')}
+                                        ${participants.map((participant) => `<option value="${participant.id}">${this._escapeHtml(this._participantOptionLabel(participant))}</option>`).join('')}
                                     </select>
                                 </div>
                                 <div class="alias-merge-actions">
@@ -449,7 +449,9 @@ const DraftImportsApp = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     canonical_full_name: canonicalParticipant.canonical_full_name,
+                    canonical_email: canonicalParticipant.email,
                     alias_full_name: aliasParticipant.canonical_full_name,
+                    alias_email: aliasParticipant.email,
                     created_by: 'drafts-ui',
                     notes: `Creato dalla lesson ${lesson.id}`,
                 }),
@@ -463,6 +465,12 @@ const DraftImportsApp = {
             console.error(error);
             window.alert(error.message);
         }
+    },
+
+    _participantOptionLabel(participant) {
+        return participant.email
+            ? `${participant.canonical_full_name} (${participant.email})`
+            : participant.canonical_full_name;
     },
 
     _renderPresenceOverrideControl(lessonId, participant) {

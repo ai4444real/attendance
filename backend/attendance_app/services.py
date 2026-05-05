@@ -53,7 +53,7 @@ class AttendanceImportService:
         return self._repository.save_draft_import(batch_data, lessons)
 
     def _build_lesson_drafts(self, normalization_result: NormalizationResult) -> list[LessonDraft]:
-        alias_map = self._build_identity_alias_map()
+        name_alias_map, email_alias_map = self._build_identity_alias_maps()
         records_by_key = defaultdict(list)
         meeting_by_key = {}
 
@@ -72,14 +72,19 @@ class AttendanceImportService:
 
             for record in records_by_key.get(key, []):
                 full_name = f"{record.first_name} {record.last_name}".strip()
-                canonical_full_name = self._apply_identity_alias(full_name, alias_map)
+                canonical_full_name, canonical_email = self._apply_identity_alias(
+                    full_name,
+                    record.email or None,
+                    name_alias_map,
+                    email_alias_map,
+                )
                 first_name, last_name = self._split_full_name(canonical_full_name)
-                participant_key = record.email.strip().lower() or canonical_full_name.lower()
+                participant_key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
                 participant_draft = LessonParticipantDraft(
                     participant_key=participant_key,
                     canonical_full_name=canonical_full_name,
                     raw_full_name=full_name,
-                    email=record.email or None,
+                    email=canonical_email,
                     segment_count=record.segment_count,
                     minutes_first_half=record.minutes_first_half,
                     minutes_second_half=record.minutes_second_half,
@@ -154,18 +159,38 @@ class AttendanceImportService:
 
         return sorted(lesson_drafts, key=lambda lesson: (lesson.lesson_date, lesson.course_name, lesson.source_meeting_id))
 
-    def _build_identity_alias_map(self) -> dict[str, str]:
+    def _build_identity_alias_maps(self) -> tuple[dict[str, AttendanceIdentityAlias], dict[str, AttendanceIdentityAlias]]:
         if self._identity_alias_repository is None:
-            return {}
+            return {}, {}
         aliases = self._identity_alias_repository.list_active_aliases()
-        return {
-            self._normalize_identity_key(alias.alias_full_name): alias.canonical_full_name
+        name_alias_map = {
+            self._normalize_identity_key(alias.alias_value): alias
             for alias in aliases
+            if alias.alias_type == "full_name"
         }
+        email_alias_map = {
+            (alias.alias_value or "").strip().casefold(): alias
+            for alias in aliases
+            if alias.alias_type == "email"
+        }
+        return name_alias_map, email_alias_map
 
-    def _apply_identity_alias(self, full_name: str, alias_map: dict[str, str]) -> str:
-        normalized = self._normalize_identity_key(full_name)
-        return alias_map.get(normalized, full_name)
+    def _apply_identity_alias(
+        self,
+        full_name: str,
+        email: str | None,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> tuple[str, str | None]:
+        normalized_email = (email or "").strip().casefold()
+        if normalized_email and normalized_email in email_alias_map:
+            alias = email_alias_map[normalized_email]
+            return alias.canonical_full_name, alias.canonical_email or email
+        normalized_name = self._normalize_identity_key(full_name)
+        if normalized_name in name_alias_map:
+            alias = name_alias_map[normalized_name]
+            return alias.canonical_full_name, alias.canonical_email or email
+        return full_name, email
 
     def _normalize_identity_key(self, value: str) -> str:
         return " ".join((value or "").strip().casefold().split())
@@ -566,21 +591,58 @@ class AttendanceIdentityAliasService:
         self,
         *,
         canonical_full_name: str,
-        alias_full_name: str,
+        canonical_email: str | None = None,
+        alias_value: str,
+        alias_type: str = "full_name",
         created_by: str | None = None,
         notes: str | None = None,
     ) -> AttendanceIdentityAlias:
         canonical = " ".join((canonical_full_name or "").strip().split())
-        alias = " ".join((alias_full_name or "").strip().split())
+        alias = " ".join((alias_value or "").strip().split()) if alias_type == "full_name" else (alias_value or "").strip()
         if not canonical:
             raise ValueError("canonical_full_name is required")
         if not alias:
-            raise ValueError("alias_full_name is required")
-        if canonical.casefold() == alias.casefold():
+            raise ValueError("alias_value is required")
+        if alias_type not in {"full_name", "email"}:
+            raise ValueError("alias_type must be full_name or email")
+        if alias_type == "full_name" and canonical.casefold() == alias.casefold():
             raise ValueError("canonical_full_name and alias_full_name must differ")
         return self._repository.create_alias(
             canonical_full_name=canonical,
-            alias_full_name=alias,
+            canonical_email=(canonical_email or "").strip() or None,
+            alias_value=alias,
+            alias_type=alias_type,
+            created_by=created_by,
+            notes=notes,
+        )
+
+    def merge_participants(
+        self,
+        *,
+        canonical_full_name: str,
+        canonical_email: str | None,
+        alias_full_name: str,
+        alias_email: str | None,
+        created_by: str | None = None,
+        notes: str | None = None,
+    ) -> AttendanceIdentityAlias:
+        same_name = canonical_full_name.strip().casefold() == alias_full_name.strip().casefold()
+        canonical_email_norm = (canonical_email or "").strip().casefold()
+        alias_email_norm = (alias_email or "").strip().casefold()
+        if same_name and canonical_email_norm and alias_email_norm and canonical_email_norm != alias_email_norm:
+            return self.create_alias(
+                canonical_full_name=canonical_full_name,
+                canonical_email=canonical_email,
+                alias_value=alias_email,
+                alias_type="email",
+                created_by=created_by,
+                notes=notes,
+            )
+        return self.create_alias(
+            canonical_full_name=canonical_full_name,
+            canonical_email=canonical_email,
+            alias_value=alias_full_name,
+            alias_type="full_name",
             created_by=created_by,
             notes=notes,
         )
@@ -592,7 +654,8 @@ class AttendanceIdentityAliasService:
             for alias in rule.aliases:
                 self._repository.create_alias(
                     canonical_full_name=rule.canonical_full_name,
-                    alias_full_name=alias,
+                    alias_value=alias,
+                    alias_type="full_name",
                     created_by="legacy-bootstrap",
                     notes="Importato da attendance/config/identity_rules.json",
                 )

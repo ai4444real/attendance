@@ -37,7 +37,9 @@ class AttendanceIdentityAliasRepository(Protocol):
         self,
         *,
         canonical_full_name: str,
-        alias_full_name: str,
+        canonical_email: str | None = None,
+        alias_value: str,
+        alias_type: str = "full_name",
         created_by: str | None = None,
         notes: str | None = None,
     ) -> AttendanceIdentityAlias:

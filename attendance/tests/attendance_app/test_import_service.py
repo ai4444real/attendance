@@ -186,7 +186,9 @@ class AttendanceImportServiceTest(unittest.TestCase):
             AttendanceIdentityAlias(
                 id=1,
                 canonical_full_name="Mario Rossi",
-                alias_full_name="Mario R. Rossi",
+                canonical_email=None,
+                alias_value="Mario R. Rossi",
+                alias_type="full_name",
                 created_by="test",
                 created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
                 is_active=True,
@@ -433,7 +435,9 @@ class FakeAttendanceIdentityAliasRepository:
         return AttendanceIdentityAlias(
             id=10,
             canonical_full_name=kwargs["canonical_full_name"],
-            alias_full_name=kwargs["alias_full_name"],
+            canonical_email=kwargs.get("canonical_email"),
+            alias_value=kwargs["alias_value"],
+            alias_type=kwargs.get("alias_type", "full_name"),
             created_by=kwargs.get("created_by"),
             created_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
             is_active=True,
@@ -448,12 +452,12 @@ class AttendanceIdentityAliasServiceTest(unittest.TestCase):
 
         alias = service.create_alias(
             canonical_full_name=" Mario Rossi ",
-            alias_full_name=" Mario R. Rossi ",
+            alias_value=" Mario R. Rossi ",
             created_by="drafts-ui",
         )
 
         self.assertEqual("Mario Rossi", alias.canonical_full_name)
-        self.assertEqual("Mario R. Rossi", alias.alias_full_name)
+        self.assertEqual("Mario R. Rossi", alias.alias_value)
         self.assertEqual("Mario Rossi", repository.last_created["canonical_full_name"])
 
     def test_create_alias_rejects_same_identity(self) -> None:
@@ -463,7 +467,7 @@ class AttendanceIdentityAliasServiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             service.create_alias(
                 canonical_full_name="Mario Rossi",
-                alias_full_name="mario rossi",
+                alias_value="mario rossi",
             )
 
     def test_bootstrap_from_legacy_rules_imports_all_aliases(self) -> None:

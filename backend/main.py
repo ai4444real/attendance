@@ -647,14 +647,18 @@ async def attendance_set_lesson_status(lesson_id: int, payload: dict):
 async def attendance_create_identity_alias(payload: dict):
     _bootstrap_identity_aliases_if_needed()
     canonical_full_name = str(payload.get("canonical_full_name") or "").strip()
+    canonical_email = str(payload.get("canonical_email") or "").strip() or None
     alias_full_name = str(payload.get("alias_full_name") or "").strip()
+    alias_email = str(payload.get("alias_email") or "").strip() or None
     created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
     notes = payload.get("notes")
     service = AttendanceIdentityAliasService(PostgresAttendanceIdentityAliasRepository())
     try:
-        alias = service.create_alias(
+        alias = service.merge_participants(
             canonical_full_name=canonical_full_name,
+            canonical_email=canonical_email,
             alias_full_name=alias_full_name,
+            alias_email=alias_email,
             created_by=created_by,
             notes=notes,
         )
@@ -667,7 +671,9 @@ async def attendance_create_identity_alias(payload: dict):
         "alias": {
             "id": alias.id,
             "canonical_full_name": alias.canonical_full_name,
-            "alias_full_name": alias.alias_full_name,
+            "canonical_email": alias.canonical_email,
+            "alias_value": alias.alias_value,
+            "alias_type": alias.alias_type,
             "created_by": alias.created_by,
             "created_at": alias.created_at.isoformat(),
             "is_active": alias.is_active,
@@ -686,7 +692,9 @@ async def attendance_list_identity_aliases():
             {
                 "id": alias.id,
                 "canonical_full_name": alias.canonical_full_name,
-                "alias_full_name": alias.alias_full_name,
+                "canonical_email": alias.canonical_email,
+                "alias_value": alias.alias_value,
+                "alias_type": alias.alias_type,
                 "created_by": alias.created_by,
                 "created_at": alias.created_at.isoformat(),
                 "is_active": alias.is_active,

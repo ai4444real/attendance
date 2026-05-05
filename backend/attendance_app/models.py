@@ -80,7 +80,9 @@ class PersistedDraftImport:
 class AttendanceIdentityAlias:
     id: int
     canonical_full_name: str
-    alias_full_name: str
+    canonical_email: Optional[str]
+    alias_value: str
+    alias_type: str
     created_by: Optional[str]
     created_at: datetime
     is_active: bool

@@ -44,6 +44,7 @@ const AttendanceAliasesApp = {
                 <thead>
                     <tr>
                         <th>Identità canonica</th>
+                        <th>Tipo</th>
                         <th>Alias</th>
                         <th>Creato da</th>
                         <th>Creato il</th>
@@ -53,8 +54,9 @@ const AttendanceAliasesApp = {
                 <tbody>
                     ${aliases.map((alias) => `
                         <tr>
-                            <td><span class="alias-name">${this._escapeHtml(alias.canonical_full_name)}</span></td>
-                            <td>${this._escapeHtml(alias.alias_full_name)}</td>
+                            <td><span class="alias-name">${this._escapeHtml(alias.canonical_full_name)}</span>${alias.canonical_email ? `<br><span class="hint">${this._escapeHtml(alias.canonical_email)}</span>` : ''}</td>
+                            <td>${this._escapeHtml(alias.alias_type)}</td>
+                            <td>${this._escapeHtml(alias.alias_value)}</td>
                             <td>${this._escapeHtml(alias.created_by || '—')}</td>
                             <td>${this._escapeHtml(this._formatDateTime(alias.created_at))}</td>
                             <td>${this._escapeHtml(alias.notes || '—')}</td>
