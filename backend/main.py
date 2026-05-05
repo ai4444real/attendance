@@ -7,7 +7,7 @@ At the moment it serves the Attendance module and its related APIs.
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import tempfile
@@ -449,7 +449,7 @@ async def attendance_import_draft(file: UploadFile = File(...)):
 async def attendance_import_batches():
     repository = PostgresAttendanceDraftQueryRepository()
     batches = repository.list_batches(limit=30)
-    return {
+    return JSONResponse({
         "batches": [
             {
                 "id": batch.id,
@@ -462,7 +462,7 @@ async def attendance_import_batches():
             }
             for batch in batches
         ]
-    }
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/api/attendance/import-batches/{batch_id}")
@@ -473,7 +473,7 @@ async def attendance_import_batch_detail(batch_id: int):
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return {
+    return JSONResponse({
         "batch": {
             "id": detail.batch.id,
             "source_system": detail.batch.source_system,
@@ -496,7 +496,7 @@ async def attendance_import_batch_detail(batch_id: int):
             }
             for lesson in detail.lessons
         ],
-    }
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/api/attendance/lessons/{lesson_id}")
@@ -507,7 +507,7 @@ async def attendance_lesson_detail(lesson_id: int):
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return {
+    return JSONResponse({
         "lesson": {
             "id": lesson.id,
             "course_name": lesson.course_name,
@@ -562,7 +562,7 @@ async def attendance_lesson_detail(lesson_id: int):
                 for action in lesson.review_actions
             ],
         }
-    }
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.post("/api/attendance/lessons/{lesson_id}/review-actions")
@@ -655,6 +655,7 @@ async def attendance_create_identity_alias(payload: dict):
     created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
     notes = payload.get("notes")
     service = AttendanceIdentityAliasService(PostgresAttendanceIdentityAliasRepository())
+    rebuilt_lesson = None
     try:
         alias = service.merge_participants(
             canonical_full_name=canonical_full_name,
@@ -665,7 +666,7 @@ async def attendance_create_identity_alias(payload: dict):
             notes=notes,
         )
         if lesson_id is not None:
-            AttendanceLessonIdentityRebuildService(
+            rebuilt_lesson = AttendanceLessonIdentityRebuildService(
                 PostgresAttendanceDraftQueryRepository(),
                 PostgresAttendanceDraftMutationRepository(),
                 PostgresAttendanceIdentityAliasRepository(),
@@ -675,7 +676,7 @@ async def attendance_create_identity_alias(payload: dict):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Creazione alias fallita: {exc}") from exc
 
-    return {
+    return JSONResponse({
         "alias": {
             "id": alias.id,
             "canonical_full_name": alias.canonical_full_name,
@@ -689,7 +690,9 @@ async def attendance_create_identity_alias(payload: dict):
         }
         ,
         "lesson_id": int(lesson_id) if lesson_id is not None else None,
-    }
+        "lesson_summary": rebuilt_lesson.summary if rebuilt_lesson is not None else None,
+        "participants_count": len(rebuilt_lesson.participants) if rebuilt_lesson is not None else None,
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/api/attendance/identity-aliases")
@@ -697,7 +700,7 @@ async def attendance_list_identity_aliases():
     _bootstrap_identity_aliases_if_needed()
     repository = PostgresAttendanceIdentityAliasRepository()
     aliases = repository.list_active_aliases()
-    return {
+    return JSONResponse({
         "aliases": [
             {
                 "id": alias.id,
@@ -712,7 +715,7 @@ async def attendance_list_identity_aliases():
             }
             for alias in aliases
         ]
-    }
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/health")

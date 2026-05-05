@@ -21,7 +21,7 @@ const DraftImportsApp = {
         this._els.lessonsContainer.innerHTML = '<div class="empty">Seleziona un import batch.</div>';
 
         try {
-            const response = await fetch('/api/attendance/import-batches');
+            const response = await fetch('/api/attendance/import-batches', { cache: 'no-store' });
             const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere gli import batch.');
@@ -73,7 +73,7 @@ const DraftImportsApp = {
         this._els.lessonsContainer.innerHTML = '<div class="empty">Carico il dettaglio del batch...</div>';
 
         try {
-            const response = await fetch(`/api/attendance/import-batches/${batchId}`);
+            const response = await fetch(`/api/attendance/import-batches/${batchId}`, { cache: 'no-store' });
             const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere il dettaglio del batch.');
@@ -213,7 +213,7 @@ const DraftImportsApp = {
         this._els.lessonsContainer.innerHTML = '<div class="empty">Carico la lezione...</div>';
 
         try {
-            const response = await fetch(`/api/attendance/lessons/${lessonId}`);
+            const response = await fetch(`/api/attendance/lessons/${lessonId}`, { cache: 'no-store' });
             const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere il dettaglio della lezione.');
@@ -459,10 +459,14 @@ const DraftImportsApp = {
             });
             const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile registrare l\'alias.');
-            window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". La lezione viene ricostruita subito.`);
             canonicalSelect.value = '';
             aliasSelect.value = '';
             await this._reloadCurrentBatch(lesson.id);
+            if (data.participants_count !== null && data.participants_count !== undefined) {
+                window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". Partecipanti attuali nella lezione: ${data.participants_count}.`);
+            } else {
+                window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". La lezione viene ricostruita subito.`);
+            }
         } catch (error) {
             console.error(error);
             window.alert(error.message);
@@ -575,7 +579,7 @@ const DraftImportsApp = {
 
     async _reloadCurrentBatch(preferredLessonId = null) {
         if (!this._selectedBatchId) return;
-        const response = await fetch(`/api/attendance/import-batches/${this._selectedBatchId}`);
+        const response = await fetch(`/api/attendance/import-batches/${this._selectedBatchId}`, { cache: 'no-store' });
         const payload = await this._readApiPayload(response);
         if (!response.ok) {
             throw new Error(payload.detail || 'Impossibile ricaricare il batch.');
