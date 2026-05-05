@@ -311,6 +311,23 @@ const DraftImportsApp = {
                                 <button type="button" class="action-button" data-action="set-end" data-lesson-id="${lesson.id}">Fine</button>
                             </div>
                             <div class="meeting-diagnostics-note">Le correzioni vengono registrate nel database come review action e aggiornano il draft. Per i vecchi import senza segmenti grezzi, i marker richiedono un reimport.</div>
+                            <div class="alias-merge-box">
+                                <div class="alias-merge-title">Unisci identità</div>
+                                <div class="alias-merge-grid">
+                                    <select id="aliasCanonicalSelect">
+                                        <option value="">Identità canonica</option>
+                                        ${participants.map((participant) => `<option value="${participant.id}">${this._escapeHtml(participant.canonical_full_name)}</option>`).join('')}
+                                    </select>
+                                    <select id="aliasSourceSelect">
+                                        <option value="">Alias da unire</option>
+                                        ${participants.map((participant) => `<option value="${participant.id}">${this._escapeHtml(participant.canonical_full_name)}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="alias-merge-actions">
+                                    <button type="button" class="action-button" data-action="merge-alias" data-lesson-id="${lesson.id}">Unisci</button>
+                                    <span class="alias-merge-note">Vale dai prossimi import. Il batch già importato non viene rimerciato ora.</span>
+                                </div>
+                            </div>
                             <div class="review-actions">
                                 ${this._renderReviewActions(lesson.review_actions || [])}
                             </div>
@@ -349,13 +366,13 @@ const DraftImportsApp = {
                         </tbody>
                     </table>
                     ${presentParticipants.length > 0 ? `
-                        <div class="present-list">
+                            <div class="present-list">
                             <div class="present-list-title">Presenti</div>
                             <div class="present-list-items">
                                 ${presentParticipants.map((participant) => `
                                     <div class="present-chip">
                                         <span class="present-chip-name">${this._escapeHtml(participant.canonical_full_name)}</span>
-                                        ${this._renderPresenceOverrideControl(lesson.id, participant)}
+                                        ${participant.manual_override_presence_status ? this._renderPresenceOverrideControl(lesson.id, participant) : ''}
                                     </div>
                                 `).join('')}
                             </div>
@@ -377,6 +394,10 @@ const DraftImportsApp = {
                 }
                 if (action === 'set-start' || action === 'set-break' || action === 'set-end') {
                     await this._promptAndSaveMarker(lesson, action);
+                    return;
+                }
+                if (action === 'merge-alias') {
+                    await this._createIdentityAliasFromLesson(lesson);
                 }
             });
         });
@@ -401,6 +422,47 @@ const DraftImportsApp = {
                 );
             });
         });
+    },
+
+    async _createIdentityAliasFromLesson(lesson) {
+        const canonicalSelect = document.getElementById('aliasCanonicalSelect');
+        const aliasSelect = document.getElementById('aliasSourceSelect');
+        const canonicalId = Number(canonicalSelect?.value || 0);
+        const aliasId = Number(aliasSelect?.value || 0);
+        if (!canonicalId || !aliasId) {
+            window.alert('Seleziona identità e alias da unire.');
+            return;
+        }
+        if (canonicalId === aliasId) {
+            window.alert('Identità e alias devono essere diversi.');
+            return;
+        }
+        const canonicalParticipant = lesson.participants.find((participant) => participant.id === canonicalId);
+        const aliasParticipant = lesson.participants.find((participant) => participant.id === aliasId);
+        if (!canonicalParticipant || !aliasParticipant) {
+            window.alert('Partecipanti non trovati.');
+            return;
+        }
+        try {
+            const response = await fetch('/api/attendance/identity-aliases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    canonical_full_name: canonicalParticipant.canonical_full_name,
+                    alias_full_name: aliasParticipant.canonical_full_name,
+                    created_by: 'drafts-ui',
+                    notes: `Creato dalla lesson ${lesson.id}`,
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Impossibile registrare l\'alias.');
+            window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". Valido dai prossimi import.`);
+            canonicalSelect.value = '';
+            aliasSelect.value = '';
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
     },
 
     _renderPresenceOverrideControl(lessonId, participant) {

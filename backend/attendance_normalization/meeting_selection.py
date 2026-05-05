@@ -6,15 +6,29 @@ from typing import Iterable
 
 from .aggregator import ZoomMeeting
 
+EXCLUDED_COURSE_TOKENS = {
+    "ESAME",
+    "TEAM MEETING",
+}
+
 
 def is_uppercase_course_name(course_name: str) -> bool:
     letters = "".join(ch for ch in course_name if ch.isalpha())
     return bool(letters) and letters == letters.upper()
 
 
+def is_excluded_course_name(course_name: str) -> bool:
+    normalized = " ".join((course_name or "").upper().split())
+    return any(token in normalized for token in EXCLUDED_COURSE_TOKENS)
+
+
 def preselected_course_names(meetings: Iterable[ZoomMeeting]) -> list[str]:
     unique_names = {meeting.course or "(senza nome)" for meeting in meetings}
-    selected = [name for name in unique_names if is_uppercase_course_name(name)]
+    selected = [
+        name
+        for name in unique_names
+        if is_uppercase_course_name(name) and not is_excluded_course_name(name)
+    ]
     return sorted(selected, key=lambda value: value.lower())
 
 
@@ -26,4 +40,5 @@ def filter_meetings_by_courses(
         meeting
         for meeting in meetings
         if (meeting.course or "(senza nome)") in selected_course_names
+        and not is_excluded_course_name(meeting.course or "")
     ]

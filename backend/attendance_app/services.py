@@ -10,6 +10,7 @@ from backend.attendance_normalization.presence_rules import determine_presence_s
 from backend.attendance_normalization.service import NormalizationResult
 
 from .models import (
+    AttendanceIdentityAlias,
     DraftLessonView,
     DraftReviewActionView,
     ImportBatchCreate,
@@ -19,6 +20,7 @@ from .models import (
 )
 from .repositories import (
     AttendanceDraftImportRepository,
+    AttendanceIdentityAliasRepository,
     AttendanceDraftMutationRepository,
     AttendanceDraftQueryRepository,
     AttendanceReviewActionRepository,
@@ -28,8 +30,13 @@ from .repositories import (
 class AttendanceImportService:
     """Use cases related to attendance imports."""
 
-    def __init__(self, repository: AttendanceDraftImportRepository) -> None:
+    def __init__(
+        self,
+        repository: AttendanceDraftImportRepository,
+        identity_alias_repository: AttendanceIdentityAliasRepository | None = None,
+    ) -> None:
         self._repository = repository
+        self._identity_alias_repository = identity_alias_repository
 
     def persist_normalization_result(
         self,
@@ -45,6 +52,7 @@ class AttendanceImportService:
         return self._repository.save_draft_import(batch_data, lessons)
 
     def _build_lesson_drafts(self, normalization_result: NormalizationResult) -> list[LessonDraft]:
+        alias_map = self._build_identity_alias_map()
         records_by_key = defaultdict(list)
         meeting_by_key = {}
 
@@ -63,10 +71,12 @@ class AttendanceImportService:
 
             for record in records_by_key.get(key, []):
                 full_name = f"{record.first_name} {record.last_name}".strip()
-                participant_key = record.email.strip().lower() or full_name.lower()
+                canonical_full_name = self._apply_identity_alias(full_name, alias_map)
+                first_name, last_name = self._split_full_name(canonical_full_name)
+                participant_key = record.email.strip().lower() or canonical_full_name.lower()
                 participant_draft = LessonParticipantDraft(
                     participant_key=participant_key,
-                    canonical_full_name=full_name,
+                    canonical_full_name=canonical_full_name,
                     raw_full_name=full_name,
                     email=record.email or None,
                     segment_count=record.segment_count,
@@ -79,9 +89,10 @@ class AttendanceImportService:
                     final_presence_status=record.calculated_presence_status,
                     flags=[],
                     metadata={
-                        "first_name": record.first_name,
-                        "last_name": record.last_name,
+                        "first_name": first_name,
+                        "last_name": last_name,
                         "segments": list(record.segments),
+                        "canonicalized_by_identity_alias": canonical_full_name != full_name,
                     },
                 )
                 existing = participants_by_key.get(participant_key)
@@ -141,6 +152,30 @@ class AttendanceImportService:
             )
 
         return sorted(lesson_drafts, key=lambda lesson: (lesson.lesson_date, lesson.course_name, lesson.source_meeting_id))
+
+    def _build_identity_alias_map(self) -> dict[str, str]:
+        if self._identity_alias_repository is None:
+            return {}
+        aliases = self._identity_alias_repository.list_active_aliases()
+        return {
+            self._normalize_identity_key(alias.alias_full_name): alias.canonical_full_name
+            for alias in aliases
+        }
+
+    def _apply_identity_alias(self, full_name: str, alias_map: dict[str, str]) -> str:
+        normalized = self._normalize_identity_key(full_name)
+        return alias_map.get(normalized, full_name)
+
+    def _normalize_identity_key(self, value: str) -> str:
+        return " ".join((value or "").strip().casefold().split())
+
+    def _split_full_name(self, full_name: str) -> tuple[str, str]:
+        parts = [part for part in (full_name or "").split(" ") if part]
+        if not parts:
+            return "", ""
+        if len(parts) == 1:
+            return parts[0], ""
+        return parts[0], " ".join(parts[1:])
 
     def _merge_participant_drafts(
         self,
@@ -518,3 +553,33 @@ class AttendanceLessonStateService:
         if status not in self._ALLOWED_STATUSES:
             raise ValueError(f"Unsupported lesson status: {status}")
         self._mutation_repository.set_lesson_status(lesson_id, status=status)
+
+
+class AttendanceIdentityAliasService:
+    """Manage persistent identity aliases used by future imports."""
+
+    def __init__(self, repository: AttendanceIdentityAliasRepository) -> None:
+        self._repository = repository
+
+    def create_alias(
+        self,
+        *,
+        canonical_full_name: str,
+        alias_full_name: str,
+        created_by: str | None = None,
+        notes: str | None = None,
+    ) -> AttendanceIdentityAlias:
+        canonical = " ".join((canonical_full_name or "").strip().split())
+        alias = " ".join((alias_full_name or "").strip().split())
+        if not canonical:
+            raise ValueError("canonical_full_name is required")
+        if not alias:
+            raise ValueError("alias_full_name is required")
+        if canonical.casefold() == alias.casefold():
+            raise ValueError("canonical_full_name and alias_full_name must differ")
+        return self._repository.create_alias(
+            canonical_full_name=canonical,
+            alias_full_name=alias,
+            created_by=created_by,
+            notes=notes,
+        )

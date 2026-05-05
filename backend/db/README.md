@@ -24,6 +24,7 @@ Primo schema previsto:
 - `attendance_lessons`
 - `attendance_lesson_participants`
 - `attendance_review_actions`
+- `attendance_identity_aliases`
 
 Regola architetturale:
 - i contratti repository stanno fuori da `backend/db`

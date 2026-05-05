@@ -4,6 +4,7 @@ import unittest
 from backend.attendance_normalization.aggregator import ZoomMeeting, ZoomSegment
 from backend.attendance_normalization.meeting_selection import (
     filter_meetings_by_courses,
+    is_excluded_course_name,
     is_uppercase_course_name,
     preselected_course_names,
 )
@@ -42,6 +43,12 @@ class UppercaseCourseRuleTests(unittest.TestCase):
     def test_rejects_when_letters_are_missing(self):
         self.assertFalse(is_uppercase_course_name("2026 - 01"))
 
+    def test_excludes_esame_and_team_meeting_patterns(self):
+        self.assertTrue(is_excluded_course_name("ESAME"))
+        self.assertTrue(is_excluded_course_name("TEAM MEETING"))
+        self.assertTrue(is_excluded_course_name("TEAM   MEETING DOCENTI"))
+        self.assertFalse(is_excluded_course_name("PRACTITIONER"))
+
 
 class MeetingSelectionTests(unittest.TestCase):
     def test_preselects_unique_uppercase_courses_in_sorted_order(self):
@@ -50,6 +57,8 @@ class MeetingSelectionTests(unittest.TestCase):
             meeting("Pnl Master", "m-2"),
             meeting("PNL BASE", "m-3"),
             meeting("PNL MASTER", "m-4"),
+            meeting("ESAME", "m-5"),
+            meeting("TEAM MEETING", "m-6"),
         ]
 
         selected = preselected_course_names(meetings)
@@ -61,6 +70,7 @@ class MeetingSelectionTests(unittest.TestCase):
             meeting("PNL MASTER", "m-1"),
             meeting("Pnl Master", "m-2"),
             meeting("PNL BASE", "m-3"),
+            meeting("TEAM MEETING", "m-4"),
         ]
 
         filtered = filter_meetings_by_courses(meetings, {"PNL BASE", "PNL MASTER"})

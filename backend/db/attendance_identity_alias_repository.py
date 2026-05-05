@@ -1,0 +1,121 @@
+"""PostgreSQL implementation for attendance identity aliases."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from backend.attendance_app.models import AttendanceIdentityAlias
+
+from .connection import get_db_connection
+
+
+class PostgresAttendanceIdentityAliasRepository:
+    """Persist and read canonical identity aliases for future imports."""
+
+    def list_active_aliases(self) -> list[AttendanceIdentityAlias]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        canonical_full_name,
+                        alias_full_name,
+                        created_by,
+                        created_at,
+                        is_active,
+                        notes
+                    FROM attendance_identity_aliases
+                    WHERE is_active = TRUE
+                    ORDER BY alias_full_name ASC, id ASC
+                    """
+                )
+                rows = cursor.fetchall()
+
+        return [
+            AttendanceIdentityAlias(
+                id=int(row[0]),
+                canonical_full_name=str(row[1]),
+                alias_full_name=str(row[2]),
+                created_by=row[3],
+                created_at=_ensure_datetime(row[4]),
+                is_active=bool(row[5]),
+                notes=row[6],
+            )
+            for row in rows
+        ]
+
+    def create_alias(
+        self,
+        *,
+        canonical_full_name: str,
+        alias_full_name: str,
+        created_by: str | None = None,
+        notes: str | None = None,
+    ) -> AttendanceIdentityAlias:
+        normalized_alias = _normalize_key(alias_full_name)
+        normalized_canonical = _normalize_key(canonical_full_name)
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO attendance_identity_aliases (
+                        canonical_full_name,
+                        alias_full_name,
+                        normalized_canonical_key,
+                        normalized_alias_key,
+                        created_by,
+                        notes,
+                        is_active
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+                    ON CONFLICT (normalized_alias_key)
+                    DO UPDATE SET
+                        canonical_full_name = EXCLUDED.canonical_full_name,
+                        normalized_canonical_key = EXCLUDED.normalized_canonical_key,
+                        created_by = EXCLUDED.created_by,
+                        notes = EXCLUDED.notes,
+                        is_active = TRUE
+                    RETURNING
+                        id,
+                        canonical_full_name,
+                        alias_full_name,
+                        created_by,
+                        created_at,
+                        is_active,
+                        notes
+                    """,
+                    (
+                        canonical_full_name,
+                        alias_full_name,
+                        normalized_canonical,
+                        normalized_alias,
+                        created_by,
+                        notes,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+
+        if row is None:
+            raise RuntimeError("Failed to create attendance identity alias.")
+
+        return AttendanceIdentityAlias(
+            id=int(row[0]),
+            canonical_full_name=str(row[1]),
+            alias_full_name=str(row[2]),
+            created_by=row[3],
+            created_at=_ensure_datetime(row[4]),
+            is_active=bool(row[5]),
+            notes=row[6],
+        )
+
+
+def _normalize_key(value: str) -> str:
+    return " ".join((value or "").strip().casefold().split())
+
+
+def _ensure_datetime(value: object) -> datetime:
+    if not isinstance(value, datetime):
+        raise RuntimeError("Expected datetime from PostgreSQL.")
+    return value

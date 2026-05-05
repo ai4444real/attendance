@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from .models import (
+    AttendanceIdentityAlias,
     DraftBatchDetail,
     DraftLessonView,
     DraftReviewActionView,
@@ -22,8 +23,25 @@ class AttendanceDraftImportRepository(Protocol):
         self,
         batch_data: ImportBatchCreate,
         lessons: list[LessonDraft],
-    ) -> PersistedDraftImport:
+        ) -> PersistedDraftImport:
         """Persist a full normalized draft import and return a summary."""
+
+
+class AttendanceIdentityAliasRepository(Protocol):
+    """Read and write participant identity aliases used during future imports."""
+
+    def list_active_aliases(self) -> list[AttendanceIdentityAlias]:
+        """Return active aliases ordered for deterministic application."""
+
+    def create_alias(
+        self,
+        *,
+        canonical_full_name: str,
+        alias_full_name: str,
+        created_by: str | None = None,
+        notes: str | None = None,
+    ) -> AttendanceIdentityAlias:
+        """Create or update one active alias rule."""
 
 
 class AttendanceDraftQueryRepository(Protocol):

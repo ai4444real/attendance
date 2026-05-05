@@ -11,6 +11,10 @@ Query utili gia' pronte:
 - `queries/attendance_admin_queries.sql`: controlli rapidi su batch, lezioni,
   partecipanti e review actions del dominio attendance
 
+Migrazioni schema attendance attuali:
+- `schema/001_initial_schema.sql`
+- `schema/002_attendance_identity_aliases.sql`
+
 Il database target è unico: `rebekko`.
 I domini applicativi convivono nello stesso database con naming esplicito, ad
 esempio:

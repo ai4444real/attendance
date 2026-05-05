@@ -77,6 +77,17 @@ class PersistedDraftImport:
 
 
 @dataclass(frozen=True)
+class AttendanceIdentityAlias:
+    id: int
+    canonical_full_name: str
+    alias_full_name: str
+    created_by: Optional[str]
+    created_at: datetime
+    is_active: bool
+    notes: Optional[str]
+
+
+@dataclass(frozen=True)
 class ImportBatchSummary:
     id: int
     source_system: str

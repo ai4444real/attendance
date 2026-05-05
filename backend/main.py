@@ -19,11 +19,13 @@ from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_app.models import ImportBatchCreate
 from backend.attendance_app.services import (
     AttendanceDraftRecalculationService,
+    AttendanceIdentityAliasService,
     AttendanceImportService,
     AttendanceLessonStateService,
     AttendanceReviewActionService,
 )
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
+from backend.db.attendance_identity_alias_repository import PostgresAttendanceIdentityAliasRepository
 from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
@@ -375,7 +377,10 @@ async def attendance_import_draft(file: UploadFile = File(...)):
             temp_path = temp_file.name
 
         result = normalize_zoom_csv_file(temp_path)
-        service = AttendanceImportService(PostgresAttendanceDraftImportRepository())
+        service = AttendanceImportService(
+            PostgresAttendanceDraftImportRepository(),
+            PostgresAttendanceIdentityAliasRepository(),
+        )
         persisted = service.persist_normalization_result(
             ImportBatchCreate(
                 source_system="zoom",
@@ -601,6 +606,38 @@ async def attendance_set_lesson_status(lesson_id: int, payload: dict):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"lesson_id": lesson_id, "status": status}
+
+
+@app.post("/api/attendance/identity-aliases")
+async def attendance_create_identity_alias(payload: dict):
+    canonical_full_name = str(payload.get("canonical_full_name") or "").strip()
+    alias_full_name = str(payload.get("alias_full_name") or "").strip()
+    created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
+    notes = payload.get("notes")
+    service = AttendanceIdentityAliasService(PostgresAttendanceIdentityAliasRepository())
+    try:
+        alias = service.create_alias(
+            canonical_full_name=canonical_full_name,
+            alias_full_name=alias_full_name,
+            created_by=created_by,
+            notes=notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Creazione alias fallita: {exc}") from exc
+
+    return {
+        "alias": {
+            "id": alias.id,
+            "canonical_full_name": alias.canonical_full_name,
+            "alias_full_name": alias.alias_full_name,
+            "created_by": alias.created_by,
+            "created_at": alias.created_at.isoformat(),
+            "is_active": alias.is_active,
+            "notes": alias.notes,
+        }
+    }
 
 
 @app.get("/health")

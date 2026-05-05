@@ -101,6 +101,12 @@
         .action-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
         .action-button { border: 1px solid var(--brand-pnl-blue); background: white; color: var(--brand-pnl-blue); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
         .action-button:hover { background: var(--brand-pnl-blue-soft); }
+        .alias-merge-box { margin-top: 14px; padding: 12px; border: 1px solid var(--brand-border); border-radius: 12px; background: white; }
+        .alias-merge-title { font-size: 13px; font-weight: 800; color: var(--brand-ink); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+        .alias-merge-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; }
+        .alias-merge-grid select { width: 100%; border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+        .alias-merge-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .alias-merge-note { font-size: 12px; color: var(--brand-muted); }
         .review-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
         .review-action-item { border: 1px solid var(--brand-border); border-radius: 12px; padding: 12px; background: white; }
         .review-action-item.active { border-color: var(--brand-pnl-blue); background: #f7fbff; box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.08); }
@@ -137,6 +143,7 @@
             .workspace-grid { grid-template-columns: 1fr; }
             .workspace-column.sticky { position: static; }
             .lesson-list-wrap { max-height: none; overflow: visible; padding-right: 0; }
+            .alias-merge-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>

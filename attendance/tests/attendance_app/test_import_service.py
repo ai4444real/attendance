@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from backend.attendance_app.models import (
+    AttendanceIdentityAlias,
     DraftLessonParticipantView,
     DraftLessonView,
     DraftReviewActionView,
@@ -14,6 +15,7 @@ from backend.attendance_app.models import (
 )
 from backend.attendance_app.services import (
     AttendanceDraftRecalculationService,
+    AttendanceIdentityAliasService,
     AttendanceImportService,
     AttendanceLessonStateService,
     AttendanceReviewActionService,
@@ -100,7 +102,8 @@ class FakeAttendanceDraftMutationRepository:
 class AttendanceImportServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repository = FakeAttendanceDraftImportRepository()
-        self.service = AttendanceImportService(self.repository)
+        self.alias_repository = FakeAttendanceIdentityAliasRepository()
+        self.service = AttendanceImportService(self.repository, self.alias_repository)
         self.batch = ImportBatchCreate(
             source_system="zoom",
             source_file_name="report-zoom-2026-05.csv",
@@ -177,6 +180,37 @@ class AttendanceImportServiceTest(unittest.TestCase):
         self.assertEqual("123", lesson.source_meeting_id)
         self.assertEqual(1, len(lesson.participants))
         self.assertEqual("Mario Rossi", lesson.participants[0].canonical_full_name)
+
+    def test_persist_normalization_result_applies_identity_aliases_from_repository(self) -> None:
+        self.alias_repository.aliases = [
+            AttendanceIdentityAlias(
+                id=1,
+                canonical_full_name="Mario Rossi",
+                alias_full_name="Mario R. Rossi",
+                created_by="test",
+                created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            )
+        ]
+        aliased = replace(
+            self.result,
+            records=[
+                replace(
+                    self.result.records[0],
+                    first_name="Mario",
+                    last_name="R. Rossi",
+                    email="",
+                )
+            ],
+        )
+
+        persisted = self.service.persist_normalization_result(self.batch, aliased)
+
+        self.assertEqual(1, persisted.participants_created)
+        participant = self.repository.last_lessons[0].participants[0]
+        self.assertEqual("Mario Rossi", participant.canonical_full_name)
+        self.assertEqual("mario rossi", participant.participant_key)
 
     def test_persist_normalization_result_rejects_blank_source_system(self) -> None:
         with self.assertRaises(ValueError):
@@ -384,6 +418,53 @@ class AttendanceLessonStateServiceTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             service.set_lesson_status(12, status="processing")
+
+
+class FakeAttendanceIdentityAliasRepository:
+    def __init__(self) -> None:
+        self.aliases: list[AttendanceIdentityAlias] = []
+        self.last_created = None
+
+    def list_active_aliases(self) -> list[AttendanceIdentityAlias]:
+        return list(self.aliases)
+
+    def create_alias(self, **kwargs) -> AttendanceIdentityAlias:
+        self.last_created = kwargs
+        return AttendanceIdentityAlias(
+            id=10,
+            canonical_full_name=kwargs["canonical_full_name"],
+            alias_full_name=kwargs["alias_full_name"],
+            created_by=kwargs.get("created_by"),
+            created_at=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
+            is_active=True,
+            notes=kwargs.get("notes"),
+        )
+
+
+class AttendanceIdentityAliasServiceTest(unittest.TestCase):
+    def test_create_alias_trims_and_delegates(self) -> None:
+        repository = FakeAttendanceIdentityAliasRepository()
+        service = AttendanceIdentityAliasService(repository)
+
+        alias = service.create_alias(
+            canonical_full_name=" Mario Rossi ",
+            alias_full_name=" Mario R. Rossi ",
+            created_by="drafts-ui",
+        )
+
+        self.assertEqual("Mario Rossi", alias.canonical_full_name)
+        self.assertEqual("Mario R. Rossi", alias.alias_full_name)
+        self.assertEqual("Mario Rossi", repository.last_created["canonical_full_name"])
+
+    def test_create_alias_rejects_same_identity(self) -> None:
+        repository = FakeAttendanceIdentityAliasRepository()
+        service = AttendanceIdentityAliasService(repository)
+
+        with self.assertRaises(ValueError):
+            service.create_alias(
+                canonical_full_name="Mario Rossi",
+                alias_full_name="mario rossi",
+            )
 
 
 if __name__ == "__main__":
