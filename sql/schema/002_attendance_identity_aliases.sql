@@ -21,4 +21,10 @@ CREATE INDEX attendance_identity_aliases_canonical_idx
 CREATE INDEX attendance_identity_aliases_active_idx
     ON attendance_identity_aliases (is_active, normalized_alias_key);
 
+ALTER TABLE attendance_identity_aliases OWNER TO rebekko_app;
+ALTER SEQUENCE attendance_identity_aliases_id_seq OWNER TO rebekko_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE attendance_identity_aliases TO rebekko_app;
+GRANT USAGE, SELECT ON SEQUENCE attendance_identity_aliases_id_seq TO rebekko_app;
+
 COMMIT;
