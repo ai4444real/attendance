@@ -169,7 +169,9 @@ class PostgresAttendanceDraftQueryRepository:
                     """
                     SELECT
                         p.id,
+                        p.participant_key,
                         p.canonical_full_name,
+                        p.raw_full_name,
                         p.email,
                         p.segment_count,
                         p.minutes_first_half,
@@ -192,19 +194,21 @@ class PostgresAttendanceDraftQueryRepository:
                 participants = [
                     DraftLessonParticipantView(
                         id=int(row[0]),
-                        canonical_full_name=str(row[1]),
-                        email=row[2],
-                        segment_count=int(row[3]),
-                        minutes_first_half=float(row[4]),
-                        minutes_second_half=float(row[5]),
-                        duration_first_half=float(row[6]),
-                        duration_second_half=float(row[7]),
-                        total_minutes=float(row[8]),
-                        calculated_presence_status=str(row[9]),
-                        manual_override_presence_status=row[10],
-                        final_presence_status=str(row[11]),
-                        flags=list(row[12] or []),
-                        metadata=dict(row[13] or {}),
+                        participant_key=str(row[1]),
+                        canonical_full_name=str(row[2]),
+                        raw_full_name=row[3],
+                        email=row[4],
+                        segment_count=int(row[5]),
+                        minutes_first_half=float(row[6]),
+                        minutes_second_half=float(row[7]),
+                        duration_first_half=float(row[8]),
+                        duration_second_half=float(row[9]),
+                        total_minutes=float(row[10]),
+                        calculated_presence_status=str(row[11]),
+                        manual_override_presence_status=row[12],
+                        final_presence_status=str(row[13]),
+                        flags=list(row[14] or []),
+                        metadata=dict(row[15] or {}),
                     )
                     for row in participant_rows
                 ]

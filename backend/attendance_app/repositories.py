@@ -99,3 +99,12 @@ class AttendanceDraftMutationRepository(Protocol):
 
     def set_lesson_status(self, lesson_id: int, *, status: str) -> None:
         """Promote or reopen one lesson draft state."""
+
+    def replace_lesson_participants_after_identity_rebuild(
+        self,
+        lesson_id: int,
+        *,
+        diagnostics: dict,
+        participants: list[dict],
+    ) -> None:
+        """Replace one lesson participant set after identity merge and remap review actions."""

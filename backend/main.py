@@ -19,6 +19,7 @@ from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_app.models import ImportBatchCreate
 from backend.attendance_app.services import (
     AttendanceDraftRecalculationService,
+    AttendanceLessonIdentityRebuildService,
     AttendanceIdentityAliasService,
     AttendanceImportService,
     AttendanceLessonStateService,
@@ -646,6 +647,7 @@ async def attendance_set_lesson_status(lesson_id: int, payload: dict):
 @app.post("/api/attendance/identity-aliases")
 async def attendance_create_identity_alias(payload: dict):
     _bootstrap_identity_aliases_if_needed()
+    lesson_id = payload.get("lesson_id")
     canonical_full_name = str(payload.get("canonical_full_name") or "").strip()
     canonical_email = str(payload.get("canonical_email") or "").strip() or None
     alias_full_name = str(payload.get("alias_full_name") or "").strip()
@@ -662,6 +664,12 @@ async def attendance_create_identity_alias(payload: dict):
             created_by=created_by,
             notes=notes,
         )
+        if lesson_id is not None:
+            AttendanceLessonIdentityRebuildService(
+                PostgresAttendanceDraftQueryRepository(),
+                PostgresAttendanceDraftMutationRepository(),
+                PostgresAttendanceIdentityAliasRepository(),
+            ).rebuild_lesson_with_current_aliases(int(lesson_id))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -679,6 +687,8 @@ async def attendance_create_identity_alias(payload: dict):
             "is_active": alias.is_active,
             "notes": alias.notes,
         }
+        ,
+        "lesson_id": int(lesson_id) if lesson_id is not None else None,
     }
 
 

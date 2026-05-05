@@ -103,7 +103,9 @@ class ImportBatchSummary:
 @dataclass(frozen=True)
 class DraftLessonParticipantView:
     id: int
+    participant_key: str
     canonical_full_name: str
+    raw_full_name: Optional[str]
     email: Optional[str]
     segment_count: int
     minutes_first_half: float

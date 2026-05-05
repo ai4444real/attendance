@@ -53,7 +53,7 @@ class AttendanceImportService:
         return self._repository.save_draft_import(batch_data, lessons)
 
     def _build_lesson_drafts(self, normalization_result: NormalizationResult) -> list[LessonDraft]:
-        name_alias_map, email_alias_map = self._build_identity_alias_maps()
+        name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
         records_by_key = defaultdict(list)
         meeting_by_key = {}
 
@@ -99,6 +99,13 @@ class AttendanceImportService:
                         "last_name": last_name,
                         "segments": list(record.segments),
                         "canonicalized_by_identity_alias": canonical_full_name != full_name,
+                        "identity_sources": [
+                            {
+                                "raw_full_name": full_name,
+                                "email": record.email or "",
+                                "segments": list(record.segments),
+                            }
+                        ],
                     },
                 )
                 existing = participants_by_key.get(participant_key)
@@ -159,22 +166,6 @@ class AttendanceImportService:
 
         return sorted(lesson_drafts, key=lambda lesson: (lesson.lesson_date, lesson.course_name, lesson.source_meeting_id))
 
-    def _build_identity_alias_maps(self) -> tuple[dict[str, AttendanceIdentityAlias], dict[str, AttendanceIdentityAlias]]:
-        if self._identity_alias_repository is None:
-            return {}, {}
-        aliases = self._identity_alias_repository.list_active_aliases()
-        name_alias_map = {
-            self._normalize_identity_key(alias.alias_value): alias
-            for alias in aliases
-            if alias.alias_type == "full_name"
-        }
-        email_alias_map = {
-            (alias.alias_value or "").strip().casefold(): alias
-            for alias in aliases
-            if alias.alias_type == "email"
-        }
-        return name_alias_map, email_alias_map
-
     def _apply_identity_alias(
         self,
         full_name: str,
@@ -182,26 +173,10 @@ class AttendanceImportService:
         name_alias_map: dict[str, AttendanceIdentityAlias],
         email_alias_map: dict[str, AttendanceIdentityAlias],
     ) -> tuple[str, str | None]:
-        normalized_email = (email or "").strip().casefold()
-        if normalized_email and normalized_email in email_alias_map:
-            alias = email_alias_map[normalized_email]
-            return alias.canonical_full_name, alias.canonical_email or email
-        normalized_name = self._normalize_identity_key(full_name)
-        if normalized_name in name_alias_map:
-            alias = name_alias_map[normalized_name]
-            return alias.canonical_full_name, alias.canonical_email or email
-        return full_name, email
-
-    def _normalize_identity_key(self, value: str) -> str:
-        return " ".join((value or "").strip().casefold().split())
+        return _apply_identity_alias_maps(full_name, email, name_alias_map, email_alias_map)
 
     def _split_full_name(self, full_name: str) -> tuple[str, str]:
-        parts = [part for part in (full_name or "").split(" ") if part]
-        if not parts:
-            return "", ""
-        if len(parts) == 1:
-            return parts[0], ""
-        return parts[0], " ".join(parts[1:])
+        return _split_full_name(full_name)
 
     def _merge_participant_drafts(
         self,
@@ -241,6 +216,16 @@ class AttendanceImportService:
         merged_metadata["segments"] = left_segments + right_segments
         merged_metadata["first_name"] = merged_metadata.get("first_name") or left.canonical_full_name.split(" ")[0]
         merged_metadata["last_name"] = merged_metadata.get("last_name") or " ".join(left.canonical_full_name.split(" ")[1:])
+        merged_metadata["identity_sources"] = _merge_identity_sources(
+            left.metadata.get("identity_sources"),
+            right.metadata.get("identity_sources"),
+            fallback_left_name=left.raw_full_name or left.canonical_full_name,
+            fallback_left_email=left.email,
+            fallback_left_segments=left_segments,
+            fallback_right_name=right.raw_full_name or right.canonical_full_name,
+            fallback_right_email=right.email,
+            fallback_right_segments=right_segments,
+        )
 
         return LessonParticipantDraft(
             participant_key=left.participant_key,
@@ -661,3 +646,347 @@ class AttendanceIdentityAliasService:
                 )
                 created += 1
         return created
+
+
+class AttendanceLessonIdentityRebuildService:
+    """Rebuild one draft lesson participant set using the current identity alias rules."""
+
+    def __init__(
+        self,
+        query_repository: AttendanceDraftQueryRepository,
+        mutation_repository: AttendanceDraftMutationRepository,
+        identity_alias_repository: AttendanceIdentityAliasRepository,
+    ) -> None:
+        self._query_repository = query_repository
+        self._mutation_repository = mutation_repository
+        self._identity_alias_repository = identity_alias_repository
+
+    def rebuild_lesson_with_current_aliases(self, lesson_id: int) -> DraftLessonView:
+        lesson = self._query_repository.get_lesson_detail(lesson_id)
+        if not lesson.participants:
+            return lesson
+        if not all(isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments") for participant in lesson.participants):
+            raise ValueError("Questa lezione non ha segmenti grezzi sufficienti per il re-merge identità.")
+
+        name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
+        effective_start = datetime.fromisoformat(lesson.effective_start_at)
+        effective_end = datetime.fromisoformat(lesson.effective_end_at)
+        break_point = datetime.fromisoformat(lesson.break_point_at) if lesson.break_point_at else None
+        break_point = self._resolve_break_point(effective_start, effective_end, break_point)
+
+        meeting = self._build_zoom_meeting(lesson, name_alias_map, email_alias_map)
+        aggregated = aggregate_meeting(
+            meeting=meeting,
+            effective_start=effective_start,
+            break_point=break_point,
+            effective_end=effective_end,
+        )
+        records_by_key = {
+            ((record.email or "").strip().lower() or record.full_name.lower()): record
+            for record in aggregated
+        }
+        action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
+
+        old_to_target_key: dict[int, str] = {}
+        grouped_participants: dict[str, list] = defaultdict(list)
+        for participant in lesson.participants:
+            rebuilt_key = self._participant_target_key(participant, name_alias_map, email_alias_map)
+            old_to_target_key[participant.id] = rebuilt_key
+            grouped_participants[rebuilt_key].append(participant)
+
+        remapped_overrides = self._build_manual_override_map(action_sequence, lesson.participants, old_to_target_key)
+
+        rebuilt_participants: list[dict] = []
+        for target_key, participants in grouped_participants.items():
+            record = records_by_key.get(target_key)
+            if record is None:
+                continue
+            survivor = min(participants, key=lambda participant: participant.id)
+            obsolete_ids = [participant.id for participant in participants if participant.id != survivor.id]
+            canonical_full_name = record.full_name
+            raw_full_name = self._pick_raw_full_name(participants)
+            canonical_email = (record.email or "").strip() or None
+            calculated = determine_presence_status(
+                minutes_first_half=record.minutes_first_half,
+                minutes_second_half=record.minutes_second_half,
+                duration_first_half=record.duration_first_half,
+                duration_second_half=record.duration_second_half,
+                threshold=lesson.threshold_ratio,
+            )
+            manual_override_presence_status = remapped_overrides.get(survivor.id)
+            final = manual_override_presence_status or calculated
+            identity_sources = self._merge_identity_sources_from_participants(participants)
+            first_name, last_name = _split_full_name(canonical_full_name)
+            metadata = dict(survivor.metadata or {})
+            metadata["segments"] = [(start.isoformat(), end.isoformat()) for start, end in record.segments]
+            metadata["identity_sources"] = identity_sources
+            metadata["first_name"] = first_name
+            metadata["last_name"] = last_name
+            metadata["canonicalized_by_identity_alias"] = canonical_full_name != (raw_full_name or canonical_full_name)
+            metadata["rebuilt_from_identity_aliases"] = True
+            rebuilt_participants.append(
+                {
+                    "survivor_id": survivor.id,
+                    "obsolete_ids": obsolete_ids,
+                    "participant_key": target_key,
+                    "canonical_full_name": canonical_full_name,
+                    "raw_full_name": raw_full_name,
+                    "email": canonical_email,
+                    "segment_count": record.segment_count,
+                    "minutes_first_half": record.minutes_first_half,
+                    "minutes_second_half": record.minutes_second_half,
+                    "duration_first_half": record.duration_first_half,
+                    "duration_second_half": record.duration_second_half,
+                    "total_minutes": record.total_minutes,
+                    "calculated_presence_status": calculated,
+                    "manual_override_presence_status": manual_override_presence_status,
+                    "final_presence_status": final,
+                    "flags": sorted({flag for participant in participants for flag in participant.flags}),
+                    "metadata": metadata,
+                }
+            )
+
+        diagnostics = dict(lesson.diagnostics or {})
+        diagnostics["remerged_from_identity_aliases"] = True
+        diagnostics["remerged_at"] = datetime.now().isoformat()
+        self._mutation_repository.replace_lesson_participants_after_identity_rebuild(
+            lesson.id,
+            diagnostics=diagnostics,
+            participants=rebuilt_participants,
+        )
+        return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _build_zoom_meeting(
+        self,
+        lesson: DraftLessonView,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> ZoomMeeting:
+        lesson_start = datetime.fromisoformat(lesson.meeting_start_at)
+        lesson_end = datetime.fromisoformat(lesson.meeting_end_at)
+        target_tz = lesson_start.tzinfo
+        segments: list[ZoomSegment] = []
+        for participant in lesson.participants:
+            for source in _get_identity_sources(participant):
+                source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+                source_email = str(source.get("email") or participant.email or "").strip()
+                canonical_full_name, canonical_email = _apply_identity_alias_maps(
+                    source_name,
+                    source_email or None,
+                    name_alias_map,
+                    email_alias_map,
+                )
+                first_name, last_name = _split_full_name(canonical_full_name)
+                for segment in list(source.get("segments") or []):
+                    if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                        continue
+                    segments.append(
+                        ZoomSegment(
+                            first_name=first_name,
+                            last_name=last_name,
+                            email=canonical_email or source_email,
+                            full_name=canonical_full_name,
+                            join_time=self._coerce_segment_datetime(segment[0], target_tz),
+                            leave_time=self._coerce_segment_datetime(segment[1], target_tz),
+                        )
+                    )
+        return ZoomMeeting(
+            course=lesson.course_name,
+            meeting_id=lesson.source_meeting_id,
+            start_time=lesson_start,
+            end_time=lesson_end,
+            duration_minutes=(lesson_end - lesson_start).total_seconds() / 60,
+            segments=segments,
+        )
+
+    def _participant_target_key(
+        self,
+        participant,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> str:
+        primary_source = _get_identity_sources(participant)[0]
+        source_name = str(primary_source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+        source_email = str(primary_source.get("email") or participant.email or "").strip()
+        canonical_full_name, canonical_email = _apply_identity_alias_maps(
+            source_name,
+            source_email or None,
+            name_alias_map,
+            email_alias_map,
+        )
+        return (canonical_email or "").strip().lower() or canonical_full_name.lower()
+
+    def _build_manual_override_map(self, action_sequence, participants, old_to_target_key: dict[int, str]) -> dict[int, str | None]:
+        target_to_survivor = {
+            old_to_target_key[participant.id]: min(
+                participant_group.id
+                for participant_group in participants
+                if old_to_target_key[participant_group.id] == old_to_target_key[participant.id]
+            )
+            for participant in participants
+        }
+        overrides = {}
+        for action in action_sequence:
+            if action.participant_id is None:
+                continue
+            target_key = old_to_target_key.get(action.participant_id)
+            if target_key is None:
+                continue
+            survivor_id = target_to_survivor[target_key]
+            if action.action_type == "set_manual_presence_status":
+                overrides[survivor_id] = str((action.payload or {}).get("presence_status"))
+            elif action.action_type == "clear_manual_presence_status":
+                overrides[survivor_id] = None
+        return overrides
+
+    def _pick_raw_full_name(self, participants) -> str:
+        candidates = [((participant.raw_full_name or "").strip()) for participant in participants]
+        candidates = [candidate for candidate in candidates if candidate]
+        if not candidates:
+            return participants[0].canonical_full_name
+        return max(candidates, key=len)
+
+    def _merge_identity_sources_from_participants(self, participants) -> list[dict]:
+        merged_sources: list[dict] = []
+        for participant in participants:
+            for source in _get_identity_sources(participant):
+                raw_full_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+                email = str(source.get("email") or participant.email or "").strip()
+                segments = list(source.get("segments") or [])
+                merged_sources.append(
+                    {
+                        "raw_full_name": raw_full_name,
+                        "email": email,
+                        "segments": segments,
+                    }
+                )
+        return _dedupe_identity_sources(merged_sources)
+
+    def _resolve_break_point(
+        self,
+        effective_start: datetime,
+        effective_end: datetime,
+        break_point: datetime | None,
+    ) -> datetime:
+        candidate = break_point or (effective_start + (effective_end - effective_start) / 2)
+        min_break = effective_start + timedelta(minutes=5)
+        max_break = effective_end - timedelta(minutes=5)
+        if max_break <= min_break:
+            return effective_start + (effective_end - effective_start) / 2
+        if candidate < min_break:
+            return min_break
+        if candidate > max_break:
+            return max_break
+        return candidate
+
+    def _coerce_segment_datetime(self, value: str, target_tz) -> datetime:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None and target_tz is not None:
+            return parsed.replace(tzinfo=target_tz)
+        if parsed.tzinfo is not None and target_tz is None:
+            return parsed.replace(tzinfo=None)
+        return parsed
+
+
+def _load_identity_alias_maps(
+    identity_alias_repository: AttendanceIdentityAliasRepository | None,
+) -> tuple[dict[str, AttendanceIdentityAlias], dict[str, AttendanceIdentityAlias]]:
+    if identity_alias_repository is None:
+        return {}, {}
+    aliases = identity_alias_repository.list_active_aliases()
+    name_alias_map = {
+        _normalize_identity_key(alias.alias_value): alias
+        for alias in aliases
+        if alias.alias_type == "full_name"
+    }
+    email_alias_map = {
+        (alias.alias_value or "").strip().casefold(): alias
+        for alias in aliases
+        if alias.alias_type == "email"
+    }
+    return name_alias_map, email_alias_map
+
+
+def _apply_identity_alias_maps(
+    full_name: str,
+    email: str | None,
+    name_alias_map: dict[str, AttendanceIdentityAlias],
+    email_alias_map: dict[str, AttendanceIdentityAlias],
+) -> tuple[str, str | None]:
+    normalized_email = (email or "").strip().casefold()
+    if normalized_email and normalized_email in email_alias_map:
+        alias = email_alias_map[normalized_email]
+        return alias.canonical_full_name, alias.canonical_email or email
+    normalized_name = _normalize_identity_key(full_name)
+    if normalized_name in name_alias_map:
+        alias = name_alias_map[normalized_name]
+        return alias.canonical_full_name, alias.canonical_email or email
+    return full_name, email
+
+
+def _normalize_identity_key(value: str) -> str:
+    return " ".join((value or "").strip().casefold().split())
+
+
+def _split_full_name(full_name: str) -> tuple[str, str]:
+    parts = [part for part in (full_name or "").split(" ") if part]
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], " ".join(parts[1:])
+
+
+def _merge_identity_sources(
+    left_sources,
+    right_sources,
+    *,
+    fallback_left_name: str,
+    fallback_left_email: str | None,
+    fallback_left_segments,
+    fallback_right_name: str,
+    fallback_right_email: str | None,
+    fallback_right_segments,
+) -> list[dict]:
+    merged = []
+    merged.extend(left_sources or [{
+        "raw_full_name": fallback_left_name,
+        "email": fallback_left_email or "",
+        "segments": fallback_left_segments,
+    }])
+    merged.extend(right_sources or [{
+        "raw_full_name": fallback_right_name,
+        "email": fallback_right_email or "",
+        "segments": fallback_right_segments,
+    }])
+    return _dedupe_identity_sources(merged)
+
+
+def _get_identity_sources(participant) -> list[dict]:
+    sources = participant.metadata.get("identity_sources")
+    if isinstance(sources, list) and sources:
+        return [dict(source) for source in sources if isinstance(source, dict)]
+    raw_full_name = (participant.raw_full_name or participant.canonical_full_name).strip()
+    return [{
+        "raw_full_name": raw_full_name,
+        "email": participant.email or "",
+        "segments": list(participant.metadata.get("segments") or []),
+    }]
+
+
+def _dedupe_identity_sources(sources: list[dict]) -> list[dict]:
+    merged: dict[tuple[str, str], dict] = {}
+    for source in sources:
+        raw_full_name = str(source.get("raw_full_name") or "").strip()
+        email = str(source.get("email") or "").strip()
+        key = (raw_full_name.casefold(), email.casefold())
+        entry = merged.setdefault(
+            key,
+            {
+                "raw_full_name": raw_full_name,
+                "email": email,
+                "segments": [],
+            },
+        )
+        entry["segments"].extend(list(source.get("segments") or []))
+    return list(merged.values())

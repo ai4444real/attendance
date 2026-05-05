@@ -325,7 +325,7 @@ const DraftImportsApp = {
                                 </div>
                                 <div class="alias-merge-actions">
                                     <button type="button" class="action-button" data-action="merge-alias" data-lesson-id="${lesson.id}">Unisci</button>
-                                    <span class="alias-merge-note">Vale dai prossimi import. Il batch già importato non viene rimerciato ora.</span>
+                                    <span class="alias-merge-note">Salva la regola identità nel database e ricompone subito questa lezione draft.</span>
                                 </div>
                             </div>
                             <div class="review-actions">
@@ -452,15 +452,17 @@ const DraftImportsApp = {
                     canonical_email: canonicalParticipant.email,
                     alias_full_name: aliasParticipant.canonical_full_name,
                     alias_email: aliasParticipant.email,
+                    lesson_id: lesson.id,
                     created_by: 'drafts-ui',
                     notes: `Creato dalla lesson ${lesson.id}`,
                 }),
             });
             const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile registrare l\'alias.');
-            window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". Valido dai prossimi import.`);
+            window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". La lezione viene ricostruita subito.`);
             canonicalSelect.value = '';
             aliasSelect.value = '';
+            await this._reloadCurrentBatch(lesson.id);
         } catch (error) {
             console.error(error);
             window.alert(error.message);

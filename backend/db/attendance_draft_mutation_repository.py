@@ -118,6 +118,107 @@ class PostgresAttendanceDraftMutationRepository:
                 )
             connection.commit()
 
+    def replace_lesson_participants_after_identity_rebuild(
+        self,
+        lesson_id: int,
+        *,
+        diagnostics: dict,
+        participants: list[dict],
+    ) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                survivor_ids = [participant["survivor_id"] for participant in participants]
+                for survivor_id in survivor_ids:
+                    cursor.execute(
+                        """
+                        UPDATE attendance_lesson_participants
+                        SET participant_key = %s
+                        WHERE id = %s
+                        """,
+                        (f"__tmp__{survivor_id}", survivor_id),
+                    )
+
+                for participant in participants:
+                    survivor_id = participant["survivor_id"]
+                    for obsolete_id in participant.get("obsolete_ids", []):
+                        cursor.execute(
+                            """
+                            UPDATE attendance_review_actions
+                            SET participant_id = %s
+                            WHERE lesson_id = %s AND participant_id = %s
+                            """,
+                            (survivor_id, lesson_id, obsolete_id),
+                        )
+
+                obsolete_ids = [
+                    obsolete_id
+                    for participant in participants
+                    for obsolete_id in participant.get("obsolete_ids", [])
+                ]
+                if obsolete_ids:
+                    cursor.execute(
+                        """
+                        DELETE FROM attendance_lesson_participants
+                        WHERE lesson_id = %s AND id = ANY(%s)
+                        """,
+                        (lesson_id, obsolete_ids),
+                    )
+
+                for participant in participants:
+                    cursor.execute(
+                        """
+                        UPDATE attendance_lesson_participants
+                        SET
+                            participant_key = %s,
+                            canonical_full_name = %s,
+                            raw_full_name = %s,
+                            email = %s,
+                            segment_count = %s,
+                            minutes_first_half = %s,
+                            minutes_second_half = %s,
+                            duration_first_half = %s,
+                            duration_second_half = %s,
+                            total_minutes = %s,
+                            calculated_presence_status = %s,
+                            manual_override_presence_status = %s,
+                            final_presence_status = %s,
+                            flags_json = %s::jsonb,
+                            metadata_json = %s::jsonb,
+                            updated_at = NOW()
+                        WHERE id = %s
+                        """,
+                        (
+                            participant["participant_key"],
+                            participant["canonical_full_name"],
+                            participant["raw_full_name"],
+                            participant["email"],
+                            participant["segment_count"],
+                            participant["minutes_first_half"],
+                            participant["minutes_second_half"],
+                            participant["duration_first_half"],
+                            participant["duration_second_half"],
+                            participant["total_minutes"],
+                            participant["calculated_presence_status"],
+                            participant["manual_override_presence_status"],
+                            participant["final_presence_status"],
+                            json.dumps(participant["flags"]),
+                            json.dumps(participant["metadata"]),
+                            participant["survivor_id"],
+                        ),
+                    )
+
+                cursor.execute(
+                    """
+                    UPDATE attendance_lessons
+                    SET
+                        diagnostics_json = %s::jsonb,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (json.dumps(diagnostics), lesson_id),
+                )
+            connection.commit()
+
 
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
