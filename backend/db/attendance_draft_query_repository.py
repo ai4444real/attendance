@@ -38,6 +38,13 @@ class PostgresAttendanceDraftQueryRepository:
                         ON l.import_batch_id = b.id
                     LEFT JOIN attendance_lesson_participants AS p
                         ON p.lesson_id = l.id
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM attendance_lessons AS lx
+                        WHERE lx.import_batch_id = b.id
+                          AND lx.status = 'draft'
+                          AND lx.is_ignored = FALSE
+                    )
                     GROUP BY b.id
                     ORDER BY b.created_at DESC
                     LIMIT %s

@@ -48,10 +48,12 @@ const DraftImportsApp = {
 
         this._els.batchList.innerHTML = this._batches.map((batch) => `
             <button class="batch-item${this._selectedBatchId === batch.id ? ' active' : ''}" data-batch-id="${batch.id}" type="button">
-                <div class="batch-title">#${batch.id} · ${this._escapeHtml(batch.source_file_name)}</div>
+                <div class="batch-title">
+                    <span class="batch-id">#${batch.id}</span>
+                    <span class="batch-file-name" title="${this._escapeAttr(batch.source_file_name)}">${this._escapeHtml(batch.source_file_name)}</span>
+                </div>
                 <div class="batch-meta">
-                    ${this._escapeHtml(batch.source_system)} · ${this._formatDateTime(batch.created_at)}<br>
-                    ${batch.lessons_count} lezioni · ${batch.participants_count} partecipanti · ${this._escapeHtml(batch.status)}
+                    ${this._escapeHtml(this._formatDateTime(batch.created_at))} · ${batch.lessons_count} lezioni · ${batch.participants_count} partecipanti
                 </div>
             </button>
         `).join('');
@@ -95,9 +97,11 @@ const DraftImportsApp = {
 
     _renderBatchSummary(batch) {
         this._els.batchSummary.innerHTML = `
-            <div class="batch-strip-title">#${this._escapeHtml(batch.id)} · ${this._escapeHtml(batch.source_file_name)}</div>
+            <div class="batch-strip-title">
+                <span class="batch-id">#${this._escapeHtml(batch.id)}</span>
+                <span class="batch-strip-file-name" title="${this._escapeAttr(batch.source_file_name)}">${this._escapeHtml(batch.source_file_name)}</span>
+            </div>
             <div class="batch-strip-meta">
-                <span><strong>${this._escapeHtml(batch.status)}</strong> · ${this._escapeHtml(batch.source_system)}</span>
                 <span><strong>${this._escapeHtml(batch.lessons_count)}</strong> lezioni</span>
                 <span><strong>${this._escapeHtml(batch.participants_count)}</strong> partecipanti</span>
                 <span>${this._escapeHtml(this._formatDateTime(batch.created_at))}</span>
@@ -732,6 +736,10 @@ const DraftImportsApp = {
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#39;');
+    },
+
+    _escapeAttr(value) {
+        return this._escapeHtml(value);
     },
 
     _escapeAttr(value) {
