@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from backend.attendance_app.models import (
     AttendanceIdentityAlias,
+    DraftLessonSourceSegment,
     DraftLessonParticipantView,
     DraftLessonView,
     DraftReviewActionView,
@@ -79,9 +80,13 @@ class FakeAttendanceReviewActionRepository:
 class FakeAttendanceDraftQueryRepository:
     def __init__(self, lesson: DraftLessonView) -> None:
         self.lesson = lesson
+        self.source_segments: list[DraftLessonSourceSegment] = []
 
     def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
         return self.lesson
+
+    def get_lesson_source_segments(self, lesson_id: int) -> list[DraftLessonSourceSegment]:
+        return list(self.source_segments)
 
 
 class FakeAttendanceDraftMutationRepository:
@@ -90,6 +95,7 @@ class FakeAttendanceDraftMutationRepository:
         self.ignored_calls = []
         self.status_calls = []
         self.last_identity_rebuild = None
+        self.source_segments_inserted = []
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
@@ -106,6 +112,10 @@ class FakeAttendanceDraftMutationRepository:
             "diagnostics": diagnostics,
             "participants": participants,
         }
+
+    def ensure_lesson_source_segments(self, lesson_id: int, source_segments: list[DraftLessonSourceSegment]) -> int:
+        self.source_segments_inserted.append((lesson_id, list(source_segments)))
+        return len(source_segments)
 
 
 class AttendanceImportServiceTest(unittest.TestCase):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 
-from backend.attendance_app.models import DraftLessonView
+from backend.attendance_app.models import DraftLessonSourceSegment, DraftLessonView
 
 from .connection import get_db_connection
 
@@ -215,6 +215,57 @@ class PostgresAttendanceDraftMutationRepository:
                     (json.dumps(diagnostics), lesson_id),
                 )
             connection.commit()
+
+    def ensure_lesson_source_segments(
+        self,
+        lesson_id: int,
+        source_segments: list[DraftLessonSourceSegment],
+    ) -> int:
+        if not source_segments:
+            return 0
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM attendance_lesson_source_segments
+                    WHERE lesson_id = %s
+                    """,
+                    (lesson_id,),
+                )
+                row = cursor.fetchone()
+                existing = int(row[0]) if row is not None else 0
+                if existing > 0:
+                    return 0
+
+                inserted = 0
+                for segment in source_segments:
+                    cursor.execute(
+                        """
+                        INSERT INTO attendance_lesson_source_segments (
+                            lesson_id,
+                            observed_full_name,
+                            observed_email,
+                            join_time,
+                            leave_time,
+                            metadata_json
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                        ON CONFLICT (lesson_id, observed_full_name, observed_email, join_time, leave_time)
+                        DO NOTHING
+                        """,
+                        (
+                            lesson_id,
+                            segment.observed_full_name,
+                            segment.observed_email,
+                            _parse_datetime(segment.join_time),
+                            _parse_datetime(segment.leave_time),
+                            json.dumps(segment.metadata or {}),
+                        ),
+                    )
+                    inserted += cursor.rowcount or 0
+            connection.commit()
+        return inserted
 
 
 def _parse_datetime(value: str) -> datetime:

@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from backend.attendance_normalization.aggregator import ZoomMeeting, ZoomSegment, aggregate_meeting
 from backend.attendance_normalization.identity_rules import load_identity_rules
 from backend.attendance_normalization.presence_rules import determine_presence_status
 from backend.attendance_normalization.service import NormalizationResult
 
 from .models import (
     AttendanceIdentityAlias,
+    DraftLessonSourceSegment,
     DraftLessonView,
     DraftReviewActionView,
     ImportBatchCreate,
@@ -116,6 +116,9 @@ class AttendanceImportService:
                         existing,
                         participant_draft,
                         threshold=meeting.threshold,
+                        effective_start_at=meeting.effective_start,
+                        break_point_at=meeting.break_point,
+                        effective_end_at=meeting.effective_end,
                     )
 
             participants = sorted(
@@ -183,6 +186,9 @@ class AttendanceImportService:
         left: LessonParticipantDraft,
         right: LessonParticipantDraft,
         threshold: float,
+        effective_start_at: str,
+        break_point_at: str,
+        effective_end_at: str,
     ) -> LessonParticipantDraft:
         canonical_full_name = (
             right.canonical_full_name
@@ -195,25 +201,11 @@ class AttendanceImportService:
             else left.raw_full_name
         )
         email = left.email or right.email
-        segment_count = left.segment_count + right.segment_count
-        minutes_first_half = left.minutes_first_half + right.minutes_first_half
-        minutes_second_half = left.minutes_second_half + right.minutes_second_half
-        duration_first_half = max(left.duration_first_half, right.duration_first_half)
-        duration_second_half = max(left.duration_second_half, right.duration_second_half)
-        total_minutes = left.total_minutes + right.total_minutes
-        calculated_presence_status = determine_presence_status(
-            minutes_first_half=minutes_first_half,
-            minutes_second_half=minutes_second_half,
-            duration_first_half=duration_first_half,
-            duration_second_half=duration_second_half,
-            threshold=threshold,
-        )
         merged_flags = sorted(set(left.flags + right.flags))
         merged_metadata = {**left.metadata, **right.metadata}
         merged_metadata["merged_duplicate_participant_key"] = True
         left_segments = list(left.metadata.get("segments", []))
         right_segments = list(right.metadata.get("segments", []))
-        merged_metadata["segments"] = left_segments + right_segments
         merged_metadata["first_name"] = merged_metadata.get("first_name") or left.canonical_full_name.split(" ")[0]
         merged_metadata["last_name"] = merged_metadata.get("last_name") or " ".join(left.canonical_full_name.split(" ")[1:])
         merged_metadata["identity_sources"] = _merge_identity_sources(
@@ -226,20 +218,48 @@ class AttendanceImportService:
             fallback_right_email=right.email,
             fallback_right_segments=right_segments,
         )
+        if _identity_sources_have_any_segments(merged_metadata["identity_sources"]):
+            rebuilt = _aggregate_identity_sources_as_one(
+                merged_metadata["identity_sources"],
+                canonical_full_name=canonical_full_name,
+                canonical_email=email,
+                effective_start_at=effective_start_at,
+                break_point_at=break_point_at,
+                effective_end_at=effective_end_at,
+                threshold=threshold,
+            )
+            merged_metadata["segments"] = rebuilt["segments"]
+        else:
+            rebuilt = {
+                "segment_count": left.segment_count + right.segment_count,
+                "minutes_first_half": _round1(left.minutes_first_half + right.minutes_first_half),
+                "minutes_second_half": _round1(left.minutes_second_half + right.minutes_second_half),
+                "duration_first_half": max(left.duration_first_half, right.duration_first_half),
+                "duration_second_half": max(left.duration_second_half, right.duration_second_half),
+                "total_minutes": _round1(left.total_minutes + right.total_minutes),
+            }
+            rebuilt["calculated_presence_status"] = determine_presence_status(
+                minutes_first_half=rebuilt["minutes_first_half"],
+                minutes_second_half=rebuilt["minutes_second_half"],
+                duration_first_half=rebuilt["duration_first_half"],
+                duration_second_half=rebuilt["duration_second_half"],
+                threshold=threshold,
+            )
+            merged_metadata["segments"] = left_segments + right_segments
 
         return LessonParticipantDraft(
             participant_key=left.participant_key,
             canonical_full_name=canonical_full_name,
             raw_full_name=raw_full_name,
             email=email,
-            segment_count=segment_count,
-            minutes_first_half=minutes_first_half,
-            minutes_second_half=minutes_second_half,
-            duration_first_half=duration_first_half,
-            duration_second_half=duration_second_half,
-            total_minutes=total_minutes,
-            calculated_presence_status=calculated_presence_status,
-            final_presence_status=calculated_presence_status,
+            segment_count=rebuilt["segment_count"],
+            minutes_first_half=rebuilt["minutes_first_half"],
+            minutes_second_half=rebuilt["minutes_second_half"],
+            duration_first_half=rebuilt["duration_first_half"],
+            duration_second_half=rebuilt["duration_second_half"],
+            total_minutes=rebuilt["total_minutes"],
+            calculated_presence_status=rebuilt["calculated_presence_status"],
+            final_presence_status=rebuilt["calculated_presence_status"],
             flags=merged_flags,
             metadata=merged_metadata,
         )
@@ -408,47 +428,44 @@ class AttendanceDraftRecalculationService:
         effective_end_at: str,
         manual_overrides: dict[int, str | None],
     ) -> list[dict]:
-        meeting = self._build_zoom_meeting(lesson)
         effective_start = datetime.fromisoformat(effective_start_at)
         effective_end = datetime.fromisoformat(effective_end_at)
         break_point = datetime.fromisoformat(break_point_at) if break_point_at else None
         break_point = self._resolve_break_point(effective_start, effective_end, break_point)
+        source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
+        if not source_segments:
+            source_segments = _extract_source_segments_from_lesson(lesson)
 
-        aggregated = aggregate_meeting(
-            meeting=meeting,
+        aggregated = _aggregate_source_segments_by_final_identity(
+            source_segments,
             effective_start=effective_start,
             break_point=break_point,
             effective_end=effective_end,
+            threshold=threshold_ratio,
+            name_alias_map={},
+            email_alias_map={},
+            forced_identity_pairs=set(),
+            forced_canonical_full_name=None,
+            forced_canonical_email=None,
         )
-        records_by_key = {
-            (record.email.strip().lower() or record.full_name.lower()): record
-            for record in aggregated
-        }
 
         updates: list[dict] = []
         for participant in lesson.participants:
             participant_key = participant.email.strip().lower() if participant.email else participant.canonical_full_name.lower()
-            record = records_by_key.get(participant_key)
+            record = aggregated.get(participant_key)
             if record is None:
                 continue
-            calculated = determine_presence_status(
-                minutes_first_half=record.minutes_first_half,
-                minutes_second_half=record.minutes_second_half,
-                duration_first_half=record.duration_first_half,
-                duration_second_half=record.duration_second_half,
-                threshold=threshold_ratio,
-            )
             manual_override_presence_status = manual_overrides.get(participant.id)
-            final = manual_override_presence_status or calculated
+            final = manual_override_presence_status or record["calculated_presence_status"]
             updates.append(
                 {
                     "id": participant.id,
-                    "minutes_first_half": record.minutes_first_half,
-                    "minutes_second_half": record.minutes_second_half,
-                    "duration_first_half": record.duration_first_half,
-                    "duration_second_half": record.duration_second_half,
-                    "total_minutes": record.total_minutes,
-                    "calculated_presence_status": calculated,
+                    "minutes_first_half": record["minutes_first_half"],
+                    "minutes_second_half": record["minutes_second_half"],
+                    "duration_first_half": record["duration_first_half"],
+                    "duration_second_half": record["duration_second_half"],
+                    "total_minutes": record["total_minutes"],
+                    "calculated_presence_status": record["calculated_presence_status"],
                     "manual_override_presence_status": manual_override_presence_status,
                     "final_presence_status": final,
                 }
@@ -488,37 +505,6 @@ class AttendanceDraftRecalculationService:
             )
         return updates
 
-    def _build_zoom_meeting(self, lesson: DraftLessonView) -> ZoomMeeting:
-        segments: list[ZoomSegment] = []
-        lesson_start = datetime.fromisoformat(lesson.meeting_start_at)
-        lesson_end = datetime.fromisoformat(lesson.meeting_end_at)
-        target_tz = lesson_start.tzinfo
-        for participant in lesson.participants:
-            participant_segments = participant.metadata.get("segments") or []
-            first_name = participant.metadata.get("first_name") or participant.canonical_full_name.split(" ")[0]
-            last_name = participant.metadata.get("last_name") or " ".join(participant.canonical_full_name.split(" ")[1:])
-            for segment in participant_segments:
-                if not isinstance(segment, (list, tuple)) or len(segment) != 2:
-                    continue
-                segments.append(
-                    ZoomSegment(
-                        first_name=first_name,
-                        last_name=last_name,
-                        email=participant.email or "",
-                        full_name=participant.canonical_full_name,
-                        join_time=self._coerce_segment_datetime(segment[0], target_tz),
-                        leave_time=self._coerce_segment_datetime(segment[1], target_tz),
-                    )
-                )
-        return ZoomMeeting(
-            course=lesson.course_name,
-            meeting_id=lesson.source_meeting_id,
-            start_time=lesson_start,
-            end_time=lesson_end,
-            duration_minutes=(lesson_end - lesson_start).total_seconds() / 60,
-            segments=segments,
-        )
-
     def _resolve_break_point(
         self,
         effective_start: datetime,
@@ -535,14 +521,6 @@ class AttendanceDraftRecalculationService:
         if candidate > max_break:
             return max_break
         return candidate
-
-    def _coerce_segment_datetime(self, value: str, target_tz) -> datetime:
-        parsed = datetime.fromisoformat(value)
-        if parsed.tzinfo is None and target_tz is not None:
-            return parsed.replace(tzinfo=target_tz)
-        if parsed.tzinfo is not None and target_tz is None:
-            return parsed.replace(tzinfo=None)
-        return parsed
 
 
 class AttendanceLessonStateService:
@@ -676,8 +654,13 @@ class AttendanceLessonIdentityRebuildService:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
         if not lesson.participants:
             return lesson
-        if not all(isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments") for participant in lesson.participants):
-            raise ValueError("Questa lezione non ha segmenti grezzi sufficienti per il re-merge identità.")
+        source_segments = self._query_repository.get_lesson_source_segments(lesson_id)
+        if not source_segments:
+            source_segments = _extract_source_segments_from_lesson(lesson)
+            if not source_segments:
+                raise ValueError("Questa lezione non ha segmenti grezzi sufficienti per il re-merge identità.")
+            self._mutation_repository.ensure_lesson_source_segments(lesson.id, source_segments)
+            source_segments = self._query_repository.get_lesson_source_segments(lesson_id) or source_segments
 
         name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
         effective_start = datetime.fromisoformat(lesson.effective_start_at)
@@ -694,17 +677,18 @@ class AttendanceLessonIdentityRebuildService:
                 "canonical_email": forced_canonical_email or "",
             }
 
-        meeting = self._build_zoom_meeting(lesson, name_alias_map, email_alias_map, forced_merge=forced_merge)
-        aggregated = aggregate_meeting(
-            meeting=meeting,
+        aggregated = _aggregate_source_segments_by_final_identity(
+            source_segments,
             effective_start=effective_start,
             break_point=break_point,
             effective_end=effective_end,
+            threshold=lesson.threshold_ratio,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+            forced_identity_pairs=self._build_forced_identity_pairs(lesson, forced_merge),
+            forced_canonical_full_name=(forced_merge or {}).get("canonical_full_name"),
+            forced_canonical_email=(forced_merge or {}).get("canonical_email"),
         )
-        records_by_key = {
-            ((record.email or "").strip().lower() or record.full_name.lower()): record
-            for record in aggregated
-        }
         action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
 
         old_to_target_key: dict[int, str] = {}
@@ -724,28 +708,22 @@ class AttendanceLessonIdentityRebuildService:
         rebuilt_participants: list[dict] = []
         missing_target_keys: list[str] = []
         for target_key, participants in grouped_participants.items():
-            record = records_by_key.get(target_key)
+            record = aggregated.get(target_key)
             if record is None:
                 missing_target_keys.append(target_key)
                 continue
             survivor = min(participants, key=lambda participant: participant.id)
             obsolete_ids = [participant.id for participant in participants if participant.id != survivor.id]
-            canonical_full_name = record.full_name
+            canonical_full_name = record["canonical_full_name"]
             raw_full_name = self._pick_raw_full_name(participants)
-            canonical_email = (record.email or "").strip() or None
-            calculated = determine_presence_status(
-                minutes_first_half=record.minutes_first_half,
-                minutes_second_half=record.minutes_second_half,
-                duration_first_half=record.duration_first_half,
-                duration_second_half=record.duration_second_half,
-                threshold=lesson.threshold_ratio,
-            )
+            canonical_email = (record["canonical_email"] or "").strip() or None
+            calculated = record["calculated_presence_status"]
             manual_override_presence_status = remapped_overrides.get(survivor.id)
             final = manual_override_presence_status or calculated
             identity_sources = self._merge_identity_sources_from_participants(participants)
             first_name, last_name = _split_full_name(canonical_full_name)
             metadata = dict(survivor.metadata or {})
-            metadata["segments"] = [(start.isoformat(), end.isoformat()) for start, end in record.segments]
+            metadata["segments"] = record["segments"]
             metadata["identity_sources"] = identity_sources
             metadata["first_name"] = first_name
             metadata["last_name"] = last_name
@@ -759,12 +737,12 @@ class AttendanceLessonIdentityRebuildService:
                     "canonical_full_name": canonical_full_name,
                     "raw_full_name": raw_full_name,
                     "email": canonical_email,
-                    "segment_count": record.segment_count,
-                    "minutes_first_half": record.minutes_first_half,
-                    "minutes_second_half": record.minutes_second_half,
-                    "duration_first_half": record.duration_first_half,
-                    "duration_second_half": record.duration_second_half,
-                    "total_minutes": record.total_minutes,
+                    "segment_count": record["segment_count"],
+                    "minutes_first_half": record["minutes_first_half"],
+                    "minutes_second_half": record["minutes_second_half"],
+                    "duration_first_half": record["duration_first_half"],
+                    "duration_second_half": record["duration_second_half"],
+                    "total_minutes": record["total_minutes"],
                     "calculated_presence_status": calculated,
                     "manual_override_presence_status": manual_override_presence_status,
                     "final_presence_status": final,
@@ -790,55 +768,6 @@ class AttendanceLessonIdentityRebuildService:
         )
         return self._query_repository.get_lesson_detail(lesson_id)
 
-    def _build_zoom_meeting(
-        self,
-        lesson: DraftLessonView,
-        name_alias_map: dict[str, AttendanceIdentityAlias],
-        email_alias_map: dict[str, AttendanceIdentityAlias],
-        *,
-        forced_merge: dict | None = None,
-    ) -> ZoomMeeting:
-        lesson_start = datetime.fromisoformat(lesson.meeting_start_at)
-        lesson_end = datetime.fromisoformat(lesson.meeting_end_at)
-        target_tz = lesson_start.tzinfo
-        segments: list[ZoomSegment] = []
-        for participant in lesson.participants:
-            for source in _get_identity_sources(participant):
-                source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
-                source_email = str(source.get("email") or participant.email or "").strip()
-                if forced_merge and participant.id in {forced_merge["canonical_participant_id"], forced_merge["alias_participant_id"]}:
-                    canonical_full_name = forced_merge["canonical_full_name"] or participant.canonical_full_name
-                    canonical_email = forced_merge["canonical_email"] or participant.email or source_email or None
-                else:
-                    canonical_full_name, canonical_email = _apply_identity_alias_maps(
-                        source_name,
-                        source_email or None,
-                        name_alias_map,
-                        email_alias_map,
-                    )
-                first_name, last_name = _split_full_name(canonical_full_name)
-                for segment in list(source.get("segments") or []):
-                    if not isinstance(segment, (list, tuple)) or len(segment) != 2:
-                        continue
-                    segments.append(
-                        ZoomSegment(
-                            first_name=first_name,
-                            last_name=last_name,
-                            email=canonical_email or source_email,
-                            full_name=canonical_full_name,
-                            join_time=self._coerce_segment_datetime(segment[0], target_tz),
-                            leave_time=self._coerce_segment_datetime(segment[1], target_tz),
-                        )
-                    )
-        return ZoomMeeting(
-            course=lesson.course_name,
-            meeting_id=lesson.source_meeting_id,
-            start_time=lesson_start,
-            end_time=lesson_end,
-            duration_minutes=(lesson_end - lesson_start).total_seconds() / 60,
-            segments=segments,
-        )
-
     def _participant_target_key(
         self,
         participant,
@@ -861,6 +790,19 @@ class AttendanceLessonIdentityRebuildService:
             email_alias_map,
         )
         return (canonical_email or "").strip().lower() or canonical_full_name.lower()
+
+    def _build_forced_identity_pairs(self, lesson: DraftLessonView, forced_merge: dict | None) -> set[tuple[str, str]]:
+        if not forced_merge:
+            return set()
+        pairs: set[tuple[str, str]] = set()
+        for participant in lesson.participants:
+            if participant.id not in {forced_merge["canonical_participant_id"], forced_merge["alias_participant_id"]}:
+                continue
+            for source in _get_identity_sources(participant):
+                source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+                source_email = str(source.get("email") or participant.email or "").strip()
+                pairs.add((source_name.casefold(), source_email.casefold()))
+        return pairs
 
     def _build_manual_override_map(self, action_sequence, participants, old_to_target_key: dict[int, str]) -> dict[int, str | None]:
         target_to_survivor = {
@@ -908,6 +850,26 @@ class AttendanceLessonIdentityRebuildService:
                 )
         return _dedupe_identity_sources(merged_sources)
 
+    def _extract_source_segments_from_lesson(self, lesson: DraftLessonView) -> list[DraftLessonSourceSegment]:
+        source_segments: list[DraftLessonSourceSegment] = []
+        for participant in lesson.participants:
+            for source in _get_identity_sources(participant):
+                source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+                source_email = str(source.get("email") or participant.email or "").strip() or None
+                for segment in list(source.get("segments") or []):
+                    if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                        continue
+                    source_segments.append(
+                        DraftLessonSourceSegment(
+                            observed_full_name=source_name,
+                            observed_email=source_email,
+                            join_time=str(segment[0]),
+                            leave_time=str(segment[1]),
+                            metadata={},
+                        )
+                    )
+        return source_segments
+
     def _resolve_break_point(
         self,
         effective_start: datetime,
@@ -924,14 +886,6 @@ class AttendanceLessonIdentityRebuildService:
         if candidate > max_break:
             return max_break
         return candidate
-
-    def _coerce_segment_datetime(self, value: str, target_tz) -> datetime:
-        parsed = datetime.fromisoformat(value)
-        if parsed.tzinfo is None and target_tz is not None:
-            return parsed.replace(tzinfo=target_tz)
-        if parsed.tzinfo is not None and target_tz is None:
-            return parsed.replace(tzinfo=None)
-        return parsed
 
 
 def _load_identity_alias_maps(
@@ -1036,3 +990,183 @@ def _dedupe_identity_sources(sources: list[dict]) -> list[dict]:
         )
         entry["segments"].extend(list(source.get("segments") or []))
     return list(merged.values())
+
+
+def _identity_sources_have_any_segments(identity_sources: list[dict]) -> bool:
+    return any(
+        isinstance(segment, (list, tuple)) and len(segment) == 2
+        for source in identity_sources
+        for segment in list(source.get("segments") or [])
+    )
+
+
+def _aggregate_identity_sources_as_one(
+    identity_sources: list[dict],
+    *,
+    canonical_full_name: str,
+    canonical_email: str | None,
+    effective_start_at: str,
+    break_point_at: str,
+    effective_end_at: str,
+    threshold: float,
+) -> dict:
+    source_segments = [
+        DraftLessonSourceSegment(
+            observed_full_name=str(source.get("raw_full_name") or canonical_full_name).strip(),
+            observed_email=str(source.get("email") or canonical_email or "").strip() or None,
+            join_time=str(segment[0]),
+            leave_time=str(segment[1]),
+            metadata={},
+        )
+        for source in identity_sources
+        for segment in list(source.get("segments") or [])
+        if isinstance(segment, (list, tuple)) and len(segment) == 2
+    ]
+    aggregated = _aggregate_source_segments_by_final_identity(
+        source_segments,
+        effective_start=datetime.fromisoformat(effective_start_at),
+        break_point=datetime.fromisoformat(break_point_at),
+        effective_end=datetime.fromisoformat(effective_end_at),
+        threshold=threshold,
+        name_alias_map={},
+        email_alias_map={},
+        forced_identity_pairs={
+            (
+                (segment.observed_full_name or "").strip().casefold(),
+                ((segment.observed_email or "").strip().casefold()),
+            )
+            for segment in source_segments
+        },
+        forced_canonical_full_name=canonical_full_name,
+        forced_canonical_email=canonical_email,
+    )
+    key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
+    return aggregated[key]
+
+
+def _aggregate_source_segments_by_final_identity(
+    source_segments: list[DraftLessonSourceSegment],
+    *,
+    effective_start: datetime,
+    break_point: datetime,
+    effective_end: datetime,
+    threshold: float,
+    name_alias_map: dict[str, AttendanceIdentityAlias],
+    email_alias_map: dict[str, AttendanceIdentityAlias],
+    forced_identity_pairs: set[tuple[str, str]],
+    forced_canonical_full_name: str | None,
+    forced_canonical_email: str | None,
+) -> dict[str, dict]:
+    grouped: dict[str, dict] = {}
+    target_tz = effective_start.tzinfo
+    for source_segment in source_segments:
+        source_name = (source_segment.observed_full_name or "").strip()
+        source_email = (source_segment.observed_email or "").strip()
+        if (source_name.casefold(), source_email.casefold()) in forced_identity_pairs:
+            canonical_full_name = forced_canonical_full_name or source_name
+            canonical_email = forced_canonical_email or source_email or None
+        else:
+            canonical_full_name, canonical_email = _apply_identity_alias_maps(
+                source_name,
+                source_email or None,
+                name_alias_map,
+                email_alias_map,
+            )
+        target_key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
+        bucket = grouped.setdefault(
+            target_key,
+            {
+                "canonical_full_name": canonical_full_name,
+                "canonical_email": canonical_email,
+                "intervals": [],
+            },
+        )
+        bucket["intervals"].append(
+            (
+                _coerce_segment_datetime(source_segment.join_time, target_tz),
+                _coerce_segment_datetime(source_segment.leave_time, target_tz),
+            )
+        )
+
+    results: dict[str, dict] = {}
+    for target_key, bucket in grouped.items():
+        merged_intervals = _merge_overlapping_intervals(bucket["intervals"])
+        minutes_first_half = _round1(sum(_overlap_minutes(start, end, effective_start, break_point) for start, end in merged_intervals))
+        minutes_second_half = _round1(sum(_overlap_minutes(start, end, break_point, effective_end) for start, end in merged_intervals))
+        duration_first_half = _round1((break_point - effective_start).total_seconds() / 60)
+        duration_second_half = _round1((effective_end - break_point).total_seconds() / 60)
+        calculated_presence_status = determine_presence_status(
+            minutes_first_half=minutes_first_half,
+            minutes_second_half=minutes_second_half,
+            duration_first_half=duration_first_half,
+            duration_second_half=duration_second_half,
+            threshold=threshold,
+        )
+        results[target_key] = {
+            "canonical_full_name": bucket["canonical_full_name"],
+            "canonical_email": bucket["canonical_email"],
+            "segment_count": len(merged_intervals),
+            "minutes_first_half": minutes_first_half,
+            "minutes_second_half": minutes_second_half,
+            "duration_first_half": duration_first_half,
+            "duration_second_half": duration_second_half,
+            "total_minutes": _round1(minutes_first_half + minutes_second_half),
+            "calculated_presence_status": calculated_presence_status,
+            "segments": [(start.isoformat(), end.isoformat()) for start, end in merged_intervals],
+        }
+    return results
+
+
+def _extract_source_segments_from_lesson(lesson: DraftLessonView) -> list[DraftLessonSourceSegment]:
+    source_segments: list[DraftLessonSourceSegment] = []
+    for participant in lesson.participants:
+        for source in _get_identity_sources(participant):
+            source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+            source_email = str(source.get("email") or participant.email or "").strip() or None
+            for segment in list(source.get("segments") or []):
+                if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                    continue
+                source_segments.append(
+                    DraftLessonSourceSegment(
+                        observed_full_name=source_name,
+                        observed_email=source_email,
+                        join_time=str(segment[0]),
+                        leave_time=str(segment[1]),
+                        metadata={},
+                    )
+                )
+    return source_segments
+
+
+def _merge_overlapping_intervals(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    if not intervals:
+        return []
+    ordered = sorted(intervals, key=lambda item: (item[0], item[1]))
+    merged: list[list[datetime]] = [[ordered[0][0], ordered[0][1]]]
+    for start, end in ordered[1:]:
+        last = merged[-1]
+        if start <= last[1]:
+            if end > last[1]:
+                last[1] = end
+        else:
+            merged.append([start, end])
+    return [(start, end) for start, end in merged]
+
+
+def _overlap_minutes(segment_start: datetime, segment_end: datetime, range_start: datetime, range_end: datetime) -> float:
+    start = max(segment_start, range_start)
+    end = min(segment_end, range_end)
+    return max(0.0, (end - start).total_seconds() / 60)
+
+
+def _coerce_segment_datetime(value: str, target_tz) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None and target_tz is not None:
+        return parsed.replace(tzinfo=target_tz)
+    if parsed.tzinfo is not None and target_tz is None:
+        return parsed.replace(tzinfo=None)
+    return parsed
+
+
+def _round1(value: float) -> float:
+    return round(value, 1)

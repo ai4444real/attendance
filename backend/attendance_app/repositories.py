@@ -7,6 +7,7 @@ from typing import Protocol
 from .models import (
     AttendanceIdentityAlias,
     DraftBatchDetail,
+    DraftLessonSourceSegment,
     DraftLessonView,
     DraftReviewActionView,
     ImportBatchCreate,
@@ -58,6 +59,9 @@ class AttendanceDraftQueryRepository(Protocol):
     def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
         """Return one lesson with full participant detail."""
 
+    def get_lesson_source_segments(self, lesson_id: int) -> list[DraftLessonSourceSegment]:
+        """Return persisted raw/source segments for one lesson."""
+
 
 class AttendanceReviewActionRepository(Protocol):
     """Write review actions for one draft lesson."""
@@ -108,3 +112,10 @@ class AttendanceDraftMutationRepository(Protocol):
         participants: list[dict],
     ) -> None:
         """Replace one lesson participant set after identity merge and remap review actions."""
+
+    def ensure_lesson_source_segments(
+        self,
+        lesson_id: int,
+        source_segments: list[DraftLessonSourceSegment],
+    ) -> int:
+        """Persist source segments for one lesson if missing, returning inserted rows."""

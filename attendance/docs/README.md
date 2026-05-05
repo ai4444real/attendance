@@ -5,6 +5,7 @@ Documentazione del progetto `attendance`.
 ## Contenuto
 
 - `ARCHITETTURA_UNIFICAZIONE.md`: visione target, pipeline e backlog
+- `RICOSTRUZIONE_LEZIONE_DRAFT.md`: specifica tecnica del rebuild corretto di una singola lezione draft
 - `MIGRAZIONE_NORMALIZZAZIONE_PYTHON.md`: migrazione incrementale della logica Zoom da JavaScript a Python
 - `LOCAL_SETUP.md`: guida setup locale
 - `CLAUDE_INSTRUCTIONS.md`: istruzioni operative storiche recuperate dal lavoro precedente

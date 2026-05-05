@@ -8,6 +8,7 @@ from backend.attendance_app.models import (
     DraftBatchDetail,
     DraftLessonSummary,
     DraftLessonParticipantView,
+    DraftLessonSourceSegment,
     DraftReviewActionView,
     DraftLessonView,
     ImportBatchSummary,
@@ -273,6 +274,35 @@ class PostgresAttendanceDraftQueryRepository:
             participants=participants,
             review_actions=review_actions,
         )
+
+    def get_lesson_source_segments(self, lesson_id: int) -> list[DraftLessonSourceSegment]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        observed_full_name,
+                        observed_email,
+                        join_time,
+                        leave_time,
+                        metadata_json
+                    FROM attendance_lesson_source_segments
+                    WHERE lesson_id = %s
+                    ORDER BY join_time ASC, leave_time ASC
+                    """,
+                    (lesson_id,),
+                )
+                rows = cursor.fetchall()
+        return [
+            DraftLessonSourceSegment(
+                observed_full_name=str(row[0]),
+                observed_email=row[1],
+                join_time=_ensure_datetime(row[2]).isoformat(),
+                leave_time=_ensure_datetime(row[3]).isoformat(),
+                metadata=dict(row[4] or {}),
+            )
+            for row in rows
+        ]
 
     def _load_lesson_summary(self, cursor, lesson_id: int) -> dict[str, int]:
         cursor.execute(

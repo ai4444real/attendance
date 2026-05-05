@@ -34,6 +34,7 @@ class PostgresAttendanceDraftImportRepository:
                     lesson_id = self._insert_lesson(cursor, batch.id, lesson)
                     lesson_count += 1
                     participant_count += self._insert_participants(cursor, lesson_id, lesson.participants)
+                    self._insert_source_segments(cursor, lesson_id, lesson.participants)
 
             connection.commit()
 
@@ -189,6 +190,51 @@ class PostgresAttendanceDraftImportRepository:
                 ),
             )
             count += 1
+        return count
+
+    def _insert_source_segments(
+        self,
+        cursor,
+        lesson_id: int,
+        participants: list[LessonParticipantDraft],
+    ) -> int:
+        count = 0
+        for participant in participants:
+            identity_sources = participant.metadata.get("identity_sources")
+            if not isinstance(identity_sources, list) or not identity_sources:
+                identity_sources = [{
+                    "raw_full_name": participant.raw_full_name or participant.canonical_full_name,
+                    "email": participant.email or "",
+                    "segments": list(participant.metadata.get("segments") or []),
+                }]
+            for source in identity_sources:
+                observed_full_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+                observed_email = str(source.get("email") or participant.email or "").strip() or None
+                for segment in list(source.get("segments") or []):
+                    if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                        continue
+                    cursor.execute(
+                        """
+                        INSERT INTO attendance_lesson_source_segments (
+                            lesson_id,
+                            observed_full_name,
+                            observed_email,
+                            join_time,
+                            leave_time,
+                            metadata_json
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                        """,
+                        (
+                            lesson_id,
+                            observed_full_name,
+                            observed_email,
+                            _parse_datetime(str(segment[0])),
+                            _parse_datetime(str(segment[1])),
+                            json.dumps({}),
+                        ),
+                    )
+                    count += 1
         return count
 
 

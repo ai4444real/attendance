@@ -135,6 +135,15 @@ class DraftReviewActionView:
 
 
 @dataclass(frozen=True)
+class DraftLessonSourceSegment:
+    observed_full_name: str
+    observed_email: Optional[str]
+    join_time: str
+    leave_time: str
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class DraftLessonView:
     id: int
     course_name: str
