@@ -153,11 +153,15 @@ const DraftImportsApp = {
     _renderLessonDetail(lesson) {
         const diagnostics = lesson.diagnostics || {};
         const summary = lesson.summary || {};
+        const threshold = lesson.threshold_ratio || 0.8;
         const timeline = diagnostics.timeline || [];
         const peak = diagnostics.peak_active_count || Math.max(...timeline.map((point) => point.active_count), 1);
         const bars = timeline.length > 0
             ? timeline.map((point) => this._buildTimelineBar(point, peak, lesson.meeting_start_at)).join('')
             : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
+        const participants = lesson.participants || [];
+        const visibleParticipants = participants.filter((participant) => participant.final_presence_status !== 'presente');
+        const presentParticipants = participants.filter((participant) => participant.final_presence_status === 'presente');
         const diagnosisText = lesson.break_source === 'auto'
             ? 'Pausa rilevata automaticamente dal profilo dei presenti.'
             : lesson.break_source === 'midpoint'
@@ -213,13 +217,11 @@ const DraftImportsApp = {
                             </div>
                         </div>
                     </div>
-                    <div class="timeline-meta">
-                        ${this._mini('Threshold', `${Math.round((lesson.threshold_ratio || 0) * 100)}%`)}
-                        ${this._mini('Inizio utile', this._formatTime(lesson.effective_start_at))}
-                        ${this._mini('Pausa', lesson.break_point_at ? this._formatTime(lesson.break_point_at) : '—')}
-                        ${this._mini('Fine utile', this._formatTime(lesson.effective_end_at))}
-                        ${this._mini('Picco presenti', String(diagnostics.peak_active_count || 0))}
-                        ${this._mini('Sorgente', `${lesson.effective_start_source || 'default'} / ${lesson.effective_end_source || 'default'}`)}
+                    <div class="threshold-strip">
+                        <div class="threshold-badge">
+                            <span class="threshold-badge-label">Threshold</span>
+                            <span class="threshold-badge-value">${Math.round(threshold * 100)}%</span>
+                        </div>
                     </div>
                     <details class="action-panel">
                         <summary class="action-panel-head">
@@ -249,17 +251,17 @@ const DraftImportsApp = {
                             </tr>
                         </thead>
                         <tbody>
-                            ${(lesson.participants || []).map((participant) => `
+                            ${visibleParticipants.map((participant) => `
                                 <tr>
                                     <td>
                                         <strong>${this._escapeHtml(participant.canonical_full_name)}</strong><br>
                                         <span class="hint">${this._escapeHtml(participant.email || 'senza email')}</span>
                                     </td>
-                                    <td>
-                                        ${this._formatMinutes(participant.minutes_first_half)} / ${this._formatMinutes(participant.duration_first_half)} min
+                                    <td class="percent-cell">
+                                        ${this._renderPercentCell(participant.minutes_first_half, participant.duration_first_half, threshold)}
                                     </td>
-                                    <td>
-                                        ${this._formatMinutes(participant.minutes_second_half)} / ${this._formatMinutes(participant.duration_second_half)} min
+                                    <td class="percent-cell">
+                                        ${this._renderPercentCell(participant.minutes_second_half, participant.duration_second_half, threshold)}
                                     </td>
                                     <td>
                                         <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}">${this._escapeHtml(participant.final_presence_status)}</span>
@@ -268,6 +270,12 @@ const DraftImportsApp = {
                             `).join('')}
                         </tbody>
                     </table>
+                    ${presentParticipants.length > 0 ? `
+                        <div class="present-list">
+                            <div class="present-list-title">Presenti</div>
+                            <div class="present-list-body">${presentParticipants.map((participant) => this._escapeHtml(participant.canonical_full_name)).join(', ')}</div>
+                        </div>
+                    ` : ''}
                 </div>
             </article>
         `;
@@ -402,12 +410,16 @@ const DraftImportsApp = {
         return parsed;
     },
 
-    _mini(label, value) {
+    _renderPercentCell(minutes, duration, threshold) {
+        const pct = duration > 0 ? minutes / duration : 0;
+        const pctRounded = Math.round(pct * 100);
+        const missingMinutes = Math.max(0, (duration * threshold) - minutes);
+        const isPositive = pct >= threshold;
+        const isBorderline = !isPositive && ((threshold - pct) <= 0.02 || missingMinutes <= 5);
+        const tone = isPositive ? 'positive' : isBorderline ? 'borderline' : 'negative';
         return `
-            <div class="mini">
-                <div class="mini-label">${this._escapeHtml(label)}</div>
-                <div class="mini-value">${this._escapeHtml(value)}</div>
-            </div>
+            <div class="percent-big ${tone}">${pctRounded}%</div>
+            <div class="percent-meta">${isBorderline ? 'borderline' : `soglia ${Math.round(threshold * 100)}%`}</div>
         `;
     },
 

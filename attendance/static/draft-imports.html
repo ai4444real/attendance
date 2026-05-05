@@ -59,12 +59,12 @@
         .pill.yellow { background: #fff2d9; color: #946200; }
         .pill.red { background: #fde7ec; color: #b42318; }
         .lesson-body { padding: 18px; }
-        .timeline-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
-        .mini { border: 1px solid var(--brand-border); border-radius: 12px; padding: 12px; background: #fafcfd; }
-        .mini-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-muted); margin-bottom: 6px; font-weight: 700; }
-        .mini-value { font-size: 18px; font-weight: 800; color: var(--brand-ink); }
         .meeting-diagnostics { margin-bottom: 16px; }
         .meeting-diagnostics-note { font-size: 14px; color: var(--brand-muted); margin: 8px 0 0; }
+        .threshold-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 16px; }
+        .threshold-badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 999px; border: 1px solid var(--brand-border); background: #fafcfd; color: var(--brand-ink); }
+        .threshold-badge-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-muted); font-weight: 800; }
+        .threshold-badge-value { font-size: 18px; font-weight: 900; color: var(--brand-pnl-blue); }
         .meeting-chart { margin-top: 14px; padding: 18px 14px 12px; border: 1px solid var(--brand-border); border-radius: 16px; background: linear-gradient(180deg, #fbfdff 0%, #f5f9fc 100%); }
         .meeting-bars { display: flex; align-items: end; gap: 3px; min-height: 110px; padding-bottom: 10px; }
         .meeting-bar { flex: 1; min-width: 8px; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #1d5f91 0%, #18a34a 100%); opacity: 0.95; }
@@ -101,6 +101,14 @@
         .participants-table { width: 100%; border-collapse: collapse; }
         .participants-table th, .participants-table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--brand-border); vertical-align: top; }
         .participants-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); }
+        .percent-cell { min-width: 120px; }
+        .percent-big { display: inline-block; min-width: 78px; font-size: 34px; line-height: 1; font-weight: 900; color: #157347; }
+        .percent-big.negative { color: #b42318; }
+        .percent-big.borderline { color: #b45309; text-shadow: 0 0 0 rgba(0,0,0,0); box-shadow: inset 0 0 0 2px #f59e0b; border-radius: 12px; padding: 6px 10px; background: #fff7e6; }
+        .percent-meta { margin-top: 4px; font-size: 12px; color: var(--brand-muted); }
+        .present-list { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--brand-border); }
+        .present-list-title { font-size: 13px; font-weight: 800; color: var(--brand-ink); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+        .present-list-body { font-size: 14px; color: var(--brand-muted); line-height: 1.6; }
         .presence-tag { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
         .presence-tag.presente { background: #e7f7ee; color: #157347; }
         .presence-tag.prima_meta { background: #e9f1fb; color: #0f4c81; }
