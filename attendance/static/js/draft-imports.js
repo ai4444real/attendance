@@ -22,7 +22,7 @@ const DraftImportsApp = {
 
         try {
             const response = await fetch('/api/attendance/import-batches');
-            const payload = await response.json();
+            const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere gli import batch.');
             }
@@ -74,7 +74,7 @@ const DraftImportsApp = {
 
         try {
             const response = await fetch(`/api/attendance/import-batches/${batchId}`);
-            const payload = await response.json();
+            const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere il dettaglio del batch.');
             }
@@ -214,7 +214,7 @@ const DraftImportsApp = {
 
         try {
             const response = await fetch(`/api/attendance/lessons/${lessonId}`);
-            const payload = await response.json();
+            const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere il dettaglio della lezione.');
             }
@@ -456,7 +456,7 @@ const DraftImportsApp = {
                     notes: `Creato dalla lesson ${lesson.id}`,
                 }),
             });
-            const data = await response.json();
+            const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile registrare l\'alias.');
             window.alert(`Alias registrato: "${aliasParticipant.canonical_full_name}" -> "${canonicalParticipant.canonical_full_name}". Valido dai prossimi import.`);
             canonicalSelect.value = '';
@@ -528,7 +528,7 @@ const DraftImportsApp = {
                     participant_id: participantId,
                 }),
             });
-            const data = await response.json();
+            const data = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(data.detail || 'Impossibile salvare la correzione.');
             }
@@ -546,7 +546,7 @@ const DraftImportsApp = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_ignored: isIgnored }),
             });
-            const data = await response.json();
+            const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile aggiornare la lezione.');
             await this._reloadCurrentBatch(lessonId);
         } catch (error) {
@@ -562,7 +562,7 @@ const DraftImportsApp = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status }),
             });
-            const data = await response.json();
+            const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile aggiornare lo stato della lezione.');
             await this._reloadCurrentBatch(lessonId);
         } catch (error) {
@@ -574,7 +574,7 @@ const DraftImportsApp = {
     async _reloadCurrentBatch(preferredLessonId = null) {
         if (!this._selectedBatchId) return;
         const response = await fetch(`/api/attendance/import-batches/${this._selectedBatchId}`);
-        const payload = await response.json();
+        const payload = await this._readApiPayload(response);
         if (!response.ok) {
             throw new Error(payload.detail || 'Impossibile ricaricare il batch.');
         }
@@ -650,6 +650,17 @@ const DraftImportsApp = {
         if (parsed > 1) parsed = parsed / 100;
         if (parsed <= 0 || parsed > 1) return null;
         return parsed;
+    },
+
+    async _readApiPayload(response) {
+        const text = await response.text();
+        try {
+            return text ? JSON.parse(text) : {};
+        } catch {
+            return {
+                detail: text || `Risposta non valida dal server (${response.status})`,
+            };
+        }
     },
 
     _renderPercentCell(minutes, duration, threshold) {
