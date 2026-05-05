@@ -448,6 +448,8 @@ const DraftImportsApp = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    canonical_participant_id: canonicalParticipant.id,
+                    alias_participant_id: aliasParticipant.id,
                     canonical_full_name: canonicalParticipant.canonical_full_name,
                     canonical_email: canonicalParticipant.email,
                     alias_full_name: aliasParticipant.canonical_full_name,

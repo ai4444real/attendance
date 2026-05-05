@@ -662,6 +662,17 @@ class AttendanceLessonIdentityRebuildService:
         self._identity_alias_repository = identity_alias_repository
 
     def rebuild_lesson_with_current_aliases(self, lesson_id: int) -> DraftLessonView:
+        return self.rebuild_lesson_with_current_aliases_and_hint(lesson_id)
+
+    def rebuild_lesson_with_current_aliases_and_hint(
+        self,
+        lesson_id: int,
+        *,
+        canonical_participant_id: int | None = None,
+        alias_participant_id: int | None = None,
+        forced_canonical_full_name: str | None = None,
+        forced_canonical_email: str | None = None,
+    ) -> DraftLessonView:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
         if not lesson.participants:
             return lesson
@@ -674,7 +685,16 @@ class AttendanceLessonIdentityRebuildService:
         break_point = datetime.fromisoformat(lesson.break_point_at) if lesson.break_point_at else None
         break_point = self._resolve_break_point(effective_start, effective_end, break_point)
 
-        meeting = self._build_zoom_meeting(lesson, name_alias_map, email_alias_map)
+        forced_merge = None
+        if canonical_participant_id is not None and alias_participant_id is not None:
+            forced_merge = {
+                "canonical_participant_id": canonical_participant_id,
+                "alias_participant_id": alias_participant_id,
+                "canonical_full_name": forced_canonical_full_name or "",
+                "canonical_email": forced_canonical_email or "",
+            }
+
+        meeting = self._build_zoom_meeting(lesson, name_alias_map, email_alias_map, forced_merge=forced_merge)
         aggregated = aggregate_meeting(
             meeting=meeting,
             effective_start=effective_start,
@@ -690,7 +710,12 @@ class AttendanceLessonIdentityRebuildService:
         old_to_target_key: dict[int, str] = {}
         grouped_participants: dict[str, list] = defaultdict(list)
         for participant in lesson.participants:
-            rebuilt_key = self._participant_target_key(participant, name_alias_map, email_alias_map)
+            rebuilt_key = self._participant_target_key(
+                participant,
+                name_alias_map,
+                email_alias_map,
+                forced_merge=forced_merge,
+            )
             old_to_target_key[participant.id] = rebuilt_key
             grouped_participants[rebuilt_key].append(participant)
 
@@ -770,6 +795,8 @@ class AttendanceLessonIdentityRebuildService:
         lesson: DraftLessonView,
         name_alias_map: dict[str, AttendanceIdentityAlias],
         email_alias_map: dict[str, AttendanceIdentityAlias],
+        *,
+        forced_merge: dict | None = None,
     ) -> ZoomMeeting:
         lesson_start = datetime.fromisoformat(lesson.meeting_start_at)
         lesson_end = datetime.fromisoformat(lesson.meeting_end_at)
@@ -779,12 +806,16 @@ class AttendanceLessonIdentityRebuildService:
             for source in _get_identity_sources(participant):
                 source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
                 source_email = str(source.get("email") or participant.email or "").strip()
-                canonical_full_name, canonical_email = _apply_identity_alias_maps(
-                    source_name,
-                    source_email or None,
-                    name_alias_map,
-                    email_alias_map,
-                )
+                if forced_merge and participant.id in {forced_merge["canonical_participant_id"], forced_merge["alias_participant_id"]}:
+                    canonical_full_name = forced_merge["canonical_full_name"] or participant.canonical_full_name
+                    canonical_email = forced_merge["canonical_email"] or participant.email or source_email or None
+                else:
+                    canonical_full_name, canonical_email = _apply_identity_alias_maps(
+                        source_name,
+                        source_email or None,
+                        name_alias_map,
+                        email_alias_map,
+                    )
                 first_name, last_name = _split_full_name(canonical_full_name)
                 for segment in list(source.get("segments") or []):
                     if not isinstance(segment, (list, tuple)) or len(segment) != 2:
@@ -813,7 +844,13 @@ class AttendanceLessonIdentityRebuildService:
         participant,
         name_alias_map: dict[str, AttendanceIdentityAlias],
         email_alias_map: dict[str, AttendanceIdentityAlias],
+        *,
+        forced_merge: dict | None = None,
     ) -> str:
+        if forced_merge and participant.id in {forced_merge["canonical_participant_id"], forced_merge["alias_participant_id"]}:
+            canonical_full_name = forced_merge["canonical_full_name"] or participant.canonical_full_name
+            canonical_email = forced_merge["canonical_email"] or participant.email or None
+            return (canonical_email or "").strip().lower() or canonical_full_name.lower()
         primary_source = _get_identity_sources(participant)[0]
         source_name = str(primary_source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
         source_email = str(primary_source.get("email") or participant.email or "").strip()

@@ -648,6 +648,8 @@ async def attendance_set_lesson_status(lesson_id: int, payload: dict):
 async def attendance_create_identity_alias(payload: dict):
     _bootstrap_identity_aliases_if_needed()
     lesson_id = payload.get("lesson_id")
+    canonical_participant_id = payload.get("canonical_participant_id")
+    alias_participant_id = payload.get("alias_participant_id")
     canonical_full_name = str(payload.get("canonical_full_name") or "").strip()
     canonical_email = str(payload.get("canonical_email") or "").strip() or None
     alias_full_name = str(payload.get("alias_full_name") or "").strip()
@@ -670,7 +672,13 @@ async def attendance_create_identity_alias(payload: dict):
                 PostgresAttendanceDraftQueryRepository(),
                 PostgresAttendanceDraftMutationRepository(),
                 PostgresAttendanceIdentityAliasRepository(),
-            ).rebuild_lesson_with_current_aliases(int(lesson_id))
+            ).rebuild_lesson_with_current_aliases_and_hint(
+                int(lesson_id),
+                canonical_participant_id=int(canonical_participant_id) if canonical_participant_id is not None else None,
+                alias_participant_id=int(alias_participant_id) if alias_participant_id is not None else None,
+                forced_canonical_full_name=canonical_full_name,
+                forced_canonical_email=canonical_email,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
