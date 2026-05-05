@@ -697,9 +697,11 @@ class AttendanceLessonIdentityRebuildService:
         remapped_overrides = self._build_manual_override_map(action_sequence, lesson.participants, old_to_target_key)
 
         rebuilt_participants: list[dict] = []
+        missing_target_keys: list[str] = []
         for target_key, participants in grouped_participants.items():
             record = records_by_key.get(target_key)
             if record is None:
+                missing_target_keys.append(target_key)
                 continue
             survivor = min(participants, key=lambda participant: participant.id)
             obsolete_ids = [participant.id for participant in participants if participant.id != survivor.id]
@@ -746,9 +748,16 @@ class AttendanceLessonIdentityRebuildService:
                 }
             )
 
+        if missing_target_keys:
+            raise ValueError(
+                "Impossibile ricostruire completamente la lezione dopo l'unione: "
+                f"mancano record aggregati per {len(missing_target_keys)} identità."
+            )
+
         diagnostics = dict(lesson.diagnostics or {})
         diagnostics["remerged_from_identity_aliases"] = True
         diagnostics["remerged_at"] = datetime.now().isoformat()
+        diagnostics["remerged_participants_count"] = len(rebuilt_participants)
         self._mutation_repository.replace_lesson_participants_after_identity_rebuild(
             lesson.id,
             diagnostics=diagnostics,

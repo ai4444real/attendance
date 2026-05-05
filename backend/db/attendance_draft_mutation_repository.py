@@ -125,6 +125,8 @@ class PostgresAttendanceDraftMutationRepository:
         diagnostics: dict,
         participants: list[dict],
     ) -> None:
+        if not participants:
+            raise ValueError("Cannot replace lesson participants with an empty set.")
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
                 survivor_ids = [participant["survivor_id"] for participant in participants]
@@ -150,19 +152,14 @@ class PostgresAttendanceDraftMutationRepository:
                             (survivor_id, lesson_id, obsolete_id),
                         )
 
-                obsolete_ids = [
-                    obsolete_id
-                    for participant in participants
-                    for obsolete_id in participant.get("obsolete_ids", [])
-                ]
-                if obsolete_ids:
-                    cursor.execute(
-                        """
-                        DELETE FROM attendance_lesson_participants
-                        WHERE lesson_id = %s AND id = ANY(%s)
-                        """,
-                        (lesson_id, obsolete_ids),
-                    )
+                delete_sql = """
+                    DELETE FROM attendance_lesson_participants
+                    WHERE lesson_id = %s
+                      AND id NOT IN ({placeholders})
+                """.format(
+                    placeholders=", ".join(["%s"] * len(survivor_ids))
+                )
+                cursor.execute(delete_sql, [lesson_id, *survivor_ids])
 
                 for participant in participants:
                     cursor.execute(
