@@ -59,6 +59,7 @@ ATTENDANCE_INDEX_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "index.html")
 ATTENDANCE_REVIEW_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "review-normalized.html")
 ATTENDANCE_IMPORT_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "import-zoom.html")
 ATTENDANCE_DRAFTS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "draft-imports.html")
+ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliases.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -300,6 +301,11 @@ async def attendance_home():
                     <h2>Draft importati</h2>
                     <p>Apri i batch già salvati nel database e scorri lezioni e partecipanti direttamente dal modello dati persistito.</p>
                 </a>
+                <a class="card" href="/attendance/aliases">
+                    <span class="card-label">Supporto</span>
+                    <h2>Alias identità</h2>
+                    <p>Controlla gli alias nome registrati nel database e verifica rapidamente se un'unione è stata salvata.</p>
+                </a>
                 <a class="card" href="/attendance/review">
                     <span class="card-label">Nuovo</span>
                     <h2>Revisione normalizzazione</h2>
@@ -350,6 +356,15 @@ async def attendance_import():
 async def attendance_drafts():
     return FileResponse(
         ATTENDANCE_DRAFTS_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/aliases")
+@app.get("/attendance/aliases/")
+async def attendance_aliases():
+    return FileResponse(
+        ATTENDANCE_ALIASES_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -637,6 +652,26 @@ async def attendance_create_identity_alias(payload: dict):
             "is_active": alias.is_active,
             "notes": alias.notes,
         }
+    }
+
+
+@app.get("/api/attendance/identity-aliases")
+async def attendance_list_identity_aliases():
+    repository = PostgresAttendanceIdentityAliasRepository()
+    aliases = repository.list_active_aliases()
+    return {
+        "aliases": [
+            {
+                "id": alias.id,
+                "canonical_full_name": alias.canonical_full_name,
+                "alias_full_name": alias.alias_full_name,
+                "created_by": alias.created_by,
+                "created_at": alias.created_at.isoformat(),
+                "is_active": alias.is_active,
+                "notes": alias.notes,
+            }
+            for alias in aliases
+        ]
     }
 
 
