@@ -5,9 +5,11 @@ const DraftImportsApp = {
         this._els = {
             batchList: document.getElementById('batchList'),
             batchSummary: document.getElementById('batchSummary'),
+            lessonFilters: document.getElementById('lessonFilters'),
             lessonList: document.getElementById('lessonList'),
             lessonsContainer: document.getElementById('lessonsContainer'),
         };
+        this._lessonFilter = 'draft';
 
         await this._loadBatches();
     },
@@ -79,10 +81,11 @@ const DraftImportsApp = {
 
             this._renderBatchSummary(payload.batch);
             this._renderLessonList(payload.lessons || []);
-            if ((payload.lessons || []).length > 0) {
-                await this._loadLessonDetail(payload.lessons[0].id);
+            const visibleLessons = this._filterLessons(payload.lessons || []);
+            if (visibleLessons.length > 0) {
+                await this._loadLessonDetail(visibleLessons[0].id);
             } else {
-                this._els.lessonsContainer.innerHTML = '<div class="empty">Questo import batch non contiene lezioni.</div>';
+                this._els.lessonsContainer.innerHTML = '<div class="empty">Nessuna lezione nel filtro corrente.</div>';
             }
         } catch (error) {
             console.error(error);
@@ -103,31 +106,103 @@ const DraftImportsApp = {
     },
 
     _renderLessonList(lessons) {
-        if (lessons.length === 0) {
+        this._currentLessons = lessons;
+        this._renderLessonFilters(lessons);
+        const visibleLessons = this._filterLessons(lessons);
+        if (visibleLessons.length === 0) {
             this._els.lessonList.innerHTML = '<div class="empty">Questo import batch non contiene lezioni.</div>';
             return;
         }
-
-        this._currentLessons = lessons;
-        this._els.lessonList.innerHTML = lessons.map((lesson) => {
+        this._els.lessonList.innerHTML = visibleLessons.map((lesson) => {
             const summary = lesson.summary || {};
             return `
-                <button class="batch-item${this._selectedLessonId === lesson.id ? ' active' : ''}" data-lesson-id="${lesson.id}" type="button">
-                    <div class="batch-title">${this._escapeHtml(lesson.course_name)}</div>
-                    <div class="batch-meta">
-                        ${this._escapeHtml(lesson.lesson_date)} · meeting ${this._escapeHtml(lesson.source_meeting_id)}<br>
-                        P ${summary.presente || 0} · 1ª ${summary.prima_meta || 0} · 2ª ${summary.seconda_meta || 0} · A ${summary.assente || 0}
+                <div class="batch-item${this._selectedLessonId === lesson.id ? ' active' : ''}">
+                    <button class="lesson-select" data-lesson-id="${lesson.id}" type="button">
+                        <div class="batch-title">${this._escapeHtml(lesson.course_name)}</div>
+                        <div class="batch-meta">
+                            ${this._escapeHtml(lesson.lesson_date)} · meeting ${this._escapeHtml(lesson.source_meeting_id)}<br>
+                            P ${summary.presente || 0} · 1ª ${summary.prima_meta || 0} · 2ª ${summary.seconda_meta || 0} · A ${summary.assente || 0}<br>
+                            ${this._escapeHtml(lesson.status)}${lesson.is_ignored ? ' · ignorata' : ''}
+                        </div>
+                    </button>
+                    <div class="lesson-actions">
+                        <button class="mini-action warn" type="button" data-lesson-action="toggle-ignore" data-lesson-id="${lesson.id}">${lesson.is_ignored ? 'Ripristina' : 'Ignore'}</button>
+                        <button class="mini-action good" type="button" data-lesson-action="toggle-status" data-lesson-id="${lesson.id}" data-target-status="${lesson.status === 'official' ? 'draft' : 'official'}">${lesson.status === 'official' ? 'Riapri' : 'Official'}</button>
                     </div>
-                </button>
+                </div>
             `;
         }).join('');
 
-        this._els.lessonList.querySelectorAll('[data-lesson-id]').forEach((button) => {
+        this._els.lessonList.querySelectorAll('.lesson-select[data-lesson-id]').forEach((button) => {
             button.addEventListener('click', async () => {
                 const lessonId = Number(button.getAttribute('data-lesson-id'));
                 await this._loadLessonDetail(lessonId);
             });
         });
+        this._els.lessonList.querySelectorAll('[data-lesson-action]').forEach((button) => {
+            button.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                const lessonId = Number(button.getAttribute('data-lesson-id'));
+                const action = button.getAttribute('data-lesson-action');
+                if (action === 'toggle-ignore') {
+                    const lesson = lessons.find((item) => item.id === lessonId);
+                    await this._setLessonIgnored(lessonId, !(lesson && lesson.is_ignored));
+                    return;
+                }
+                if (action === 'toggle-status') {
+                    const targetStatus = button.getAttribute('data-target-status');
+                    await this._setLessonStatus(lessonId, targetStatus);
+                }
+            });
+        });
+    },
+
+    _renderLessonFilters(lessons) {
+        const counts = {
+            draft: lessons.filter((lesson) => lesson.status === 'draft' && !lesson.is_ignored).length,
+            ignored: lessons.filter((lesson) => lesson.is_ignored).length,
+            official: lessons.filter((lesson) => lesson.status === 'official' && !lesson.is_ignored).length,
+            all: lessons.length,
+        };
+        this._els.lessonFilters.innerHTML = [
+            ['draft', 'Draft'],
+            ['ignored', 'Ignorate'],
+            ['official', 'Official'],
+            ['all', 'Tutte'],
+        ].map(([key, label]) => `
+            <button type="button" class="filter-chip${this._lessonFilter === key ? ' active' : ''}" data-filter="${key}">
+                ${label} <span class="filter-chip-count">${counts[key] || 0}</span>
+            </button>
+        `).join('');
+        this._els.lessonFilters.querySelectorAll('[data-filter]').forEach((button) => {
+            button.addEventListener('click', () => {
+                this._lessonFilter = button.getAttribute('data-filter') || 'draft';
+                this._renderLessonList(this._currentLessons || []);
+                if (this._currentLessons && !this._filterLessons(this._currentLessons).some((lesson) => lesson.id === this._selectedLessonId)) {
+                    const nextLesson = this._filterLessons(this._currentLessons)[0];
+                    if (nextLesson) {
+                        this._loadLessonDetail(nextLesson.id);
+                    } else {
+                        this._selectedLessonId = null;
+                        this._els.lessonsContainer.innerHTML = '<div class="empty">Nessuna lezione nel filtro corrente.</div>';
+                    }
+                }
+            });
+        });
+    },
+
+    _filterLessons(lessons) {
+        switch (this._lessonFilter) {
+            case 'ignored':
+                return lessons.filter((lesson) => lesson.is_ignored);
+            case 'official':
+                return lessons.filter((lesson) => lesson.status === 'official' && !lesson.is_ignored);
+            case 'all':
+                return lessons;
+            case 'draft':
+            default:
+                return lessons.filter((lesson) => lesson.status === 'draft' && !lesson.is_ignored);
+        }
     },
 
     async _loadLessonDetail(lessonId) {
@@ -160,8 +235,8 @@ const DraftImportsApp = {
             ? timeline.map((point) => this._buildTimelineBar(point, peak, lesson.meeting_start_at)).join('')
             : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
         const participants = lesson.participants || [];
-        const visibleParticipants = participants.filter((participant) => participant.final_presence_status !== 'presente');
-        const presentParticipants = participants.filter((participant) => participant.final_presence_status === 'presente');
+        const visibleParticipants = participants.filter((participant) => participant.final_presence_status !== 'presente' || participant.manual_override_presence_status);
+        const presentParticipants = participants.filter((participant) => participant.final_presence_status === 'presente' && !participant.manual_override_presence_status);
         const diagnosisText = lesson.break_source === 'auto'
             ? 'Pausa rilevata automaticamente dal profilo dei presenti.'
             : lesson.break_source === 'midpoint'
@@ -264,7 +339,11 @@ const DraftImportsApp = {
                                         ${this._renderPercentCell(participant.minutes_second_half, participant.duration_second_half, threshold)}
                                     </td>
                                     <td>
-                                        <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}">${this._escapeHtml(participant.final_presence_status)}</span>
+                                        <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}${participant.manual_override_presence_status ? ' manual' : ''}">${this._escapeHtml(participant.final_presence_status)}</span>
+                                        <div class="row-actions">
+                                            ${participant.final_presence_status !== 'presente' ? `<button type="button" class="mini-action good" data-participant-action="set-presente" data-lesson-id="${lesson.id}" data-participant-id="${participant.id}">Dai presenza</button>` : ''}
+                                            ${participant.manual_override_presence_status ? `<button type="button" class="mini-action neutral" data-participant-action="clear-presence" data-lesson-id="${lesson.id}" data-participant-id="${participant.id}">Reset override</button>` : ''}
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -292,6 +371,29 @@ const DraftImportsApp = {
                 }
                 if (action === 'set-start' || action === 'set-break' || action === 'set-end') {
                     await this._promptAndSaveMarker(lesson, action);
+                }
+            });
+        });
+        this._els.lessonsContainer.querySelectorAll('[data-participant-action]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const action = button.getAttribute('data-participant-action');
+                const participantId = Number(button.getAttribute('data-participant-id'));
+                if (action === 'set-presente') {
+                    await this._createLessonReviewAction(
+                        lesson.id,
+                        'set_manual_presence_status',
+                        { presence_status: 'presente' },
+                        participantId,
+                    );
+                    return;
+                }
+                if (action === 'clear-presence') {
+                    await this._createLessonReviewAction(
+                        lesson.id,
+                        'clear_manual_presence_status',
+                        {},
+                        participantId,
+                    );
                 }
             });
         });
@@ -327,7 +429,7 @@ const DraftImportsApp = {
         await this._createLessonReviewAction(lesson.id, config.type, { at: iso });
     },
 
-    async _createLessonReviewAction(lessonId, actionType, payload) {
+    async _createLessonReviewAction(lessonId, actionType, payload, participantId = null) {
         try {
             const response = await fetch(`/api/attendance/lessons/${lessonId}/review-actions`, {
                 method: 'POST',
@@ -336,6 +438,7 @@ const DraftImportsApp = {
                     action_type: actionType,
                     payload,
                     created_by: 'drafts-ui',
+                    participant_id: participantId,
                 }),
             });
             const data = await response.json();
@@ -349,6 +452,57 @@ const DraftImportsApp = {
         }
     },
 
+    async _setLessonIgnored(lessonId, isIgnored) {
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lessonId}/ignore`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_ignored: isIgnored }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Impossibile aggiornare la lezione.');
+            await this._reloadCurrentBatch(lessonId);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
+    },
+
+    async _setLessonStatus(lessonId, status) {
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lessonId}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Impossibile aggiornare lo stato della lezione.');
+            await this._reloadCurrentBatch(lessonId);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
+    },
+
+    async _reloadCurrentBatch(preferredLessonId = null) {
+        if (!this._selectedBatchId) return;
+        const response = await fetch(`/api/attendance/import-batches/${this._selectedBatchId}`);
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.detail || 'Impossibile ricaricare il batch.');
+        }
+        this._renderBatchSummary(payload.batch);
+        this._renderLessonList(payload.lessons || []);
+        const visibleLessons = this._filterLessons(payload.lessons || []);
+        const nextLesson = visibleLessons.find((lesson) => lesson.id === preferredLessonId) || visibleLessons[0];
+        if (nextLesson) {
+            await this._loadLessonDetail(nextLesson.id);
+        } else {
+            this._selectedLessonId = null;
+            this._els.lessonsContainer.innerHTML = '<div class="empty">Nessuna lezione nel filtro corrente.</div>';
+        }
+    },
+
     _renderReviewActions(actions) {
         if (!actions.length) {
             return '<div class="empty">Nessuna correzione registrata per questa lezione.</div>';
@@ -356,8 +510,9 @@ const DraftImportsApp = {
 
         const activeTypes = new Set();
         return actions.map((action) => {
-            const isActive = !activeTypes.has(action.action_type);
-            if (isActive) activeTypes.add(action.action_type);
+            const actionScope = action.participant_id ? `${action.action_type}:${action.participant_id}` : action.action_type;
+            const isActive = !activeTypes.has(actionScope);
+            if (isActive) activeTypes.add(actionScope);
             return `
             <article class="review-action-item${isActive ? ' active' : ''}">
                 ${isActive ? '<div class="review-action-badge">Attiva nel draft</div>' : ''}
@@ -414,7 +569,7 @@ const DraftImportsApp = {
         const pct = duration > 0 ? minutes / duration : 0;
         const pctRounded = Math.round(pct * 100);
         const missingMinutes = Math.max(0, (duration * threshold) - minutes);
-        const isPositive = pct >= threshold;
+        const isPositive = pct >= (threshold - 0.000001);
         const isBorderline = !isPositive && ((threshold - pct) <= 0.02 || missingMinutes <= 5);
         const tone = isPositive ? 'positive' : isBorderline ? 'borderline' : 'negative';
         return `

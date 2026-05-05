@@ -207,6 +207,8 @@ class AttendanceReviewActionService:
         "set_effective_start",
         "set_break_point",
         "set_effective_end",
+        "set_manual_presence_status",
+        "clear_manual_presence_status",
     }
 
     def __init__(self, repository: AttendanceReviewActionRepository) -> None:
@@ -226,7 +228,9 @@ class AttendanceReviewActionService:
             raise ValueError("lesson_id must be positive")
         if action_type not in self._ALLOWED_ACTIONS:
             raise ValueError(f"Unsupported review action: {action_type}")
-        if not isinstance(payload, dict) or not payload:
+        if not isinstance(payload, dict):
+            raise ValueError("payload is required")
+        if action_type != "clear_manual_presence_status" and not payload:
             raise ValueError("payload is required")
         self._validate_payload(action_type, payload)
         return self._repository.create_lesson_review_action(
@@ -239,6 +243,15 @@ class AttendanceReviewActionService:
         )
 
     def _validate_payload(self, action_type: str, payload: dict) -> None:
+        if action_type == "set_manual_presence_status":
+            presence_status = payload.get("presence_status")
+            if presence_status not in {"presente", "prima_meta", "seconda_meta", "assente"}:
+                raise ValueError("presence_status must be one of presente, prima_meta, seconda_meta, assente")
+            return
+
+        if action_type == "clear_manual_presence_status":
+            return
+
         if action_type == "set_threshold_ratio":
             threshold = payload.get("threshold_ratio")
             if not isinstance(threshold, (int, float)) or threshold <= 0 or threshold > 1:
@@ -272,6 +285,10 @@ class AttendanceDraftRecalculationService:
         break_source = lesson.break_source
         effective_start_source = lesson.effective_start_source
         effective_end_source = lesson.effective_end_source
+        manual_overrides = {
+            participant.id: participant.manual_override_presence_status
+            for participant in lesson.participants
+        }
 
         for action in action_sequence:
             payload = action.payload or {}
@@ -286,6 +303,10 @@ class AttendanceDraftRecalculationService:
             elif action.action_type == "set_effective_end":
                 effective_end_at = str(payload["at"])
                 effective_end_source = "review_action"
+            elif action.action_type == "set_manual_presence_status" and action.participant_id is not None:
+                manual_overrides[action.participant_id] = str(payload["presence_status"])
+            elif action.action_type == "clear_manual_presence_status" and action.participant_id is not None:
+                manual_overrides[action.participant_id] = None
 
         participants_have_segments = all(
             isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
@@ -299,11 +320,13 @@ class AttendanceDraftRecalculationService:
                 effective_start_at=effective_start_at,
                 break_point_at=break_point_at,
                 effective_end_at=effective_end_at,
+                manual_overrides=manual_overrides,
             )
         else:
             participants = self._recalculate_threshold_only(
                 lesson,
                 threshold_ratio=threshold_ratio,
+                manual_overrides=manual_overrides,
             )
 
         diagnostics = dict(lesson.diagnostics or {})
@@ -337,6 +360,7 @@ class AttendanceDraftRecalculationService:
         effective_start_at: str,
         break_point_at: str | None,
         effective_end_at: str,
+        manual_overrides: dict[int, str | None],
     ) -> list[dict]:
         meeting = self._build_zoom_meeting(lesson)
         effective_start = datetime.fromisoformat(effective_start_at)
@@ -368,7 +392,8 @@ class AttendanceDraftRecalculationService:
                 duration_second_half=record.duration_second_half,
                 threshold=threshold_ratio,
             )
-            final = participant.manual_override_presence_status or calculated
+            manual_override_presence_status = manual_overrides.get(participant.id)
+            final = manual_override_presence_status or calculated
             updates.append(
                 {
                     "id": participant.id,
@@ -378,6 +403,7 @@ class AttendanceDraftRecalculationService:
                     "duration_second_half": record.duration_second_half,
                     "total_minutes": record.total_minutes,
                     "calculated_presence_status": calculated,
+                    "manual_override_presence_status": manual_override_presence_status,
                     "final_presence_status": final,
                 }
             )
@@ -388,6 +414,7 @@ class AttendanceDraftRecalculationService:
         lesson: DraftLessonView,
         *,
         threshold_ratio: float,
+        manual_overrides: dict[int, str | None],
     ) -> list[dict]:
         updates: list[dict] = []
         for participant in lesson.participants:
@@ -398,7 +425,8 @@ class AttendanceDraftRecalculationService:
                 duration_second_half=participant.duration_second_half,
                 threshold=threshold_ratio,
             )
-            final = participant.manual_override_presence_status or calculated
+            manual_override_presence_status = manual_overrides.get(participant.id)
+            final = manual_override_presence_status or calculated
             updates.append(
                 {
                     "id": participant.id,
@@ -408,6 +436,7 @@ class AttendanceDraftRecalculationService:
                     "duration_second_half": participant.duration_second_half,
                     "total_minutes": participant.total_minutes,
                     "calculated_presence_status": calculated,
+                    "manual_override_presence_status": manual_override_presence_status,
                     "final_presence_status": final,
                 }
             )
@@ -468,3 +497,24 @@ class AttendanceDraftRecalculationService:
         if parsed.tzinfo is not None and target_tz is None:
             return parsed.replace(tzinfo=None)
         return parsed
+
+
+class AttendanceLessonStateService:
+    """Change lesson state flags that are orthogonal to attendance recalculation."""
+
+    _ALLOWED_STATUSES = {"draft", "official"}
+
+    def __init__(self, mutation_repository: AttendanceDraftMutationRepository) -> None:
+        self._mutation_repository = mutation_repository
+
+    def set_lesson_ignored(self, lesson_id: int, *, is_ignored: bool) -> None:
+        if lesson_id <= 0:
+            raise ValueError("lesson_id must be positive")
+        self._mutation_repository.set_lesson_ignored(lesson_id, is_ignored=is_ignored)
+
+    def set_lesson_status(self, lesson_id: int, *, status: str) -> None:
+        if lesson_id <= 0:
+            raise ValueError("lesson_id must be positive")
+        if status not in self._ALLOWED_STATUSES:
+            raise ValueError(f"Unsupported lesson status: {status}")
+        self._mutation_repository.set_lesson_status(lesson_id, status=status)

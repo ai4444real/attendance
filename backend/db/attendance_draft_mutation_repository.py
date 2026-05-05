@@ -68,6 +68,7 @@ class PostgresAttendanceDraftMutationRepository:
                             duration_second_half = %s,
                             total_minutes = %s,
                             calculated_presence_status = %s,
+                            manual_override_presence_status = %s,
                             final_presence_status = %s,
                             updated_at = NOW()
                         WHERE id = %s
@@ -79,10 +80,42 @@ class PostgresAttendanceDraftMutationRepository:
                             participant["duration_second_half"],
                             participant["total_minutes"],
                             participant["calculated_presence_status"],
+                            participant["manual_override_presence_status"],
                             participant["final_presence_status"],
                             participant["id"],
                         ),
                     )
+            connection.commit()
+
+    def set_lesson_ignored(self, lesson_id: int, *, is_ignored: bool) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE attendance_lessons
+                    SET
+                        is_ignored = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (is_ignored, lesson_id),
+                )
+            connection.commit()
+
+    def set_lesson_status(self, lesson_id: int, *, status: str) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE attendance_lessons
+                    SET
+                        status = %s,
+                        officialized_at = CASE WHEN %s = 'official' THEN NOW() ELSE NULL END,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (status, status, lesson_id),
+                )
             connection.commit()
 
 

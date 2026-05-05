@@ -73,3 +73,9 @@ class AttendanceDraftMutationRepository(Protocol):
         participants: list[dict],
     ) -> None:
         """Persist recalculated lesson and participant values."""
+
+    def set_lesson_ignored(self, lesson_id: int, *, is_ignored: bool) -> None:
+        """Toggle one lesson between visible and ignored."""
+
+    def set_lesson_status(self, lesson_id: int, *, status: str) -> None:
+        """Promote or reopen one lesson draft state."""

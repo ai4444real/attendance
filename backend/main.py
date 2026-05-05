@@ -17,8 +17,12 @@ from dotenv import load_dotenv
 
 from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_app.models import ImportBatchCreate
-from backend.attendance_app.services import AttendanceImportService, AttendanceReviewActionService
-from backend.attendance_app.services import AttendanceDraftRecalculationService
+from backend.attendance_app.services import (
+    AttendanceDraftRecalculationService,
+    AttendanceImportService,
+    AttendanceLessonStateService,
+    AttendanceReviewActionService,
+)
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
 from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
@@ -526,6 +530,7 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
     action_payload = payload.get("payload") or {}
     created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
     notes = payload.get("notes")
+    participant_id = payload.get("participant_id")
     query_repository = PostgresAttendanceDraftQueryRepository()
 
     if action_type in {"set_effective_start", "set_break_point", "set_effective_end"}:
@@ -548,6 +553,7 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
             action_payload,
             created_by=created_by,
             notes=notes,
+            participant_id=int(participant_id) if participant_id is not None else None,
         )
         recalculated_lesson = AttendanceDraftRecalculationService(
             query_repository,
@@ -573,6 +579,28 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
         },
         "lesson_id": recalculated_lesson.id,
     }
+
+
+@app.post("/api/attendance/lessons/{lesson_id}/ignore")
+async def attendance_set_lesson_ignored(lesson_id: int, payload: dict):
+    is_ignored = bool(payload.get("is_ignored"))
+    service = AttendanceLessonStateService(PostgresAttendanceDraftMutationRepository())
+    try:
+        service.set_lesson_ignored(lesson_id, is_ignored=is_ignored)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"lesson_id": lesson_id, "is_ignored": is_ignored}
+
+
+@app.post("/api/attendance/lessons/{lesson_id}/status")
+async def attendance_set_lesson_status(lesson_id: int, payload: dict):
+    status = str(payload.get("status") or "").strip()
+    service = AttendanceLessonStateService(PostgresAttendanceDraftMutationRepository())
+    try:
+        service.set_lesson_status(lesson_id, status=status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"lesson_id": lesson_id, "status": status}
 
 
 @app.get("/health")

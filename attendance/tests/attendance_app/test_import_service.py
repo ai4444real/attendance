@@ -15,6 +15,7 @@ from backend.attendance_app.models import (
 from backend.attendance_app.services import (
     AttendanceDraftRecalculationService,
     AttendanceImportService,
+    AttendanceLessonStateService,
     AttendanceReviewActionService,
 )
 from backend.attendance_normalization.service import (
@@ -83,9 +84,17 @@ class FakeAttendanceDraftQueryRepository:
 class FakeAttendanceDraftMutationRepository:
     def __init__(self) -> None:
         self.last_update = None
+        self.ignored_calls = []
+        self.status_calls = []
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
+
+    def set_lesson_ignored(self, lesson_id: int, *, is_ignored: bool) -> None:
+        self.ignored_calls.append((lesson_id, is_ignored))
+
+    def set_lesson_status(self, lesson_id: int, *, status: str) -> None:
+        self.status_calls.append((lesson_id, status))
 
 
 class AttendanceImportServiceTest(unittest.TestCase):
@@ -230,6 +239,17 @@ class AttendanceReviewActionServiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.create_lesson_review_action(12, "explode_lesson", {"foo": "bar"})
 
+    def test_create_lesson_review_action_accepts_manual_presence_override(self) -> None:
+        action = self.service.create_lesson_review_action(
+            12,
+            "set_manual_presence_status",
+            {"presence_status": "presente"},
+            participant_id=44,
+        )
+
+        self.assertEqual("set_manual_presence_status", action.action_type)
+        self.assertEqual(1, len(self.repository.calls))
+
 
 class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
     def test_recalculate_lesson_accepts_naive_segment_datetimes_with_aware_markers(self) -> None:
@@ -284,6 +304,86 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
 
         self.assertIsNotNone(mutation.last_update)
         self.assertEqual(1, len(mutation.last_update["participants"]))
+
+    def test_recalculate_lesson_applies_latest_manual_presence_override(self) -> None:
+        lesson = DraftLessonView(
+            id=51,
+            course_name="MASTER",
+            lesson_date="2026-02-09",
+            source_meeting_id="886 5440 3922",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-02-09T19:54:00+00:00",
+            meeting_end_at="2026-02-09T23:06:00+00:00",
+            effective_start_at="2026-02-09T20:00:00+00:00",
+            break_point_at="2026-02-09T21:33:00+00:00",
+            effective_end_at="2026-02-09T23:06:00+00:00",
+            break_source="midpoint",
+            effective_start_source="snap",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=2,
+                    canonical_full_name="Mario Rossi",
+                    email="mario@example.com",
+                    segment_count=1,
+                    minutes_first_half=40.0,
+                    minutes_second_half=20.0,
+                    duration_first_half=50.0,
+                    duration_second_half=50.0,
+                    total_minutes=60.0,
+                    calculated_presence_status="prima_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="prima_meta",
+                    flags=[],
+                    metadata={"segments": []},
+                )
+            ],
+            review_actions=[
+                DraftReviewActionView(
+                    id=1,
+                    lesson_id=51,
+                    participant_id=2,
+                    action_type="set_manual_presence_status",
+                    payload={"presence_status": "presente"},
+                    created_by="test",
+                    created_at="2026-05-05T10:00:00+00:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            ],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(51)
+
+        participant_update = mutation.last_update["participants"][0]
+        self.assertEqual("presente", participant_update["manual_override_presence_status"])
+        self.assertEqual("presente", participant_update["final_presence_status"])
+
+
+class AttendanceLessonStateServiceTest(unittest.TestCase):
+    def test_set_lesson_ignored_delegates_to_repository(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonStateService(mutation)
+
+        service.set_lesson_ignored(12, is_ignored=True)
+
+        self.assertEqual([(12, True)], mutation.ignored_calls)
+
+    def test_set_lesson_status_rejects_unknown_status(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonStateService(mutation)
+
+        with self.assertRaises(ValueError):
+            service.set_lesson_status(12, status="processing")
 
 
 if __name__ == "__main__":
