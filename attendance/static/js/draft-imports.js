@@ -235,8 +235,8 @@ const DraftImportsApp = {
             ? timeline.map((point) => this._buildTimelineBar(point, peak, lesson.meeting_start_at)).join('')
             : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
         const participants = lesson.participants || [];
-        const visibleParticipants = participants.filter((participant) => participant.final_presence_status !== 'presente' || participant.manual_override_presence_status);
-        const presentParticipants = participants.filter((participant) => participant.final_presence_status === 'presente' && !participant.manual_override_presence_status);
+        const visibleParticipants = participants.filter((participant) => participant.final_presence_status !== 'presente');
+        const presentParticipants = participants.filter((participant) => participant.final_presence_status === 'presente');
         const diagnosisText = lesson.break_source === 'auto'
             ? 'Pausa rilevata automaticamente dal profilo dei presenti.'
             : lesson.break_source === 'midpoint'
@@ -341,8 +341,7 @@ const DraftImportsApp = {
                                     <td>
                                         <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}${participant.manual_override_presence_status ? ' manual' : ''}">${this._escapeHtml(participant.final_presence_status)}</span>
                                         <div class="row-actions">
-                                            ${participant.final_presence_status !== 'presente' ? `<button type="button" class="mini-action good" data-participant-action="set-presente" data-lesson-id="${lesson.id}" data-participant-id="${participant.id}">Dai presenza</button>` : ''}
-                                            ${participant.manual_override_presence_status ? `<button type="button" class="mini-action neutral" data-participant-action="clear-presence" data-lesson-id="${lesson.id}" data-participant-id="${participant.id}">Reset override</button>` : ''}
+                                            ${this._renderPresenceOverrideControl(lesson.id, participant)}
                                         </div>
                                     </td>
                                 </tr>
@@ -352,7 +351,14 @@ const DraftImportsApp = {
                     ${presentParticipants.length > 0 ? `
                         <div class="present-list">
                             <div class="present-list-title">Presenti</div>
-                            <div class="present-list-body">${presentParticipants.map((participant) => this._escapeHtml(participant.canonical_full_name)).join(', ')}</div>
+                            <div class="present-list-items">
+                                ${presentParticipants.map((participant) => `
+                                    <div class="present-chip">
+                                        <span class="present-chip-name">${this._escapeHtml(participant.canonical_full_name)}</span>
+                                        ${this._renderPresenceOverrideControl(lesson.id, participant)}
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
                     ` : ''}
                 </div>
@@ -374,29 +380,40 @@ const DraftImportsApp = {
                 }
             });
         });
-        this._els.lessonsContainer.querySelectorAll('[data-participant-action]').forEach((button) => {
-            button.addEventListener('click', async () => {
-                const action = button.getAttribute('data-participant-action');
-                const participantId = Number(button.getAttribute('data-participant-id'));
-                if (action === 'set-presente') {
-                    await this._createLessonReviewAction(
-                        lesson.id,
-                        'set_manual_presence_status',
-                        { presence_status: 'presente' },
-                        participantId,
-                    );
-                    return;
-                }
-                if (action === 'clear-presence') {
+        this._els.lessonsContainer.querySelectorAll('[data-presence-override]').forEach((select) => {
+            select.addEventListener('change', async () => {
+                const participantId = Number(select.getAttribute('data-participant-id'));
+                const value = select.value;
+                if (value === 'auto') {
                     await this._createLessonReviewAction(
                         lesson.id,
                         'clear_manual_presence_status',
                         {},
                         participantId,
                     );
+                    return;
                 }
+                await this._createLessonReviewAction(
+                    lesson.id,
+                    'set_manual_presence_status',
+                    { presence_status: value },
+                    participantId,
+                );
             });
         });
+    },
+
+    _renderPresenceOverrideControl(lessonId, participant) {
+        const currentValue = participant.manual_override_presence_status || 'auto';
+        return `
+            <select class="override-select" data-presence-override="1" data-lesson-id="${lessonId}" data-participant-id="${participant.id}">
+                <option value="auto"${currentValue === 'auto' ? ' selected' : ''}>Automatico</option>
+                <option value="presente"${currentValue === 'presente' ? ' selected' : ''}>Presente</option>
+                <option value="prima_meta"${currentValue === 'prima_meta' ? ' selected' : ''}>Prima metà</option>
+                <option value="seconda_meta"${currentValue === 'seconda_meta' ? ' selected' : ''}>Seconda metà</option>
+                <option value="assente"${currentValue === 'assente' ? ' selected' : ''}>Assente</option>
+            </select>
+        `;
     },
 
     async _promptAndSaveThreshold(lesson) {
@@ -567,13 +584,16 @@ const DraftImportsApp = {
 
     _renderPercentCell(minutes, duration, threshold) {
         const pct = duration > 0 ? minutes / duration : 0;
-        const pctRounded = Math.round(pct * 100);
+        const pctPercent = pct * 100;
+        const thresholdPercent = threshold * 100;
         const missingMinutes = Math.max(0, (duration * threshold) - minutes);
         const isPositive = pct >= (threshold - 0.000001);
         const isBorderline = !isPositive && ((threshold - pct) <= 0.02 || missingMinutes <= 5);
         const tone = isPositive ? 'positive' : isBorderline ? 'borderline' : 'negative';
+        const shouldShowDecimal = Math.abs(pctPercent - thresholdPercent) < 1.05;
+        const pctDisplay = shouldShowDecimal ? `${pctPercent.toFixed(1)}%` : `${Math.round(pctPercent)}%`;
         return `
-            <div class="percent-big ${tone}">${pctRounded}%</div>
+            <div class="percent-big ${tone}">${pctDisplay}</div>
             <div class="percent-meta">${isBorderline ? 'borderline' : `soglia ${Math.round(threshold * 100)}%`}</div>
         `;
     },
