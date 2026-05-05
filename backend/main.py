@@ -68,6 +68,17 @@ app.mount("/attendance/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), na
 app.mount("/attendance/manage", StaticFiles(directory=ATTENDANCE_ADAPTER_DIR, html=True), name="attendance-manage")
 app.mount("/assets", StaticFiles(directory=GLOBAL_ASSETS_DIR), name="global-assets")
 
+_identity_alias_bootstrap_done = False
+
+
+def _bootstrap_identity_aliases_if_needed() -> None:
+    global _identity_alias_bootstrap_done
+    if _identity_alias_bootstrap_done:
+        return
+    service = AttendanceIdentityAliasService(PostgresAttendanceIdentityAliasRepository())
+    service.bootstrap_from_legacy_rules()
+    _identity_alias_bootstrap_done = True
+
 
 def render_module_shell(title: str, subtitle: str, body_html: str) -> str:
     return f"""
@@ -374,6 +385,14 @@ async def attendance_manage():
     return RedirectResponse(url="/attendance/manage/", status_code=307)
 
 
+@app.on_event("startup")
+async def bootstrap_attendance_identity_aliases() -> None:
+    try:
+        _bootstrap_identity_aliases_if_needed()
+    except Exception as exc:
+        print(f"[startup] identity alias bootstrap skipped: {exc}")
+
+
 @app.post("/api/attendance/import-draft")
 async def attendance_import_draft(file: UploadFile = File(...)):
     filename = file.filename or ""
@@ -386,6 +405,7 @@ async def attendance_import_draft(file: UploadFile = File(...)):
 
     temp_path: str | None = None
     try:
+        _bootstrap_identity_aliases_if_needed()
         suffix = Path(filename).suffix or ".csv"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file.write(content)
@@ -625,6 +645,7 @@ async def attendance_set_lesson_status(lesson_id: int, payload: dict):
 
 @app.post("/api/attendance/identity-aliases")
 async def attendance_create_identity_alias(payload: dict):
+    _bootstrap_identity_aliases_if_needed()
     canonical_full_name = str(payload.get("canonical_full_name") or "").strip()
     alias_full_name = str(payload.get("alias_full_name") or "").strip()
     created_by = str(payload.get("created_by") or "drafts-ui").strip() or "drafts-ui"
@@ -657,6 +678,7 @@ async def attendance_create_identity_alias(payload: dict):
 
 @app.get("/api/attendance/identity-aliases")
 async def attendance_list_identity_aliases():
+    _bootstrap_identity_aliases_if_needed()
     repository = PostgresAttendanceIdentityAliasRepository()
     aliases = repository.list_active_aliases()
     return {

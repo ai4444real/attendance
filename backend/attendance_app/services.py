@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from backend.attendance_normalization.aggregator import ZoomMeeting, ZoomSegment, aggregate_meeting
+from backend.attendance_normalization.identity_rules import load_identity_rules
 from backend.attendance_normalization.presence_rules import determine_presence_status
 from backend.attendance_normalization.service import NormalizationResult
 
@@ -583,3 +584,17 @@ class AttendanceIdentityAliasService:
             created_by=created_by,
             notes=notes,
         )
+
+    def bootstrap_from_legacy_rules(self, path: str | None = None) -> int:
+        rules = load_identity_rules(path)
+        created = 0
+        for rule in rules.rules:
+            for alias in rule.aliases:
+                self._repository.create_alias(
+                    canonical_full_name=rule.canonical_full_name,
+                    alias_full_name=alias,
+                    created_by="legacy-bootstrap",
+                    notes="Importato da attendance/config/identity_rules.json",
+                )
+                created += 1
+        return created

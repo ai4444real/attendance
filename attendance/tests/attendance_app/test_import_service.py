@@ -466,6 +466,14 @@ class AttendanceIdentityAliasServiceTest(unittest.TestCase):
                 alias_full_name="mario rossi",
             )
 
+    def test_bootstrap_from_legacy_rules_imports_all_aliases(self) -> None:
+        repository = FakeAttendanceIdentityAliasRepository()
+        service = AttendanceIdentityAliasService(repository)
+
+        created = service.bootstrap_from_legacy_rules("attendance/config/identity_rules.json")
+
+        self.assertEqual(8, created)
+
 
 if __name__ == "__main__":
     unittest.main()
