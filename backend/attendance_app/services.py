@@ -625,6 +625,11 @@ class AttendanceIdentityAliasService:
                 created += 1
         return created
 
+    def deactivate_alias(self, alias_id: int) -> None:
+        if alias_id <= 0:
+            raise ValueError("alias_id must be positive")
+        self._repository.deactivate_alias(alias_id)
+
 
 class AttendanceLessonIdentityRebuildService:
     """Rebuild one draft lesson participant set using the current identity alias rules."""

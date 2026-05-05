@@ -726,6 +726,23 @@ async def attendance_list_identity_aliases():
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
+@app.post("/api/attendance/identity-aliases/{alias_id}/deactivate")
+async def attendance_deactivate_identity_alias(alias_id: int):
+    service = AttendanceIdentityAliasService(PostgresAttendanceIdentityAliasRepository())
+    try:
+        service.deactivate_alias(alias_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Disattivazione alias fallita: {exc}") from exc
+    return JSONResponse(
+        {"alias_id": alias_id, "is_active": False},
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "rebekko-webapps"}

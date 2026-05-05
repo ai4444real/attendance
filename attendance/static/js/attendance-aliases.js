@@ -7,6 +7,21 @@ const AttendanceAliasesApp = {
             aliasesBody: document.getElementById('aliasesBody'),
         };
 
+        this._els.aliasesBody.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-action="deactivate-alias"]');
+            if (!button) {
+                return;
+            }
+            const aliasId = Number(button.dataset.aliasId || 0);
+            if (!aliasId) {
+                return;
+            }
+            this._deactivateAlias(aliasId, button).catch((error) => {
+                console.error(error);
+                window.alert(error.message || 'Impossibile disattivare l’alias.');
+            });
+        });
+
         await this._loadAliases();
     },
 
@@ -49,6 +64,7 @@ const AttendanceAliasesApp = {
                         <th>Creato da</th>
                         <th>Creato il</th>
                         <th>Note</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -60,11 +76,42 @@ const AttendanceAliasesApp = {
                             <td>${this._escapeHtml(alias.created_by || '—')}</td>
                             <td>${this._escapeHtml(this._formatDateTime(alias.created_at))}</td>
                             <td>${this._escapeHtml(alias.notes || '—')}</td>
+                            <td class="actions-cell">
+                                <button
+                                    type="button"
+                                    class="alias-delete-button"
+                                    data-action="deactivate-alias"
+                                    data-alias-id="${this._escapeAttr(alias.id)}"
+                                    title="Disattiva alias"
+                                    aria-label="Disattiva alias ${this._escapeAttr(alias.alias_value)}"
+                                >×</button>
+                            </td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
         `;
+    },
+
+    async _deactivateAlias(aliasId, button) {
+        if (!window.confirm('Disattivare questo alias?')) {
+            return;
+        }
+        button.disabled = true;
+        const response = await fetch(`/api/attendance/identity-aliases/${aliasId}/deactivate`, {
+            method: 'POST',
+            cache: 'no-store',
+        });
+        let payload = {};
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = {};
+        }
+        if (!response.ok) {
+            throw new Error(payload.detail || 'Impossibile disattivare l’alias.');
+        }
+        await this._loadAliases();
     },
 
     _formatDateTime(value) {
@@ -85,6 +132,10 @@ const AttendanceAliasesApp = {
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#39;');
+    },
+
+    _escapeAttr(value) {
+        return this._escapeHtml(value);
     },
 };
 

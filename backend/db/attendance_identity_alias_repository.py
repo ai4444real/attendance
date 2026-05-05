@@ -125,6 +125,22 @@ class PostgresAttendanceIdentityAliasRepository:
             notes=row[8],
         )
 
+    def deactivate_alias(self, alias_id: int) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE attendance_identity_aliases
+                    SET
+                        is_active = FALSE
+                    WHERE id = %s
+                    """,
+                    (alias_id,),
+                )
+                if cursor.rowcount == 0:
+                    raise LookupError(f"Attendance identity alias {alias_id} not found.")
+            connection.commit()
+
 
 def _normalize_key(value: str) -> str:
     return " ".join((value or "").strip().casefold().split())

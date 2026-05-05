@@ -46,6 +46,9 @@ class AttendanceIdentityAliasRepository(Protocol):
     ) -> AttendanceIdentityAlias:
         """Create or update one active alias rule."""
 
+    def deactivate_alias(self, alias_id: int) -> None:
+        """Deactivate one alias rule without deleting history."""
+
 
 class AttendanceDraftQueryRepository(Protocol):
     """Read-only queries for draft attendance imports."""
