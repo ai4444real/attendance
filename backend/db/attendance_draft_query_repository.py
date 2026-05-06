@@ -12,6 +12,7 @@ from backend.attendance_app.models import (
     DraftReviewActionView,
     DraftLessonView,
     ImportBatchSummary,
+    SchoolAttendanceRecordView,
 )
 
 from .connection import get_db_connection
@@ -324,6 +325,40 @@ class PostgresAttendanceDraftQueryRepository:
                 join_time=_ensure_datetime(row[2]).isoformat(),
                 leave_time=_ensure_datetime(row[3]).isoformat(),
                 metadata=dict(row[4] or {}),
+            )
+            for row in rows
+        ]
+
+    def list_school_attendance_records(self) -> list[SchoolAttendanceRecordView]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        l.id,
+                        l.course_name,
+                        l.lesson_date,
+                        p.canonical_full_name,
+                        p.email,
+                        p.final_presence_status
+                    FROM attendance_lessons AS l
+                    JOIN attendance_lesson_participants AS p
+                        ON p.lesson_id = l.id
+                    WHERE l.status = 'official'
+                      AND l.is_ignored = FALSE
+                    ORDER BY l.course_name ASC, l.lesson_date ASC, p.canonical_full_name ASC, p.id ASC
+                    """
+                )
+                rows = cursor.fetchall()
+
+        return [
+            SchoolAttendanceRecordView(
+                lesson_id=int(row[0]),
+                course_name=str(row[1]),
+                lesson_date=row[2].isoformat(),
+                canonical_full_name=str(row[3]),
+                email=row[4],
+                final_presence_status=str(row[5]),
             )
             for row in rows
         ]

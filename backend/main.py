@@ -63,6 +63,7 @@ ATTENDANCE_REVIEW_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "review-normalized.
 ATTENDANCE_IMPORT_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "import-zoom.html")
 ATTENDANCE_DRAFTS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "draft-imports.html")
 ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliases.html")
+ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -300,6 +301,11 @@ async def attendance_home():
                     <h2>Visualizzazione presenze</h2>
                     <p>Apri la schermata attuale per caricare i file CSV trackcc-like, analizzare i dati e usare filtri ed export.</p>
                 </a>
+                <a class="card" href="/attendance/school">
+                    <span class="card-label">MVP</span>
+                    <h2>Analisi scuola</h2>
+                    <p>Consulta i dati ufficiali già consolidati: tabella presenze, filtri per corso e studente, riepilogo dei totali.</p>
+                </a>
                 <a class="card" href="/attendance/manage">
                     <span class="card-label">Attivo</span>
                     <h2>Gestione presenze</h2>
@@ -379,6 +385,15 @@ async def attendance_drafts():
 async def attendance_aliases():
     return FileResponse(
         ATTENDANCE_ALIASES_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/school")
+@app.get("/attendance/school/")
+async def attendance_school():
+    return FileResponse(
+        ATTENDANCE_SCHOOL_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -814,6 +829,28 @@ async def attendance_list_identity_aliases():
             for alias in aliases
         ]
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/attendance/school-records")
+async def attendance_school_records():
+    repository = PostgresAttendanceDraftQueryRepository()
+    records = repository.list_school_attendance_records()
+    return JSONResponse(
+        {
+            "records": [
+                {
+                    "lesson_id": record.lesson_id,
+                    "course_name": record.course_name,
+                    "lesson_date": record.lesson_date,
+                    "canonical_full_name": record.canonical_full_name,
+                    "email": record.email,
+                    "final_presence_status": record.final_presence_status,
+                }
+                for record in records
+            ]
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.post("/api/attendance/identity-aliases/{alias_id}/deactivate")

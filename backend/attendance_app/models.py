@@ -202,3 +202,13 @@ class DraftLessonSummary:
 class DraftBatchDetail:
     batch: ImportBatchSummary
     lessons: list[DraftLessonSummary]
+
+
+@dataclass(frozen=True)
+class SchoolAttendanceRecordView:
+    lesson_id: int
+    course_name: str
+    lesson_date: str
+    canonical_full_name: str
+    email: Optional[str]
+    final_presence_status: str
