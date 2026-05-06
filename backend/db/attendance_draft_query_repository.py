@@ -20,11 +20,34 @@ from .connection import get_db_connection
 class PostgresAttendanceDraftQueryRepository:
     """Read draft batches, lessons and participants from PostgreSQL."""
 
-    def list_batches(self, limit: int = 20) -> list[ImportBatchSummary]:
+    def list_batches(self, limit: int = 20, scope: str = "open") -> list[ImportBatchSummary]:
+        if scope not in {"open", "closed", "all"}:
+            raise ValueError(f"Unsupported batch scope: {scope}")
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
+                where_clause = ""
+                if scope == "open":
+                    where_clause = """
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM attendance_lessons AS lx
+                        WHERE lx.import_batch_id = b.id
+                          AND lx.status = 'draft'
+                          AND lx.is_ignored = FALSE
+                    )
                     """
+                elif scope == "closed":
+                    where_clause = """
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM attendance_lessons AS lx
+                        WHERE lx.import_batch_id = b.id
+                          AND lx.status = 'draft'
+                          AND lx.is_ignored = FALSE
+                    )
+                    """
+                cursor.execute(
+                    f"""
                     SELECT
                         b.id,
                         b.source_system,
@@ -38,13 +61,7 @@ class PostgresAttendanceDraftQueryRepository:
                         ON l.import_batch_id = b.id
                     LEFT JOIN attendance_lesson_participants AS p
                         ON p.lesson_id = l.id
-                    WHERE EXISTS (
-                        SELECT 1
-                        FROM attendance_lessons AS lx
-                        WHERE lx.import_batch_id = b.id
-                          AND lx.status = 'draft'
-                          AND lx.is_ignored = FALSE
-                    )
+                    {where_clause}
                     GROUP BY b.id
                     ORDER BY b.created_at DESC
                     LIMIT %s

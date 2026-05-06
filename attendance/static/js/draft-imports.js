@@ -5,10 +5,12 @@ const DraftImportsApp = {
         this._els = {
             batchList: document.getElementById('batchList'),
             batchSummary: document.getElementById('batchSummary'),
+            batchFilters: document.getElementById('batchFilters'),
             lessonFilters: document.getElementById('lessonFilters'),
             lessonList: document.getElementById('lessonList'),
             lessonsContainer: document.getElementById('lessonsContainer'),
         };
+        this._batchScope = 'open';
         this._lessonFilter = 'draft';
 
         await this._loadBatches();
@@ -19,9 +21,10 @@ const DraftImportsApp = {
         this._els.batchSummary.innerHTML = '';
         this._els.lessonList.innerHTML = '';
         this._els.lessonsContainer.innerHTML = '<div class="empty">Seleziona un import batch.</div>';
+        this._renderBatchFilters();
 
         try {
-            const response = await fetch('/api/attendance/import-batches', { cache: 'no-store' });
+            const response = await fetch(`/api/attendance/import-batches?scope=${encodeURIComponent(this._batchScope)}`, { cache: 'no-store' });
             const payload = await this._readApiPayload(response);
             if (!response.ok) {
                 throw new Error(payload.detail || 'Impossibile leggere gli import batch.');
@@ -34,12 +37,32 @@ const DraftImportsApp = {
                 const nextBatch = this._batches.find((batch) => batch.id === preferredBatchId) || this._batches[0];
                 await this._loadBatchDetail(nextBatch.id, preferredLessonId);
             } else {
-                this._els.batchList.innerHTML = '<div class="empty">Nessun import batch nel database.</div>';
+                this._els.batchList.innerHTML = '<div class="empty">Nessun import batch nel filtro corrente.</div>';
+                this._els.batchSummary.innerHTML = '';
             }
         } catch (error) {
             console.error(error);
             this._els.batchList.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
         }
+    },
+
+    _renderBatchFilters() {
+        const filters = [
+            ['open', 'Aperti'],
+            ['closed', 'Chiusi'],
+            ['all', 'Tutti'],
+        ];
+        this._els.batchFilters.innerHTML = filters.map(([key, label]) => `
+            <button type="button" class="filter-chip${this._batchScope === key ? ' active' : ''}" data-batch-scope="${key}">
+                ${label}
+            </button>
+        `).join('');
+        this._els.batchFilters.querySelectorAll('[data-batch-scope]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                this._batchScope = button.getAttribute('data-batch-scope') || 'open';
+                await this._loadBatches();
+            });
+        });
     },
 
     _renderBatchList() {

@@ -466,9 +466,12 @@ async def attendance_import_draft(file: UploadFile = File(...)):
 
 
 @app.get("/api/attendance/import-batches")
-async def attendance_import_batches():
+async def attendance_import_batches(scope: str = "open"):
     repository = PostgresAttendanceDraftQueryRepository()
-    batches = repository.list_batches(limit=30)
+    try:
+        batches = repository.list_batches(limit=60, scope=scope)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse({
         "batches": [
             {
