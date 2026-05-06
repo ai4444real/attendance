@@ -132,7 +132,7 @@ class PostgresAttendanceDraftQueryRepository:
                         l.threshold_ratio
                     FROM attendance_lessons AS l
                     WHERE l.import_batch_id = %s
-                    ORDER BY l.lesson_date DESC, l.course_name ASC, l.id ASC
+                    ORDER BY l.lesson_date ASC, l.course_name ASC, l.id ASC
                     """,
                     (batch_id,),
                 )
