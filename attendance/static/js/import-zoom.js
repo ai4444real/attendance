@@ -9,8 +9,9 @@ const ImportZoomApp = {
             reviewLastBtn: document.getElementById('reviewLastBtn'),
             statusLine: document.getElementById('statusLine'),
             summaryPanel: document.getElementById('summaryPanel'),
-            summaryGrid: document.getElementById('summaryGrid'),
-            summaryNotes: document.getElementById('summaryNotes'),
+            summaryStrip: document.getElementById('summaryStrip'),
+            importedLessonsList: document.getElementById('importedLessonsList'),
+            skippedLessonsList: document.getElementById('skippedLessonsList'),
         };
 
         this._wireUpload();
@@ -89,63 +90,56 @@ const ImportZoomApp = {
     },
 
     _renderSummary(fileName, payload) {
-        const cards = [
+        const stripItems = [
             {
-                label: 'File',
-                value: fileName,
-                detail: payload.batch_created ? `batch #${payload.batch_id}` : 'nessun batch creato',
+                label: 'Batch',
+                value: payload.batch_created ? `#${payload.batch_id}` : 'nessuno',
+                tone: payload.batch_created ? 'good' : '',
             },
             {
-                label: 'Lezioni',
+                label: 'Lezioni importate',
                 value: String(payload.lessons_created ?? 0),
-                detail: 'salvate in draft',
+                tone: (payload.lessons_created ?? 0) > 0 ? 'good' : '',
             },
             {
-                label: 'Partecipanti',
-                value: String(payload.participants_created ?? 0),
-                detail: 'record draft creati',
-            },
-            {
-                label: 'Duplicati skip',
+                label: 'Lezioni non importate',
                 value: String(payload.duplicate_lessons_skipped ?? 0),
-                detail: (payload.skipped_duplicates && payload.skipped_duplicates.length)
-                    ? `${payload.skipped_duplicates[0].course_name} · ${payload.skipped_duplicates[0].lesson_date}`
-                    : 'non importati nel DB',
-            },
-            {
-                label: 'Stato',
-                value: String(payload.status ?? 'draft'),
-                detail: payload.source_file_name || 'import batch',
+                tone: (payload.duplicate_lessons_skipped ?? 0) > 0 ? 'warn' : '',
             },
         ];
 
-        this._els.summaryGrid.innerHTML = cards.map((card) => `
-            <article class="summary-card">
-                <div class="summary-label">${this._escapeHtml(card.label)}</div>
-                <div class="summary-value">${this._escapeHtml(card.value)}</div>
-                <div class="summary-detail">${this._escapeHtml(card.detail)}</div>
-            </article>
+        this._els.summaryStrip.innerHTML = stripItems.map((item) => `
+            <div class="result-pill">
+                <span class="result-pill-label">${this._escapeHtml(item.label)}</span>
+                <span class="result-pill-value ${this._escapeHtml(item.tone || '')}">${this._escapeHtml(item.value)}</span>
+            </div>
         `).join('');
 
+        const imported = payload.imported_lessons || [];
         const skipped = payload.skipped_duplicates || [];
-        if (skipped.length > 0) {
-            this._els.summaryNotes.innerHTML = `
-                <div class="summary-note-title">Lezioni non importate perché già esistenti</div>
-                <div class="summary-note-list">
-                    ${skipped.slice(0, 8).map((item) => `
-                        <div class="summary-note-item">
-                            ${this._escapeHtml(item.course_name)} · ${this._escapeHtml(item.lesson_date)} · meeting ${this._escapeHtml(item.source_meeting_id)}
-                            <span class="summary-note-hint">già presente in batch #${this._escapeHtml(item.existing_batch_id)} · lesson #${this._escapeHtml(item.existing_lesson_id)}</span>
-                        </div>
-                    `).join('')}
-                    ${skipped.length > 8 ? `<div class="summary-note-item">... e altre ${this._escapeHtml(skipped.length - 8)} lezioni già presenti</div>` : ''}
-                </div>
-            `;
-            this._els.summaryNotes.classList.remove('hidden');
-        } else {
-            this._els.summaryNotes.innerHTML = '';
-            this._els.summaryNotes.classList.add('hidden');
-        }
+        this._els.importedLessonsList.innerHTML = imported.length > 0
+            ? `
+                ${imported.slice(0, 8).map((item) => `
+                    <div class="summary-item">
+                        ${this._escapeHtml(item.course_name)} · ${this._escapeHtml(item.lesson_date)}
+                        <span class="summary-item-hint">meeting ${this._escapeHtml(item.source_meeting_id)}</span>
+                    </div>
+                `).join('')}
+                ${imported.length > 8 ? `<div class="summary-item">... e altre ${this._escapeHtml(imported.length - 8)} lezioni importate</div>` : ''}
+            `
+            : '<div class="summary-empty">Nessuna lezione nuova in questo file.</div>';
+
+        this._els.skippedLessonsList.innerHTML = skipped.length > 0
+            ? `
+                ${skipped.slice(0, 8).map((item) => `
+                    <div class="summary-item">
+                        ${this._escapeHtml(item.course_name)} · ${this._escapeHtml(item.lesson_date)}
+                        <span class="summary-item-hint">già presente in batch #${this._escapeHtml(item.existing_batch_id)} · lesson #${this._escapeHtml(item.existing_lesson_id)}</span>
+                    </div>
+                `).join('')}
+                ${skipped.length > 8 ? `<div class="summary-item">... e altre ${this._escapeHtml(skipped.length - 8)} lezioni già presenti</div>` : ''}
+            `
+            : '<div class="summary-empty">Nessuna lezione saltata.</div>';
 
         this._els.summaryPanel.classList.remove('hidden');
     },

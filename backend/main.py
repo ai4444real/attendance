@@ -433,6 +433,14 @@ async def attendance_import_draft(file: UploadFile = File(...)):
             "source_file_name": persisted.batch.source_file_name if persisted.batch is not None else filename,
             "lessons_created": persisted.lessons_created,
             "participants_created": persisted.participants_created,
+            "imported_lessons": [
+                {
+                    "course_name": item.course_name,
+                    "source_meeting_id": item.source_meeting_id,
+                    "lesson_date": item.lesson_date,
+                }
+                for item in (persisted.imported_lessons or [])
+            ],
             "duplicate_lessons_skipped": persisted.duplicate_lessons_skipped,
             "skipped_duplicates": [
                 {

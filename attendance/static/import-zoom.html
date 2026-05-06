@@ -213,66 +213,80 @@
             margin-top: 10px;
         }
 
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
+        .result-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
         }
 
-        .summary-card {
-            background: white;
+        .result-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
             border: 1px solid var(--brand-border);
-            border-radius: 16px;
-            padding: 18px;
-            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+            border-radius: 999px;
+            background: #fafcfd;
         }
 
-        .summary-label {
-            font-size: 12px;
+        .result-pill-label {
+            font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             color: var(--brand-muted);
-            margin-bottom: 8px;
-            font-weight: 700;
+            font-weight: 800;
         }
 
-        .summary-value {
-            font-size: 28px;
-            font-weight: 800;
+        .result-pill-value {
+            font-size: 18px;
+            font-weight: 900;
             color: var(--brand-ink);
         }
 
-        .summary-detail {
-            margin-top: 6px;
-            color: var(--brand-muted);
-            font-size: 13px;
+        .result-pill-value.good { color: var(--brand-pnl-green-dark); }
+        .result-pill-value.warn { color: #946200; }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
         }
-        .summary-notes {
-            margin-top: 16px;
-            padding: 14px 16px;
+
+        .summary-group {
+            padding: 16px;
             border: 1px solid var(--brand-border);
-            border-radius: 14px;
+            border-radius: 16px;
             background: #fafcfd;
         }
-        .summary-note-title {
+
+        .summary-group-title {
             font-size: 13px;
             font-weight: 800;
             color: var(--brand-ink);
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
-        .summary-note-list {
+
+        .summary-list {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             font-size: 13px;
             color: var(--brand-ink);
         }
-        .summary-note-item { line-height: 1.5; }
-        .summary-note-hint {
+
+        .summary-item { line-height: 1.5; }
+        .summary-item-hint {
             color: var(--brand-muted);
             margin-left: 6px;
+        }
+
+        .summary-empty {
+            color: var(--brand-muted);
+            font-size: 13px;
         }
 
         .status-line {
@@ -329,9 +343,18 @@
             <div id="statusLine" class="status-line info">Nessun file caricato.</div>
         </section>
 
-        <section id="summaryPanel" class="hidden">
-            <div class="summary-grid" id="summaryGrid"></div>
-            <div id="summaryNotes" class="summary-notes hidden"></div>
+        <section id="summaryPanel" class="panel hidden">
+            <div id="summaryStrip" class="result-strip"></div>
+            <div class="summary-grid">
+                <div class="summary-group">
+                    <div class="summary-group-title">Lezioni importate</div>
+                    <div id="importedLessonsList" class="summary-list"></div>
+                </div>
+                <div class="summary-group">
+                    <div class="summary-group-title">Lezioni non importate</div>
+                    <div id="skippedLessonsList" class="summary-list"></div>
+                </div>
+            </div>
         </section>
     </main>
 

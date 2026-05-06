@@ -12,6 +12,7 @@ from backend.attendance_app.models import (
     DraftReviewActionView,
     ImportBatch,
     ImportBatchCreate,
+    ImportedLessonSummary,
     PersistedDraftImport,
     SkippedDuplicateLesson,
 )
@@ -55,6 +56,14 @@ class FakeAttendanceDraftImportRepository:
             ),
             lessons_created=len(lessons),
             participants_created=sum(len(lesson.participants) for lesson in lessons),
+            imported_lessons=[
+                ImportedLessonSummary(
+                    course_name=lesson.course_name,
+                    source_meeting_id=lesson.source_meeting_id,
+                    lesson_date=lesson.lesson_date,
+                )
+                for lesson in lessons
+            ],
             duplicate_lessons_skipped=0,
             skipped_duplicates=[],
         )
@@ -289,6 +298,7 @@ class AttendanceImportServiceTest(unittest.TestCase):
             batch=None,
             lessons_created=0,
             participants_created=0,
+            imported_lessons=[],
             duplicate_lessons_skipped=3,
             skipped_duplicates=[
                 SkippedDuplicateLesson(

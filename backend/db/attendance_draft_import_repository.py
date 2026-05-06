@@ -8,6 +8,7 @@ import json
 from backend.attendance_app.models import (
     ImportBatch,
     ImportBatchCreate,
+    ImportedLessonSummary,
     LessonDraft,
     LessonParticipantDraft,
     PersistedDraftImport,
@@ -40,6 +41,14 @@ class PostgresAttendanceDraftImportRepository:
                 batch = None
                 lesson_count = 0
                 participant_count = 0
+                imported_lessons = [
+                    ImportedLessonSummary(
+                        course_name=lesson.course_name,
+                        source_meeting_id=lesson.source_meeting_id,
+                        lesson_date=lesson.lesson_date,
+                    )
+                    for lesson in lessons_to_insert
+                ]
 
                 if lessons_to_insert:
                     batch = self._insert_batch(cursor, batch_data)
@@ -56,6 +65,7 @@ class PostgresAttendanceDraftImportRepository:
             batch=batch,
             lessons_created=lesson_count,
             participants_created=participant_count,
+            imported_lessons=imported_lessons,
             duplicate_lessons_skipped=len(skipped_duplicates),
             skipped_duplicates=skipped_duplicates,
         )
