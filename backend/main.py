@@ -24,6 +24,8 @@ from backend.attendance_app.services import (
     AttendanceImportService,
     AttendanceLessonStateService,
     AttendanceReviewActionService,
+    _apply_identity_alias_maps,
+    _load_identity_alias_maps,
 )
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
 from backend.db.attendance_identity_alias_repository import PostgresAttendanceIdentityAliasRepository
@@ -530,6 +532,7 @@ async def attendance_lesson_detail(lesson_id: int):
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    source_segment_groups = _build_lesson_source_groups(repository, lesson_id)
     return JSONResponse({
         "lesson": {
             "id": lesson.id,
@@ -553,7 +556,9 @@ async def attendance_lesson_detail(lesson_id: int):
             "participants": [
                 {
                     "id": participant.id,
+                    "participant_key": participant.participant_key,
                     "canonical_full_name": participant.canonical_full_name,
+                    "raw_full_name": participant.raw_full_name,
                     "email": participant.email,
                     "segment_count": participant.segment_count,
                     "minutes_first_half": participant.minutes_first_half,
@@ -566,6 +571,7 @@ async def attendance_lesson_detail(lesson_id: int):
                     "final_presence_status": participant.final_presence_status,
                     "flags": participant.flags,
                     "metadata": participant.metadata,
+                    "source_details": source_segment_groups.get(participant.participant_key, []),
                 }
                 for participant in lesson.participants
             ],
@@ -586,6 +592,42 @@ async def attendance_lesson_detail(lesson_id: int):
             ],
         }
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+def _build_lesson_source_groups(repository: PostgresAttendanceDraftQueryRepository, lesson_id: int) -> dict[str, list[dict]]:
+    source_segments = repository.get_lesson_source_segments(lesson_id)
+    if not source_segments:
+        return {}
+
+    name_alias_map, email_alias_map = _load_identity_alias_maps(PostgresAttendanceIdentityAliasRepository())
+    by_participant_key: dict[str, dict[tuple[str, str], dict]] = {}
+
+    for segment in source_segments:
+        canonical_full_name, canonical_email = _apply_identity_alias_maps(
+            segment.observed_full_name,
+            segment.observed_email,
+            name_alias_map,
+            email_alias_map,
+        )
+        participant_key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
+        raw_name = (segment.observed_full_name or canonical_full_name).strip()
+        raw_email = (segment.observed_email or "").strip()
+        source_key = (raw_name.casefold(), raw_email.casefold())
+        grouped_sources = by_participant_key.setdefault(participant_key, {})
+        source_entry = grouped_sources.setdefault(
+            source_key,
+            {
+                "raw_full_name": raw_name,
+                "email": raw_email or None,
+                "segments": [],
+            },
+        )
+        source_entry["segments"].append((segment.join_time, segment.leave_time))
+
+    return {
+        participant_key: list(grouped_sources.values())
+        for participant_key, grouped_sources in by_participant_key.items()
+    }
 
 
 @app.post("/api/attendance/lessons/{lesson_id}/review-actions")

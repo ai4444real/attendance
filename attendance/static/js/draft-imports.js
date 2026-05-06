@@ -612,6 +612,14 @@ const DraftImportsApp = {
     },
 
     _getParticipantIdentitySources(participant) {
+        const sourceDetails = participant?.source_details;
+        if (Array.isArray(sourceDetails) && sourceDetails.length > 0) {
+            return sourceDetails.map((source) => ({
+                raw_full_name: String(source.raw_full_name || participant.raw_full_name || participant.canonical_full_name).trim(),
+                email: String(source.email || participant.email || '').trim(),
+                segments: Array.isArray(source.segments) ? source.segments.filter((segment) => Array.isArray(segment) && segment.length === 2) : [],
+            }));
+        }
         const sources = participant?.metadata?.identity_sources;
         if (Array.isArray(sources) && sources.length > 0) {
             return sources.map((source) => ({
