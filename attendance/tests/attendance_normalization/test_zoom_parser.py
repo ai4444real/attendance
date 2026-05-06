@@ -1,4 +1,5 @@
 import unittest
+from zoneinfo import ZoneInfo
 
 from backend.attendance_normalization.zoom_parser import parse_zoom_csv_text
 
@@ -40,6 +41,16 @@ class ZoomParserTests(unittest.TestCase):
         segment = parsed.meetings[0].segments[0]
         self.assertEqual(segment.first_name, "Francesco")
         self.assertEqual(segment.last_name, "Conte")
+
+    def test_parsed_datetimes_are_timezone_aware_in_europe_zurich(self):
+        parsed = parse_zoom_csv_text(CSV_SAMPLE)
+
+        meeting = parsed.meetings[0]
+        segment = meeting.segments[0]
+
+        self.assertEqual(meeting.start_time.tzinfo, ZoneInfo("Europe/Zurich"))
+        self.assertEqual(meeting.start_time.isoformat(), "2025-01-30T18:54:02+01:00")
+        self.assertEqual(segment.join_time.isoformat(), "2025-01-30T18:58:37+01:00")
 
 
 if __name__ == "__main__":

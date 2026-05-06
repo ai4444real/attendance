@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import re
+from zoneinfo import ZoneInfo
 
 from .aggregator import ZoomMeeting, ZoomSegment
 
@@ -19,6 +20,7 @@ ZOOM_DATETIME_PATTERN = re.compile(
     r"(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)",
     re.IGNORECASE,
 )
+ZOOM_LOCAL_TIMEZONE = ZoneInfo("Europe/Zurich")
 
 
 def parse_zoom_csv_text(csv_text: str) -> ZoomParseResult:
@@ -186,6 +188,7 @@ def _parse_zoom_datetime(value: str) -> datetime | None:
         parsed_hours,
         int(minutes),
         int(seconds),
+        tzinfo=ZOOM_LOCAL_TIMEZONE,
     )
 
 
