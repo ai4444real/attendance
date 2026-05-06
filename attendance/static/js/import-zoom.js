@@ -101,6 +101,13 @@ const ImportZoomApp = {
                 detail: 'record draft creati',
             },
             {
+                label: 'Duplicati skip',
+                value: String(payload.duplicate_lessons_skipped ?? 0),
+                detail: (payload.skipped_duplicates && payload.skipped_duplicates.length)
+                    ? `${payload.skipped_duplicates[0].course_name} · ${payload.skipped_duplicates[0].lesson_date}`
+                    : 'non importati nel DB',
+            },
+            {
                 label: 'Stato',
                 value: String(payload.status ?? 'draft'),
                 detail: payload.source_file_name || 'import batch',

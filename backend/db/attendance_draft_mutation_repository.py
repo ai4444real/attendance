@@ -267,6 +267,20 @@ class PostgresAttendanceDraftMutationRepository:
             connection.commit()
         return inserted
 
+    def delete_lesson(self, lesson_id: int) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM attendance_lessons
+                    WHERE id = %s
+                    """,
+                    (lesson_id,),
+                )
+                if cursor.rowcount == 0:
+                    raise LookupError(f"Attendance lesson {lesson_id} not found.")
+            connection.commit()
+
 
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)

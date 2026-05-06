@@ -11,6 +11,7 @@ from backend.attendance_app.models import (
     LessonDraft,
     LessonParticipantDraft,
     PersistedDraftImport,
+    SkippedDuplicateLesson,
 )
 
 from .connection import get_db_connection
@@ -29,8 +30,13 @@ class PostgresAttendanceDraftImportRepository:
                 batch = self._insert_batch(cursor, batch_data)
                 lesson_count = 0
                 participant_count = 0
+                skipped_duplicates: list[SkippedDuplicateLesson] = []
 
                 for lesson in lessons:
+                    duplicate = self._find_existing_duplicate(cursor, lesson)
+                    if duplicate is not None:
+                        skipped_duplicates.append(duplicate)
+                        continue
                     lesson_id = self._insert_lesson(cursor, batch.id, lesson)
                     lesson_count += 1
                     participant_count += self._insert_participants(cursor, lesson_id, lesson.participants)
@@ -42,6 +48,8 @@ class PostgresAttendanceDraftImportRepository:
             batch=batch,
             lessons_created=lesson_count,
             participants_created=participant_count,
+            duplicate_lessons_skipped=len(skipped_duplicates),
+            skipped_duplicates=skipped_duplicates,
         )
 
     def _insert_batch(self, cursor, data: ImportBatchCreate) -> ImportBatch:
@@ -141,6 +149,36 @@ class PostgresAttendanceDraftImportRepository:
         if row is None:
             raise RuntimeError("Failed to create attendance lesson.")
         return int(row[0])
+
+    def _find_existing_duplicate(self, cursor, lesson: LessonDraft) -> SkippedDuplicateLesson | None:
+        cursor.execute(
+            """
+            SELECT
+                id,
+                import_batch_id
+            FROM attendance_lessons
+            WHERE course_name = %s
+              AND source_meeting_id = %s
+              AND lesson_date = %s
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (
+                lesson.course_name,
+                lesson.source_meeting_id,
+                _parse_date(lesson.lesson_date),
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        return SkippedDuplicateLesson(
+            course_name=lesson.course_name,
+            source_meeting_id=lesson.source_meeting_id,
+            lesson_date=lesson.lesson_date,
+            existing_lesson_id=int(row[0]),
+            existing_batch_id=int(row[1]),
+        )
 
     def _insert_participants(
         self,

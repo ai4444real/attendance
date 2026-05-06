@@ -14,7 +14,7 @@ const DraftImportsApp = {
         await this._loadBatches();
     },
 
-    async _loadBatches() {
+    async _loadBatches(preferredBatchId = null, preferredLessonId = null) {
         this._els.batchList.innerHTML = '<div class="empty">Carico gli import batch...</div>';
         this._els.batchSummary.innerHTML = '';
         this._els.lessonList.innerHTML = '';
@@ -31,7 +31,8 @@ const DraftImportsApp = {
             this._renderBatchList();
 
             if (this._batches.length > 0) {
-                await this._loadBatchDetail(this._batches[0].id);
+                const nextBatch = this._batches.find((batch) => batch.id === preferredBatchId) || this._batches[0];
+                await this._loadBatchDetail(nextBatch.id, preferredLessonId);
             } else {
                 this._els.batchList.innerHTML = '<div class="empty">Nessun import batch nel database.</div>';
             }
@@ -66,7 +67,7 @@ const DraftImportsApp = {
         });
     },
 
-    async _loadBatchDetail(batchId) {
+    async _loadBatchDetail(batchId, preferredLessonId = null) {
         this._selectedBatchId = batchId;
         this._selectedLessonId = null;
         this._renderBatchList();
@@ -85,7 +86,8 @@ const DraftImportsApp = {
             this._renderLessonList(payload.lessons || []);
             const visibleLessons = this._filterLessons(payload.lessons || []);
             if (visibleLessons.length > 0) {
-                await this._loadLessonDetail(visibleLessons[0].id);
+                const nextLesson = visibleLessons.find((lesson) => lesson.id === preferredLessonId) || visibleLessons[0];
+                await this._loadLessonDetail(nextLesson.id);
             } else {
                 this._els.lessonsContainer.innerHTML = '<div class="empty">Nessuna lezione nel filtro corrente.</div>';
             }
@@ -132,6 +134,7 @@ const DraftImportsApp = {
                     <div class="lesson-actions">
                         <button class="mini-action warn" type="button" data-lesson-action="toggle-ignore" data-lesson-id="${lesson.id}">${lesson.is_ignored ? 'Ripristina' : 'Ignore'}</button>
                         <button class="mini-action good" type="button" data-lesson-action="toggle-status" data-lesson-id="${lesson.id}" data-target-status="${lesson.status === 'official' ? 'draft' : 'official'}">${lesson.status === 'official' ? 'Riapri' : 'Official'}</button>
+                        <button class="mini-action neutral" type="button" data-lesson-action="delete-lesson" data-lesson-id="${lesson.id}">Elimina</button>
                     </div>
                 </div>
             `;
@@ -156,6 +159,10 @@ const DraftImportsApp = {
                 if (action === 'toggle-status') {
                     const targetStatus = button.getAttribute('data-target-status');
                     await this._setLessonStatus(lessonId, targetStatus);
+                    return;
+                }
+                if (action === 'delete-lesson') {
+                    await this._deleteLesson(lessonId);
                 }
             });
         });
@@ -577,6 +584,24 @@ const DraftImportsApp = {
             const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile aggiornare lo stato della lezione.');
             await this._reloadCurrentBatch(lessonId);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
+    },
+
+    async _deleteLesson(lessonId) {
+        if (!window.confirm('Eliminare questa lezione dal batch? Verranno rimossi anche partecipanti e correzioni collegate.')) {
+            return;
+        }
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lessonId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await this._readApiPayload(response);
+            if (!response.ok) throw new Error(data.detail || 'Impossibile eliminare la lezione.');
+            await this._loadBatches(this._selectedBatchId, null);
         } catch (error) {
             console.error(error);
             window.alert(error.message);

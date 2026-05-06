@@ -543,6 +543,11 @@ class AttendanceLessonStateService:
             raise ValueError(f"Unsupported lesson status: {status}")
         self._mutation_repository.set_lesson_status(lesson_id, status=status)
 
+    def delete_lesson(self, lesson_id: int) -> None:
+        if lesson_id <= 0:
+            raise ValueError("lesson_id must be positive")
+        self._mutation_repository.delete_lesson(lesson_id)
+
 
 class AttendanceIdentityAliasService:
     """Manage persistent identity aliases used by future imports."""

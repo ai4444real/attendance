@@ -13,6 +13,7 @@ from backend.attendance_app.models import (
     ImportBatch,
     ImportBatchCreate,
     PersistedDraftImport,
+    SkippedDuplicateLesson,
 )
 from backend.attendance_app.services import (
     AttendanceDraftRecalculationService,
@@ -54,6 +55,8 @@ class FakeAttendanceDraftImportRepository:
             ),
             lessons_created=len(lessons),
             participants_created=sum(len(lesson.participants) for lesson in lessons),
+            duplicate_lessons_skipped=0,
+            skipped_duplicates=[],
         )
 
 
@@ -96,6 +99,7 @@ class FakeAttendanceDraftMutationRepository:
         self.status_calls = []
         self.last_identity_rebuild = None
         self.source_segments_inserted = []
+        self.deleted_lessons = []
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
@@ -116,6 +120,9 @@ class FakeAttendanceDraftMutationRepository:
     def ensure_lesson_source_segments(self, lesson_id: int, source_segments: list[DraftLessonSourceSegment]) -> int:
         self.source_segments_inserted.append((lesson_id, list(source_segments)))
         return len(source_segments)
+
+    def delete_lesson(self, lesson_id: int) -> None:
+        self.deleted_lessons.append(lesson_id)
 
 
 class AttendanceImportServiceTest(unittest.TestCase):
@@ -536,6 +543,14 @@ class AttendanceLessonStateServiceTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             service.set_lesson_status(12, status="processing")
+
+    def test_delete_lesson_delegates_to_repository(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonStateService(mutation)
+
+        service.delete_lesson(33)
+
+        self.assertEqual([33], mutation.deleted_lessons)
 
 
 class FakeAttendanceIdentityAliasRepository:

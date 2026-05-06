@@ -14,6 +14,7 @@ from .models import (
     ImportBatchSummary,
     LessonDraft,
     PersistedDraftImport,
+    SkippedDuplicateLesson,
 )
 
 
@@ -122,3 +123,6 @@ class AttendanceDraftMutationRepository(Protocol):
         source_segments: list[DraftLessonSourceSegment],
     ) -> int:
         """Persist source segments for one lesson if missing, returning inserted rows."""
+
+    def delete_lesson(self, lesson_id: int) -> None:
+        """Delete one lesson and all dependent draft data."""

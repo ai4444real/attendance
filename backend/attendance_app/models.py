@@ -70,10 +70,21 @@ class LessonDraft:
 
 
 @dataclass(frozen=True)
+class SkippedDuplicateLesson:
+    course_name: str
+    source_meeting_id: str
+    lesson_date: str
+    existing_lesson_id: int
+    existing_batch_id: int
+
+
+@dataclass(frozen=True)
 class PersistedDraftImport:
     batch: ImportBatch
     lessons_created: int
     participants_created: int
+    duplicate_lessons_skipped: int = 0
+    skipped_duplicates: list[SkippedDuplicateLesson] | None = None
 
 
 @dataclass(frozen=True)

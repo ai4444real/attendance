@@ -432,6 +432,17 @@ async def attendance_import_draft(file: UploadFile = File(...)):
             "source_file_name": persisted.batch.source_file_name,
             "lessons_created": persisted.lessons_created,
             "participants_created": persisted.participants_created,
+            "duplicate_lessons_skipped": persisted.duplicate_lessons_skipped,
+            "skipped_duplicates": [
+                {
+                    "course_name": item.course_name,
+                    "source_meeting_id": item.source_meeting_id,
+                    "lesson_date": item.lesson_date,
+                    "existing_lesson_id": item.existing_lesson_id,
+                    "existing_batch_id": item.existing_batch_id,
+                }
+                for item in (persisted.skipped_duplicates or [])
+            ],
         }
     except HTTPException:
         raise
@@ -642,6 +653,18 @@ async def attendance_set_lesson_status(lesson_id: int, payload: dict):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"lesson_id": lesson_id, "status": status}
+
+
+@app.post("/api/attendance/lessons/{lesson_id}/delete")
+async def attendance_delete_lesson(lesson_id: int):
+    service = AttendanceLessonStateService(PostgresAttendanceDraftMutationRepository())
+    try:
+        service.delete_lesson(lesson_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"lesson_id": lesson_id, "deleted": True}
 
 
 @app.post("/api/attendance/identity-aliases")
