@@ -6,7 +6,7 @@ const ImportZoomApp = {
             dropZone: document.getElementById('dropZone'),
             fileInput: document.getElementById('fileInput'),
             pickFileBtn: document.getElementById('pickFileBtn'),
-            reviewLastBtn: document.getElementById('reviewLastBtn'),
+            draftsBtn: document.getElementById('draftsBtn'),
             statusLine: document.getElementById('statusLine'),
             summaryPanel: document.getElementById('summaryPanel'),
             summaryStrip: document.getElementById('summaryStrip'),
@@ -15,7 +15,7 @@ const ImportZoomApp = {
         };
 
         this._wireUpload();
-        this._wireReviewLast();
+        this._wireDrafts();
     },
 
     _wireUpload() {
@@ -46,9 +46,9 @@ const ImportZoomApp = {
         });
     },
 
-    _wireReviewLast() {
-        this._els.reviewLastBtn.addEventListener('click', () => {
-            window.location.href = '/attendance/review';
+    _wireDrafts() {
+        this._els.draftsBtn.addEventListener('click', () => {
+            window.location.href = '/attendance/drafts';
         });
     },
 
@@ -146,7 +146,7 @@ const ImportZoomApp = {
 
     _setBusy(isBusy) {
         this._els.pickFileBtn.disabled = isBusy;
-        this._els.reviewLastBtn.disabled = isBusy;
+        this._els.draftsBtn.disabled = isBusy;
         this._els.fileInput.disabled = isBusy;
     },
 
