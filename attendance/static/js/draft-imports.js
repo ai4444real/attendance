@@ -412,6 +412,7 @@ const DraftImportsApp = {
                                     <td>
                                         <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}${participant.manual_override_presence_status ? ' manual' : ''}">${this._escapeHtml(participant.final_presence_status)}</span>
                                         <div class="row-actions">
+                                            <button type="button" class="source-button" data-source-detail="${participant.id}">Origine</button>
                                             ${this._renderPresenceOverrideControl(lesson.id, participant)}
                                         </div>
                                     </td>
@@ -434,6 +435,7 @@ const DraftImportsApp = {
                     ` : ''}
                 </div>
             </article>
+            <div id="sourceModalHost"></div>
         `;
         this._wireLessonActionButtons(lesson);
     },
@@ -474,6 +476,15 @@ const DraftImportsApp = {
                     { presence_status: value },
                     participantId,
                 );
+            });
+        });
+        this._els.lessonsContainer.querySelectorAll('[data-source-detail]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const participantId = Number(button.getAttribute('data-source-detail'));
+                const participant = lesson.participants.find((item) => item.id === participantId);
+                if (participant) {
+                    this._openSourceModal(lesson, participant);
+                }
             });
         });
     },
@@ -546,6 +557,89 @@ const DraftImportsApp = {
                 <option value="assente"${currentValue === 'assente' ? ' selected' : ''}>Assente</option>
             </select>
         `;
+    },
+
+    _openSourceModal(lesson, participant) {
+        const host = document.getElementById('sourceModalHost');
+        if (!host) return;
+        this._closeSourceModal();
+        const sources = this._getParticipantIdentitySources(participant);
+        host.innerHTML = `
+            <div class="source-modal-backdrop" data-source-modal-close="1">
+                <div class="source-modal" role="dialog" aria-modal="true" aria-labelledby="sourceModalTitle">
+                    <div class="source-modal-head">
+                        <div>
+                            <h4 id="sourceModalTitle" class="source-modal-title">Origine record</h4>
+                            <div class="source-modal-subtitle">
+                                ${this._escapeHtml(participant.canonical_full_name)} · ${this._escapeHtml(lesson.course_name)} · ${this._escapeHtml(lesson.lesson_date)}
+                            </div>
+                        </div>
+                        <button type="button" class="source-modal-close" data-source-modal-close="1" aria-label="Chiudi dettaglio origine">×</button>
+                    </div>
+                    <div class="source-modal-body">
+                        ${sources.map((source) => `
+                            <section class="source-group">
+                                <div class="source-group-head">
+                                    <div>
+                                        <div class="source-name">${this._escapeHtml(source.raw_full_name || participant.canonical_full_name)}</div>
+                                        <div class="source-email">${this._escapeHtml(source.email || 'senza email')}</div>
+                                    </div>
+                                    <div class="source-count">${source.segments.length} segment${source.segments.length === 1 ? 'o' : 'i'}</div>
+                                </div>
+                                <div class="source-segments">
+                                    ${source.segments.length > 0 ? source.segments.map((segment) => `
+                                        <div class="source-segment">
+                                            ${this._escapeHtml(this._formatDateTime(segment[0], lesson.meeting_start_at))} → ${this._escapeHtml(this._formatDateTime(segment[1], lesson.meeting_start_at))}
+                                        </div>
+                                    `).join('') : '<div class="source-empty">Nessun segmento salvato.</div>'}
+                                </div>
+                            </section>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        host.querySelectorAll('[data-source-modal-close]').forEach((node) => {
+            node.addEventListener('click', (event) => {
+                if (event.target === node || node.classList.contains('source-modal-close')) {
+                    this._closeSourceModal();
+                }
+            });
+        });
+        document.addEventListener('keydown', this._handleSourceModalEscape);
+        this._sourceModalHost = host;
+    },
+
+    _getParticipantIdentitySources(participant) {
+        const sources = participant?.metadata?.identity_sources;
+        if (Array.isArray(sources) && sources.length > 0) {
+            return sources.map((source) => ({
+                raw_full_name: String(source.raw_full_name || participant.raw_full_name || participant.canonical_full_name).trim(),
+                email: String(source.email || participant.email || '').trim(),
+                segments: Array.isArray(source.segments) ? source.segments.filter((segment) => Array.isArray(segment) && segment.length === 2) : [],
+            }));
+        }
+        return [{
+            raw_full_name: String(participant.raw_full_name || participant.canonical_full_name).trim(),
+            email: String(participant.email || '').trim(),
+            segments: Array.isArray(participant?.metadata?.segments)
+                ? participant.metadata.segments.filter((segment) => Array.isArray(segment) && segment.length === 2)
+                : [],
+        }];
+    },
+
+    _handleSourceModalEscape: (event) => {
+        if (event.key === 'Escape' && DraftImportsApp._sourceModalHost) {
+            DraftImportsApp._closeSourceModal();
+        }
+    },
+
+    _closeSourceModal() {
+        if (!this._sourceModalHost) return;
+        this._sourceModalHost.innerHTML = '';
+        this._sourceModalHost = null;
+        document.removeEventListener('keydown', this._handleSourceModalEscape);
     },
 
     async _promptAndSaveThreshold(lesson) {
