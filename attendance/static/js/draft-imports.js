@@ -563,7 +563,7 @@ const DraftImportsApp = {
         const host = document.getElementById('sourceModalHost');
         if (!host) return;
         this._closeSourceModal();
-        const sources = this._getParticipantIdentitySources(participant);
+        const sources = this._getParticipantIdentitySources(lesson, participant);
         host.innerHTML = `
             <div class="source-modal-backdrop" data-source-modal-close="1">
                 <div class="source-modal" role="dialog" aria-modal="true" aria-labelledby="sourceModalTitle">
@@ -611,7 +611,57 @@ const DraftImportsApp = {
         this._sourceModalHost = host;
     },
 
-    _getParticipantIdentitySources(participant) {
+    _getParticipantIdentitySources(lesson, participant) {
+        const normalizedCanonicalName = String(participant?.canonical_full_name || '').trim().toLowerCase();
+        const sameNameParticipants = Array.isArray(lesson?.participants)
+            ? lesson.participants.filter((item) => String(item?.canonical_full_name || '').trim().toLowerCase() === normalizedCanonicalName)
+            : [participant];
+        const grouped = new Map();
+
+        sameNameParticipants.forEach((item) => {
+            const sources = this._extractIdentitySources(item);
+            sources.forEach((source) => {
+                const rawFullName = String(source.raw_full_name || item.raw_full_name || item.canonical_full_name).trim();
+                const email = String(source.email || item.email || '').trim();
+                const key = `${rawFullName.toLowerCase()}::${email.toLowerCase()}`;
+                const entry = grouped.get(key) || {
+                    raw_full_name: rawFullName,
+                    email,
+                    segments: [],
+                };
+                (Array.isArray(source.segments) ? source.segments : []).forEach((segment) => {
+                    if (Array.isArray(segment) && segment.length === 2) {
+                        entry.segments.push([segment[0], segment[1]]);
+                    }
+                });
+                grouped.set(key, entry);
+            });
+        });
+
+        if (grouped.size === 0) {
+            return [{
+                raw_full_name: String(participant.raw_full_name || participant.canonical_full_name).trim(),
+                email: String(participant.email || '').trim(),
+                segments: Array.isArray(participant?.metadata?.segments)
+                    ? participant.metadata.segments.filter((segment) => Array.isArray(segment) && segment.length === 2)
+                    : [],
+            }];
+        }
+
+        return Array.from(grouped.values())
+            .map((entry) => ({
+                raw_full_name: entry.raw_full_name,
+                email: entry.email,
+                segments: this._dedupeAndSortSegments(entry.segments),
+            }))
+            .sort((left, right) => {
+                const leftFirst = left.segments[0]?.[0] || '';
+                const rightFirst = right.segments[0]?.[0] || '';
+                return leftFirst.localeCompare(rightFirst) || left.raw_full_name.localeCompare(right.raw_full_name);
+            });
+    },
+
+    _extractIdentitySources(participant) {
         const sourceDetails = participant?.source_details;
         if (Array.isArray(sourceDetails) && sourceDetails.length > 0) {
             return sourceDetails.map((source) => ({
@@ -635,6 +685,20 @@ const DraftImportsApp = {
                 ? participant.metadata.segments.filter((segment) => Array.isArray(segment) && segment.length === 2)
                 : [],
         }];
+    },
+
+    _dedupeAndSortSegments(segments) {
+        const seen = new Set();
+        const unique = [];
+        segments.forEach((segment) => {
+            if (!Array.isArray(segment) || segment.length !== 2) return;
+            const key = `${segment[0]}::${segment[1]}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            unique.push([segment[0], segment[1]]);
+        });
+        unique.sort((left, right) => String(left[0]).localeCompare(String(right[0])) || String(left[1]).localeCompare(String(right[1])));
+        return unique;
     },
 
     _handleSourceModalEscape: (event) => {
