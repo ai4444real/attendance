@@ -336,9 +336,11 @@ class AttendanceDraftRecalculationService:
         self,
         query_repository: AttendanceDraftQueryRepository,
         mutation_repository: AttendanceDraftMutationRepository,
+        identity_alias_repository: AttendanceIdentityAliasRepository | None = None,
     ) -> None:
         self._query_repository = query_repository
         self._mutation_repository = mutation_repository
+        self._identity_alias_repository = identity_alias_repository
 
     def recalculate_lesson(self, lesson_id: int) -> DraftLessonView:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
@@ -436,14 +438,15 @@ class AttendanceDraftRecalculationService:
         if not source_segments:
             source_segments = _extract_source_segments_from_lesson(lesson)
 
+        name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
         aggregated = _aggregate_source_segments_by_final_identity(
             source_segments,
             effective_start=effective_start,
             break_point=break_point,
             effective_end=effective_end,
             threshold=threshold_ratio,
-            name_alias_map={},
-            email_alias_map={},
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
             forced_identity_pairs=set(),
             forced_canonical_full_name=None,
             forced_canonical_email=None,

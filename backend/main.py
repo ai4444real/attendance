@@ -664,6 +664,7 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
         recalculated_lesson = AttendanceDraftRecalculationService(
             query_repository,
             PostgresAttendanceDraftMutationRepository(),
+            PostgresAttendanceIdentityAliasRepository(),
         ).recalculate_lesson(lesson_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
