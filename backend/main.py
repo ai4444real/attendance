@@ -427,9 +427,10 @@ async def attendance_import_draft(file: UploadFile = File(...)):
             result,
         )
         return {
-            "batch_id": persisted.batch.id,
-            "status": persisted.batch.status,
-            "source_file_name": persisted.batch.source_file_name,
+            "batch_created": persisted.batch is not None,
+            "batch_id": persisted.batch.id if persisted.batch is not None else None,
+            "status": persisted.batch.status if persisted.batch is not None else "skipped",
+            "source_file_name": persisted.batch.source_file_name if persisted.batch is not None else filename,
             "lessons_created": persisted.lessons_created,
             "participants_created": persisted.participants_created,
             "duplicate_lessons_skipped": persisted.duplicate_lessons_skipped,

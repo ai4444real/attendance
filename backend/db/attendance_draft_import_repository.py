@@ -27,20 +27,28 @@ class PostgresAttendanceDraftImportRepository:
     ) -> PersistedDraftImport:
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
-                batch = self._insert_batch(cursor, batch_data)
-                lesson_count = 0
-                participant_count = 0
                 skipped_duplicates: list[SkippedDuplicateLesson] = []
+                lessons_to_insert: list[LessonDraft] = []
 
                 for lesson in lessons:
                     duplicate = self._find_existing_duplicate(cursor, lesson)
                     if duplicate is not None:
                         skipped_duplicates.append(duplicate)
-                        continue
-                    lesson_id = self._insert_lesson(cursor, batch.id, lesson)
-                    lesson_count += 1
-                    participant_count += self._insert_participants(cursor, lesson_id, lesson.participants)
-                    self._insert_source_segments(cursor, lesson_id, lesson.participants)
+                    else:
+                        lessons_to_insert.append(lesson)
+
+                batch = None
+                lesson_count = 0
+                participant_count = 0
+
+                if lessons_to_insert:
+                    batch = self._insert_batch(cursor, batch_data)
+
+                    for lesson in lessons_to_insert:
+                        lesson_id = self._insert_lesson(cursor, batch.id, lesson)
+                        lesson_count += 1
+                        participant_count += self._insert_participants(cursor, lesson_id, lesson.participants)
+                        self._insert_source_segments(cursor, lesson_id, lesson.participants)
 
             connection.commit()
 

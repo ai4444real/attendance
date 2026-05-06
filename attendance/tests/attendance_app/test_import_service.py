@@ -280,6 +280,27 @@ class AttendanceImportServiceTest(unittest.TestCase):
         self.assertEqual("presente", participant.final_presence_status)
         self.assertTrue(participant.metadata["merged_duplicate_participant_key"])
 
+    def test_import_result_can_represent_no_batch_when_everything_is_skipped(self) -> None:
+        persisted = PersistedDraftImport(
+            batch=None,
+            lessons_created=0,
+            participants_created=0,
+            duplicate_lessons_skipped=3,
+            skipped_duplicates=[
+                SkippedDuplicateLesson(
+                    course_name="PRACTITIONER",
+                    source_meeting_id="891 9285 7355",
+                    lesson_date="2026-01-28",
+                    existing_lesson_id=147,
+                    existing_batch_id=9,
+                )
+            ],
+        )
+
+        self.assertIsNone(persisted.batch)
+        self.assertEqual(0, persisted.lessons_created)
+        self.assertEqual(3, persisted.duplicate_lessons_skipped)
+
 
 class AttendanceReviewActionServiceTest(unittest.TestCase):
     def setUp(self) -> None:

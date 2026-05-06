@@ -74,7 +74,11 @@ const ImportZoomApp = {
             }
 
             this._renderSummary(file.name, payload);
-            this._setStatus(`Import draft creato per ${file.name}. Batch #${payload.batch_id}.`, 'success');
+            if (payload.batch_created) {
+                this._setStatus(`Import draft creato per ${file.name}. Batch #${payload.batch_id}.`, 'success');
+            } else {
+                this._setStatus(`Nessuna nuova lezione importata da ${file.name}: tutto già presente nel database.`, 'success');
+            }
         } catch (error) {
             console.error(error);
             this._setStatus(`Errore: ${error.message}`, 'error');
@@ -88,7 +92,7 @@ const ImportZoomApp = {
             {
                 label: 'File',
                 value: fileName,
-                detail: `batch #${payload.batch_id}`,
+                detail: payload.batch_created ? `batch #${payload.batch_id}` : 'nessun batch creato',
             },
             {
                 label: 'Lezioni',

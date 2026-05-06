@@ -80,7 +80,7 @@ class SkippedDuplicateLesson:
 
 @dataclass(frozen=True)
 class PersistedDraftImport:
-    batch: ImportBatch
+    batch: ImportBatch | None
     lessons_created: int
     participants_created: int
     duplicate_lessons_skipped: int = 0
