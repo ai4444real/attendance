@@ -100,6 +100,7 @@ class FakeAttendanceDraftMutationRepository:
         self.last_identity_rebuild = None
         self.source_segments_inserted = []
         self.deleted_lessons = []
+        self.deleted_batches = []
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
@@ -123,6 +124,9 @@ class FakeAttendanceDraftMutationRepository:
 
     def delete_lesson(self, lesson_id: int) -> None:
         self.deleted_lessons.append(lesson_id)
+
+    def delete_batch(self, batch_id: int) -> None:
+        self.deleted_batches.append(batch_id)
 
 
 class AttendanceImportServiceTest(unittest.TestCase):
@@ -572,6 +576,14 @@ class AttendanceLessonStateServiceTest(unittest.TestCase):
         service.delete_lesson(33)
 
         self.assertEqual([33], mutation.deleted_lessons)
+
+    def test_delete_batch_delegates_to_repository(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonStateService(mutation)
+
+        service.delete_batch(10)
+
+        self.assertEqual([10], mutation.deleted_batches)
 
 
 class FakeAttendanceIdentityAliasRepository:

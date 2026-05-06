@@ -48,21 +48,31 @@ const DraftImportsApp = {
         }
 
         this._els.batchList.innerHTML = this._batches.map((batch) => `
-            <button class="batch-item${this._selectedBatchId === batch.id ? ' active' : ''}" data-batch-id="${batch.id}" type="button">
-                <div class="batch-title">
-                    <span class="batch-id">#${batch.id}</span>
-                    <span class="batch-file-name" title="${this._escapeAttr(batch.source_file_name)}">${this._escapeHtml(batch.source_file_name)}</span>
-                </div>
-                <div class="batch-meta">
-                    ${this._escapeHtml(this._formatDateTime(batch.created_at))} · ${batch.lessons_count} lezioni · ${batch.participants_count} partecipanti
-                </div>
-            </button>
+            <div class="batch-card">
+                <button class="batch-delete" type="button" data-batch-action="delete-batch" data-batch-id="${batch.id}" title="Elimina batch" aria-label="Elimina batch ${batch.id}">×</button>
+                <button class="batch-item${this._selectedBatchId === batch.id ? ' active' : ''}" data-batch-id="${batch.id}" type="button">
+                    <div class="batch-title">
+                        <span class="batch-id">#${batch.id}</span>
+                        <span class="batch-file-name" title="${this._escapeAttr(batch.source_file_name)}">${this._escapeHtml(batch.source_file_name)}</span>
+                    </div>
+                    <div class="batch-meta">
+                        ${this._escapeHtml(this._formatDateTime(batch.created_at))} · ${batch.lessons_count} lezioni · ${batch.participants_count} partecipanti
+                    </div>
+                </button>
+            </div>
         `).join('');
 
         this._els.batchList.querySelectorAll('[data-batch-id]').forEach((button) => {
             button.addEventListener('click', async () => {
                 const batchId = Number(button.getAttribute('data-batch-id'));
                 await this._loadBatchDetail(batchId);
+            });
+        });
+        this._els.batchList.querySelectorAll('[data-batch-action="delete-batch"]').forEach((button) => {
+            button.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                const batchId = Number(button.getAttribute('data-batch-id'));
+                await this._deleteBatch(batchId);
             });
         });
     },
@@ -99,9 +109,12 @@ const DraftImportsApp = {
 
     _renderBatchSummary(batch) {
         this._els.batchSummary.innerHTML = `
-            <div class="batch-strip-title">
-                <span class="batch-id">#${this._escapeHtml(batch.id)}</span>
-                <span class="batch-strip-file-name" title="${this._escapeAttr(batch.source_file_name)}">${this._escapeHtml(batch.source_file_name)}</span>
+            <div class="batch-strip-left">
+                <button class="batch-delete" type="button" data-batch-action="delete-batch" data-batch-id="${this._escapeAttr(batch.id)}" title="Elimina batch" aria-label="Elimina batch ${this._escapeAttr(batch.id)}">×</button>
+                <div class="batch-strip-title">
+                    <span class="batch-id">#${this._escapeHtml(batch.id)}</span>
+                    <span class="batch-strip-file-name" title="${this._escapeAttr(batch.source_file_name)}">${this._escapeHtml(batch.source_file_name)}</span>
+                </div>
             </div>
             <div class="batch-strip-meta">
                 <span><strong>${this._escapeHtml(batch.lessons_count)}</strong> lezioni</span>
@@ -109,6 +122,13 @@ const DraftImportsApp = {
                 <span>${this._escapeHtml(this._formatDateTime(batch.created_at))}</span>
             </div>
         `;
+        this._els.batchSummary.querySelectorAll('[data-batch-action="delete-batch"]').forEach((button) => {
+            button.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                const batchId = Number(button.getAttribute('data-batch-id'));
+                await this._deleteBatch(batchId);
+            });
+        });
     },
 
     _renderLessonList(lessons) {
@@ -602,6 +622,24 @@ const DraftImportsApp = {
             const data = await this._readApiPayload(response);
             if (!response.ok) throw new Error(data.detail || 'Impossibile eliminare la lezione.');
             await this._loadBatches(this._selectedBatchId, null);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
+    },
+
+    async _deleteBatch(batchId) {
+        if (!window.confirm('Eliminare questo batch per sempre? Verranno rimossi anche tutte le lezioni, i partecipanti e le correzioni collegate.')) {
+            return;
+        }
+        try {
+            const response = await fetch(`/api/attendance/import-batches/${batchId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await this._readApiPayload(response);
+            if (!response.ok) throw new Error(data.detail || 'Impossibile eliminare il batch.');
+            await this._loadBatches();
         } catch (error) {
             console.error(error);
             window.alert(error.message);

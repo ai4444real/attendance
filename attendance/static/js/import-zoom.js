@@ -10,6 +10,7 @@ const ImportZoomApp = {
             statusLine: document.getElementById('statusLine'),
             summaryPanel: document.getElementById('summaryPanel'),
             summaryGrid: document.getElementById('summaryGrid'),
+            summaryNotes: document.getElementById('summaryNotes'),
         };
 
         this._wireUpload();
@@ -125,6 +126,26 @@ const ImportZoomApp = {
                 <div class="summary-detail">${this._escapeHtml(card.detail)}</div>
             </article>
         `).join('');
+
+        const skipped = payload.skipped_duplicates || [];
+        if (skipped.length > 0) {
+            this._els.summaryNotes.innerHTML = `
+                <div class="summary-note-title">Lezioni non importate perché già esistenti</div>
+                <div class="summary-note-list">
+                    ${skipped.slice(0, 8).map((item) => `
+                        <div class="summary-note-item">
+                            ${this._escapeHtml(item.course_name)} · ${this._escapeHtml(item.lesson_date)} · meeting ${this._escapeHtml(item.source_meeting_id)}
+                            <span class="summary-note-hint">già presente in batch #${this._escapeHtml(item.existing_batch_id)} · lesson #${this._escapeHtml(item.existing_lesson_id)}</span>
+                        </div>
+                    `).join('')}
+                    ${skipped.length > 8 ? `<div class="summary-note-item">... e altre ${this._escapeHtml(skipped.length - 8)} lezioni già presenti</div>` : ''}
+                </div>
+            `;
+            this._els.summaryNotes.classList.remove('hidden');
+        } else {
+            this._els.summaryNotes.innerHTML = '';
+            this._els.summaryNotes.classList.add('hidden');
+        }
 
         this._els.summaryPanel.classList.remove('hidden');
     },

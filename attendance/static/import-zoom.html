@@ -247,6 +247,33 @@
             color: var(--brand-muted);
             font-size: 13px;
         }
+        .summary-notes {
+            margin-top: 16px;
+            padding: 14px 16px;
+            border: 1px solid var(--brand-border);
+            border-radius: 14px;
+            background: #fafcfd;
+        }
+        .summary-note-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--brand-ink);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .summary-note-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--brand-ink);
+        }
+        .summary-note-item { line-height: 1.5; }
+        .summary-note-hint {
+            color: var(--brand-muted);
+            margin-left: 6px;
+        }
 
         .status-line {
             margin-top: 14px;
@@ -304,6 +331,7 @@
 
         <section id="summaryPanel" class="hidden">
             <div class="summary-grid" id="summaryGrid"></div>
+            <div id="summaryNotes" class="summary-notes hidden"></div>
         </section>
     </main>
 

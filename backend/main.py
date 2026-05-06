@@ -668,6 +668,18 @@ async def attendance_delete_lesson(lesson_id: int):
     return {"lesson_id": lesson_id, "deleted": True}
 
 
+@app.post("/api/attendance/import-batches/{batch_id}/delete")
+async def attendance_delete_import_batch(batch_id: int):
+    service = AttendanceLessonStateService(PostgresAttendanceDraftMutationRepository())
+    try:
+        service.delete_batch(batch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"batch_id": batch_id, "deleted": True}
+
+
 @app.post("/api/attendance/identity-aliases")
 async def attendance_create_identity_alias(payload: dict):
     _bootstrap_identity_aliases_if_needed()

@@ -548,6 +548,11 @@ class AttendanceLessonStateService:
             raise ValueError("lesson_id must be positive")
         self._mutation_repository.delete_lesson(lesson_id)
 
+    def delete_batch(self, batch_id: int) -> None:
+        if batch_id <= 0:
+            raise ValueError("batch_id must be positive")
+        self._mutation_repository.delete_batch(batch_id)
+
 
 class AttendanceIdentityAliasService:
     """Manage persistent identity aliases used by future imports."""
