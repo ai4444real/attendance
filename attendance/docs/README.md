@@ -4,6 +4,8 @@ Documentazione del progetto `attendance`.
 
 ## Contenuto
 
+- `BACKLOG_ANALISI_PER_SCUOLA.md`: catalogo delle funzionalita' analitiche richieste dal lato scuola, derivato dalla view `/attendance/view`
+- `HANDOFF_OPERATIVO_ATTENDANCE.md`: stato corrente, decisioni già prese, regole e trappole operative
 - `ARCHITETTURA_UNIFICAZIONE.md`: visione target, pipeline e backlog
 - `RICOSTRUZIONE_LEZIONE_DRAFT.md`: specifica tecnica del rebuild corretto di una singola lezione draft
 - `MIGRAZIONE_NORMALIZZAZIONE_PYTHON.md`: migrazione incrementale della logica Zoom da JavaScript a Python
