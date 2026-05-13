@@ -126,6 +126,10 @@ class PostgresAttendanceDraftQueryRepository:
 
                 cursor.execute(
                     """
+                    WITH instructor_names AS (
+                        SELECT lower(instructor_name) AS name_key
+                        FROM attendance_instructors
+                    )
                     SELECT
                         l.id,
                         l.course_name,
@@ -167,6 +171,10 @@ class PostgresAttendanceDraftQueryRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
+                    WITH instructor_names AS (
+                        SELECT lower(instructor_name) AS name_key
+                        FROM attendance_instructors
+                    )
                     SELECT
                         l.id,
                         l.course_name,
@@ -216,6 +224,14 @@ class PostgresAttendanceDraftQueryRepository:
                         p.metadata_json
                     FROM attendance_lesson_participants AS p
                     WHERE p.lesson_id = %s
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM attendance_instructors AS i
+                          WHERE lower(i.instructor_name) IN (
+                              lower(p.canonical_full_name),
+                              lower(COALESCE(p.raw_full_name, ''))
+                          )
+                      )
                     ORDER BY p.canonical_full_name ASC
                     """,
                     (lesson_id,),
@@ -339,7 +355,11 @@ class PostgresAttendanceDraftQueryRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    WITH official_lessons AS (
+                    WITH instructor_names AS (
+                        SELECT lower(instructor_name) AS name_key
+                        FROM attendance_instructors
+                    ),
+                    official_lessons AS (
                         SELECT
                             id,
                             course_name,
@@ -374,6 +394,14 @@ class PostgresAttendanceDraftQueryRepository:
                         ON lc.course_name = l.course_name
                     LEFT JOIN attendance_courses AS c
                         ON c.course_name = l.course_name
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM instructor_names AS i
+                        WHERE i.name_key IN (
+                            lower(p.canonical_full_name),
+                            lower(COALESCE(p.raw_full_name, ''))
+                        )
+                    )
                     ORDER BY l.course_name ASC, l.lesson_date ASC, p.canonical_full_name ASC, p.id ASC
                     """
                 )
@@ -398,6 +426,10 @@ class PostgresAttendanceDraftQueryRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
+                    WITH instructor_names AS (
+                        SELECT lower(instructor_name) AS name_key
+                        FROM attendance_instructors
+                    )
                     SELECT
                         l.id,
                         l.course_name,
@@ -414,6 +446,14 @@ class PostgresAttendanceDraftQueryRepository:
                         ON c.course_name = l.course_name
                     LEFT JOIN attendance_lesson_participants AS p
                         ON p.lesson_id = l.id
+                       AND NOT EXISTS (
+                           SELECT 1
+                           FROM instructor_names AS i
+                           WHERE i.name_key IN (
+                               lower(p.canonical_full_name),
+                               lower(COALESCE(p.raw_full_name, ''))
+                           )
+                       )
                     WHERE l.status = 'official'
                       AND l.is_ignored = FALSE
                     GROUP BY l.id, c.expected_lessons_count
@@ -467,7 +507,11 @@ class PostgresAttendanceDraftQueryRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    WITH ranked_lessons AS (
+                    WITH instructor_names AS (
+                        SELECT lower(instructor_name) AS name_key
+                        FROM attendance_instructors
+                    ),
+                    ranked_lessons AS (
                         SELECT
                             l.id,
                             l.course_name,
@@ -498,6 +542,14 @@ class PostgresAttendanceDraftQueryRepository:
                             ON p.lesson_id = l.id
                         WHERE l.status = 'official'
                           AND l.is_ignored = FALSE
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM instructor_names AS i
+                              WHERE i.name_key IN (
+                                  lower(p.canonical_full_name),
+                                  lower(COALESCE(p.raw_full_name, ''))
+                              )
+                          )
                         GROUP BY l.course_name, p.canonical_full_name
                     ),
                     student_recent_lessons AS (
@@ -574,6 +626,10 @@ class PostgresAttendanceDraftQueryRepository:
     def _load_lesson_summary(self, cursor, lesson_id: int) -> dict[str, int]:
         cursor.execute(
             """
+            WITH instructor_names AS (
+                SELECT lower(instructor_name) AS name_key
+                FROM attendance_instructors
+            )
             SELECT
                 COUNT(*) FILTER (WHERE p.final_presence_status = 'presente') AS presente,
                 COUNT(*) FILTER (WHERE p.final_presence_status = 'prima_meta') AS prima_meta,
@@ -581,6 +637,14 @@ class PostgresAttendanceDraftQueryRepository:
                 COUNT(*) FILTER (WHERE p.final_presence_status = 'assente') AS assente
             FROM attendance_lesson_participants AS p
             WHERE p.lesson_id = %s
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM instructor_names AS i
+                  WHERE i.name_key IN (
+                      lower(p.canonical_full_name),
+                      lower(COALESCE(p.raw_full_name, ''))
+                  )
+              )
             """,
             (lesson_id,),
         )
