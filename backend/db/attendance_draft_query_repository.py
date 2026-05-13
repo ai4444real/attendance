@@ -336,18 +336,41 @@ class PostgresAttendanceDraftQueryRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
+                    WITH official_lessons AS (
+                        SELECT
+                            id,
+                            course_name,
+                            lesson_date
+                        FROM attendance_lessons
+                        WHERE status = 'official'
+                          AND is_ignored = FALSE
+                    ),
+                    lesson_counts AS (
+                        SELECT
+                            course_name,
+                            COUNT(*) AS official_lessons_count
+                        FROM official_lessons
+                        GROUP BY course_name
+                    )
                     SELECT
                         l.id,
                         l.course_name,
                         l.lesson_date,
                         p.canonical_full_name,
                         p.email,
-                        p.final_presence_status
-                    FROM attendance_lessons AS l
+                        p.final_presence_status,
+                        COALESCE(c.expected_lessons_count, lc.official_lessons_count) AS expected_lessons_count,
+                        CASE
+                            WHEN c.expected_lessons_count IS NULL THEN 'official_lessons'
+                            ELSE 'configured'
+                        END AS expected_lessons_source
+                    FROM official_lessons AS l
                     JOIN attendance_lesson_participants AS p
                         ON p.lesson_id = l.id
-                    WHERE l.status = 'official'
-                      AND l.is_ignored = FALSE
+                    JOIN lesson_counts AS lc
+                        ON lc.course_name = l.course_name
+                    LEFT JOIN attendance_courses AS c
+                        ON c.course_name = l.course_name
                     ORDER BY l.course_name ASC, l.lesson_date ASC, p.canonical_full_name ASC, p.id ASC
                     """
                 )
@@ -361,6 +384,8 @@ class PostgresAttendanceDraftQueryRepository:
                 canonical_full_name=str(row[3]),
                 email=row[4],
                 final_presence_status=str(row[5]),
+                expected_lessons_count=int(row[6]),
+                expected_lessons_source=str(row[7]),
             )
             for row in rows
         ]

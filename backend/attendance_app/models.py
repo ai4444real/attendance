@@ -212,6 +212,8 @@ class SchoolAttendanceRecordView:
     canonical_full_name: str
     email: Optional[str]
     final_presence_status: str
+    expected_lessons_count: int
+    expected_lessons_source: str
 
 
 @dataclass(frozen=True)

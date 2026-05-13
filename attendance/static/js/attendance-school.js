@@ -103,6 +103,8 @@ const AttendanceSchoolApp = {
             return;
         }
 
+        const participationByStudentCourse = this._buildParticipationIndex(this._records);
+
         this._els.tableContainer.innerHTML = `
             <table>
                 <thead>
@@ -111,20 +113,90 @@ const AttendanceSchoolApp = {
                         <th>Data</th>
                         <th>Studente</th>
                         <th>Stato di presenza</th>
+                        <th>Partecipazione corso</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${records.map((record) => `
-                        <tr>
-                            <td>${this._escapeHtml(record.course_name)}</td>
-                            <td>${this._escapeHtml(this._formatDate(record.lesson_date))}</td>
-                            <td>${this._escapeHtml(record.canonical_full_name)}</td>
-                            <td><span class="status-tag ${this._escapeAttr(record.final_presence_status)}">${this._escapeHtml(this._presenceLabel(record.final_presence_status))}</span></td>
-                        </tr>
-                    `).join('')}
+                    ${records.map((record) => {
+                        const participation = participationByStudentCourse.get(this._studentCourseKey(record));
+                        return `
+                            <tr>
+                                <td>${this._escapeHtml(record.course_name)}</td>
+                                <td>${this._escapeHtml(this._formatDate(record.lesson_date))}</td>
+                                <td>${this._escapeHtml(record.canonical_full_name)}</td>
+                                <td><span class="status-tag ${this._escapeAttr(record.final_presence_status)}">${this._escapeHtml(this._presenceLabel(record.final_presence_status))}</span></td>
+                                <td class="participation-cell">${this._renderParticipation(participation)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
                 </tbody>
             </table>
         `;
+    },
+
+    _buildParticipationIndex(records) {
+        const index = new Map();
+        for (const record of records) {
+            const key = this._studentCourseKey(record);
+            const entry = index.get(key) || {
+                score: 0,
+                expectedLessons: record.expected_lessons_count || 0,
+                expectedSource: record.expected_lessons_source || 'official_lessons',
+            };
+            entry.score += this._presenceScore(record.final_presence_status);
+            entry.expectedLessons = record.expected_lessons_count || entry.expectedLessons;
+            entry.expectedSource = record.expected_lessons_source || entry.expectedSource;
+            index.set(key, entry);
+        }
+
+        for (const entry of index.values()) {
+            entry.percentage = entry.expectedLessons > 0
+                ? (entry.score / entry.expectedLessons) * 100
+                : null;
+            entry.canTakeExam = entry.expectedSource === 'configured'
+                && entry.percentage !== null
+                && entry.percentage >= 80;
+        }
+        return index;
+    },
+
+    _renderParticipation(participation) {
+        if (!participation || participation.percentage === null) {
+            return '<span class="participation-detail">n/d</span>';
+        }
+        const percentage = this._formatPercentage(participation.percentage);
+        const sourceLabel = participation.expectedSource === 'configured'
+            ? 'totale configurato'
+            : 'totale dedotto';
+        const examTag = participation.expectedSource !== 'configured'
+            ? '<span class="exam-tag partial">Esame non valutabile</span>'
+            : participation.canTakeExam
+                ? '<span class="exam-tag ok">Esame ok</span>'
+                : '<span class="exam-tag no">Esame no</span>';
+        return `
+            <div class="participation-value">${this._escapeHtml(percentage)}%</div>
+            <div class="participation-detail">${this._escapeHtml(this._formatScore(participation.score))}/${this._escapeHtml(participation.expectedLessons)} · ${this._escapeHtml(sourceLabel)}</div>
+            ${examTag}
+        `;
+    },
+
+    _presenceScore(status) {
+        if (status === 'presente') return 1;
+        if (status === 'prima_meta' || status === 'seconda_meta') return 0.5;
+        return 0;
+    },
+
+    _studentCourseKey(record) {
+        return `${record.course_name}||${record.canonical_full_name}`;
+    },
+
+    _formatPercentage(value) {
+        const rounded = Math.round(value * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    },
+
+    _formatScore(value) {
+        return Number.isInteger(value) ? String(value) : value.toFixed(1);
     },
 
     _presenceLabel(status) {

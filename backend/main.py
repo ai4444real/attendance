@@ -846,6 +846,8 @@ async def attendance_school_records():
                     "canonical_full_name": record.canonical_full_name,
                     "email": record.email,
                     "final_presence_status": record.final_presence_status,
+                    "expected_lessons_count": record.expected_lessons_count,
+                    "expected_lessons_source": record.expected_lessons_source,
                 }
                 for record in records
             ]
