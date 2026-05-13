@@ -212,3 +212,22 @@ class SchoolAttendanceRecordView:
     canonical_full_name: str
     email: Optional[str]
     final_presence_status: str
+
+
+@dataclass(frozen=True)
+class SchoolCourseLessonView:
+    lesson_id: int
+    course_name: str
+    lesson_date: str
+    source_meeting_id: str
+    total_records: int
+    presente_count: int
+    prima_meta_count: int
+    seconda_meta_count: int
+    assente_count: int
+
+
+@dataclass(frozen=True)
+class SchoolCourseOverviewView:
+    course_name: str
+    lessons: list[SchoolCourseLessonView]

@@ -64,6 +64,7 @@ ATTENDANCE_IMPORT_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "import-zoom.html")
 ATTENDANCE_DRAFTS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "draft-imports.html")
 ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliases.html")
 ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.html")
+ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -306,6 +307,11 @@ async def attendance_home():
                     <h2>Analisi scuola</h2>
                     <p>Consulta i dati ufficiali già consolidati: tabella presenze, filtri per corso e studente, riepilogo dei totali.</p>
                 </a>
+                <a class="card" href="/attendance/courses">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Corsi importati</h2>
+                    <p>Colpo d'occhio sui corsi official e sulle relative lezioni già importate, in sequenza cronologica.</p>
+                </a>
                 <a class="card" href="/attendance/manage">
                     <span class="card-label">Attivo</span>
                     <h2>Gestione presenze</h2>
@@ -394,6 +400,15 @@ async def attendance_aliases():
 async def attendance_school():
     return FileResponse(
         ATTENDANCE_SCHOOL_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/courses")
+@app.get("/attendance/courses/")
+async def attendance_courses():
+    return FileResponse(
+        ATTENDANCE_COURSES_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -848,6 +863,44 @@ async def attendance_school_records():
                 }
                 for record in records
             ]
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/api/attendance/school-courses")
+async def attendance_school_courses():
+    repository = PostgresAttendanceDraftQueryRepository()
+    courses = repository.list_school_course_overview()
+    total_lessons = sum(len(course.lessons) for course in courses)
+    total_records = sum(lesson.total_records for course in courses for lesson in course.lessons)
+    return JSONResponse(
+        {
+            "summary": {
+                "courses": len(courses),
+                "lessons": total_lessons,
+                "records": total_records,
+            },
+            "courses": [
+                {
+                    "course_name": course.course_name,
+                    "lessons": [
+                        {
+                            "lesson_id": lesson.lesson_id,
+                            "course_name": lesson.course_name,
+                            "lesson_date": lesson.lesson_date,
+                            "source_meeting_id": lesson.source_meeting_id,
+                            "total_records": lesson.total_records,
+                            "presente_count": lesson.presente_count,
+                            "prima_meta_count": lesson.prima_meta_count,
+                            "seconda_meta_count": lesson.seconda_meta_count,
+                            "assente_count": lesson.assente_count,
+                        }
+                        for lesson in course.lessons
+                    ],
+                }
+                for course in courses
+            ],
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )

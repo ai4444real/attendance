@@ -13,6 +13,8 @@ from backend.attendance_app.models import (
     DraftLessonView,
     ImportBatchSummary,
     SchoolAttendanceRecordView,
+    SchoolCourseLessonView,
+    SchoolCourseOverviewView,
 )
 
 from .connection import get_db_connection
@@ -361,6 +363,52 @@ class PostgresAttendanceDraftQueryRepository:
                 final_presence_status=str(row[5]),
             )
             for row in rows
+        ]
+
+    def list_school_course_overview(self) -> list[SchoolCourseOverviewView]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        l.id,
+                        l.course_name,
+                        l.lesson_date,
+                        l.source_meeting_id,
+                        COUNT(p.id) AS total_records,
+                        COUNT(*) FILTER (WHERE p.final_presence_status = 'presente') AS presente_count,
+                        COUNT(*) FILTER (WHERE p.final_presence_status = 'prima_meta') AS prima_meta_count,
+                        COUNT(*) FILTER (WHERE p.final_presence_status = 'seconda_meta') AS seconda_meta_count,
+                        COUNT(*) FILTER (WHERE p.final_presence_status = 'assente') AS assente_count
+                    FROM attendance_lessons AS l
+                    LEFT JOIN attendance_lesson_participants AS p
+                        ON p.lesson_id = l.id
+                    WHERE l.status = 'official'
+                      AND l.is_ignored = FALSE
+                    GROUP BY l.id
+                    ORDER BY l.course_name ASC, l.lesson_date ASC, l.id ASC
+                    """
+                )
+                rows = cursor.fetchall()
+
+        grouped_by_course: dict[str, list[SchoolCourseLessonView]] = {}
+        for row in rows:
+            lesson = SchoolCourseLessonView(
+                lesson_id=int(row[0]),
+                course_name=str(row[1]),
+                lesson_date=row[2].isoformat(),
+                source_meeting_id=str(row[3]),
+                total_records=int(row[4]),
+                presente_count=int(row[5]),
+                prima_meta_count=int(row[6]),
+                seconda_meta_count=int(row[7]),
+                assente_count=int(row[8]),
+            )
+            grouped_by_course.setdefault(lesson.course_name, []).append(lesson)
+
+        return [
+            SchoolCourseOverviewView(course_name=course_name, lessons=lessons)
+            for course_name, lessons in grouped_by_course.items()
         ]
 
     def _load_lesson_summary(self, cursor, lesson_id: int) -> dict[str, int]:
