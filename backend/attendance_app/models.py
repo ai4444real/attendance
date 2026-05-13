@@ -235,3 +235,14 @@ class SchoolCourseOverviewView:
     expected_lessons_count: int
     expected_lessons_source: str
     lessons: list[SchoolCourseLessonView]
+
+
+@dataclass(frozen=True)
+class SchoolStudentFollowupView:
+    course_name: str
+    canonical_full_name: str
+    email: Optional[str]
+    checked_lessons_count: int
+    missed_lessons_count: int
+    attended_lessons_count: int
+    recent_lessons: list[dict[str, str | bool]]

@@ -15,6 +15,7 @@ from backend.attendance_app.models import (
     SchoolAttendanceRecordView,
     SchoolCourseLessonView,
     SchoolCourseOverviewView,
+    SchoolStudentFollowupView,
 )
 
 from .connection import get_db_connection
@@ -448,6 +449,125 @@ class PostgresAttendanceDraftQueryRepository:
                 )
             )
         return course_overviews
+
+    def list_school_student_followups(
+        self,
+        *,
+        recent_lessons_limit: int = 4,
+        missed_lessons_threshold: int = 3,
+    ) -> list[SchoolStudentFollowupView]:
+        if recent_lessons_limit <= 0:
+            raise ValueError("recent_lessons_limit must be positive.")
+        if missed_lessons_threshold <= 0:
+            raise ValueError("missed_lessons_threshold must be positive.")
+
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH ranked_lessons AS (
+                        SELECT
+                            l.id,
+                            l.course_name,
+                            l.lesson_date,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY l.course_name
+                                ORDER BY l.lesson_date DESC, l.id DESC
+                            ) AS lesson_rank
+                        FROM attendance_lessons AS l
+                        WHERE l.status = 'official'
+                          AND l.is_ignored = FALSE
+                    ),
+                    recent_lessons AS (
+                        SELECT
+                            id,
+                            course_name,
+                            lesson_date
+                        FROM ranked_lessons
+                        WHERE lesson_rank <= %s
+                    ),
+                    course_students AS (
+                        SELECT
+                            l.course_name,
+                            p.canonical_full_name,
+                            MIN(p.email) FILTER (WHERE p.email IS NOT NULL AND p.email <> '') AS email
+                        FROM attendance_lessons AS l
+                        JOIN attendance_lesson_participants AS p
+                            ON p.lesson_id = l.id
+                        WHERE l.status = 'official'
+                          AND l.is_ignored = FALSE
+                        GROUP BY l.course_name, p.canonical_full_name
+                    ),
+                    student_recent_lessons AS (
+                        SELECT
+                            cs.course_name,
+                            cs.canonical_full_name,
+                            cs.email,
+                            rl.id AS lesson_id,
+                            rl.lesson_date,
+                            CASE WHEN p.id IS NULL THEN FALSE ELSE TRUE END AS attended
+                        FROM course_students AS cs
+                        JOIN recent_lessons AS rl
+                            ON rl.course_name = cs.course_name
+                        LEFT JOIN attendance_lesson_participants AS p
+                            ON p.lesson_id = rl.id
+                           AND p.canonical_full_name = cs.canonical_full_name
+                    ),
+                    aggregated AS (
+                        SELECT
+                            course_name,
+                            canonical_full_name,
+                            email,
+                            COUNT(*) AS checked_lessons_count,
+                            COUNT(*) FILTER (WHERE attended = FALSE) AS missed_lessons_count,
+                            COUNT(*) FILTER (WHERE attended = TRUE) AS attended_lessons_count,
+                            jsonb_agg(
+                                jsonb_build_object(
+                                    'lesson_id', lesson_id,
+                                    'lesson_date', lesson_date,
+                                    'attended', attended
+                                )
+                                ORDER BY lesson_date ASC, lesson_id ASC
+                            ) AS recent_lessons_json
+                        FROM student_recent_lessons
+                        GROUP BY course_name, canonical_full_name, email
+                    )
+                    SELECT
+                        course_name,
+                        canonical_full_name,
+                        email,
+                        checked_lessons_count,
+                        missed_lessons_count,
+                        attended_lessons_count,
+                        recent_lessons_json
+                    FROM aggregated
+                    WHERE checked_lessons_count = %s
+                      AND missed_lessons_count >= %s
+                    ORDER BY missed_lessons_count DESC, course_name ASC, canonical_full_name ASC
+                    """,
+                    (recent_lessons_limit, recent_lessons_limit, missed_lessons_threshold),
+                )
+                rows = cursor.fetchall()
+
+        return [
+            SchoolStudentFollowupView(
+                course_name=str(row[0]),
+                canonical_full_name=str(row[1]),
+                email=row[2],
+                checked_lessons_count=int(row[3]),
+                missed_lessons_count=int(row[4]),
+                attended_lessons_count=int(row[5]),
+                recent_lessons=[
+                    {
+                        "lesson_id": str(item["lesson_id"]),
+                        "lesson_date": item["lesson_date"],
+                        "attended": bool(item["attended"]),
+                    }
+                    for item in list(row[6] or [])
+                ],
+            )
+            for row in rows
+        ]
 
     def _load_lesson_summary(self, cursor, lesson_id: int) -> dict[str, int]:
         cursor.execute(

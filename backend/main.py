@@ -66,6 +66,7 @@ ATTENDANCE_DRAFTS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "draft-imports.html
 ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliases.html")
 ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.html")
 ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
+ATTENDANCE_FOLLOWUPS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-followups.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -313,6 +314,11 @@ async def attendance_home():
                     <h2>Analisi scuola</h2>
                     <p>Consulta i dati ufficiali già consolidati: tabella presenze, filtri per corso e studente, riepilogo dei totali.</p>
                 </a>
+                <a class="card" href="/attendance/followups">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Studenti da richiamare</h2>
+                    <p>Segnala gli studenti che risultano assenti implicitamente nelle ultime lezioni official di un corso.</p>
+                </a>
                 <a class="card" href="/attendance/courses">
                     <span class="card-label">Nuovo</span>
                     <h2>Corsi importati</h2>
@@ -395,6 +401,15 @@ async def attendance_school():
 async def attendance_courses():
     return FileResponse(
         ATTENDANCE_COURSES_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/followups")
+@app.get("/attendance/followups/")
+async def attendance_followups():
+    return FileResponse(
+        ATTENDANCE_FOLLOWUPS_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -921,6 +936,38 @@ async def attendance_set_course_expected_lessons(payload: dict):
         {
             "course_name": course_name,
             "expected_lessons_count": expected_lessons_count,
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/api/attendance/school-followups")
+async def attendance_school_followups():
+    repository = PostgresAttendanceDraftQueryRepository()
+    recent_lessons_limit = 4
+    missed_lessons_threshold = 3
+    followups = repository.list_school_student_followups(
+        recent_lessons_limit=recent_lessons_limit,
+        missed_lessons_threshold=missed_lessons_threshold,
+    )
+    return JSONResponse(
+        {
+            "criteria": {
+                "recent_lessons_limit": recent_lessons_limit,
+                "missed_lessons_threshold": missed_lessons_threshold,
+            },
+            "followups": [
+                {
+                    "course_name": item.course_name,
+                    "canonical_full_name": item.canonical_full_name,
+                    "email": item.email,
+                    "checked_lessons_count": item.checked_lessons_count,
+                    "missed_lessons_count": item.missed_lessons_count,
+                    "attended_lessons_count": item.attended_lessons_count,
+                    "recent_lessons": item.recent_lessons,
+                }
+                for item in followups
+            ],
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )

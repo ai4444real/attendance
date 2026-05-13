@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Corsi importati</title>
+    <title>Studenti da richiamare</title>
     <link rel="stylesheet" href="/assets/styles/brand.css">
     <style>
         * { box-sizing: border-box; }
@@ -30,30 +30,17 @@
         .panel { background: white; border: 1px solid var(--brand-border); border-radius: 18px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); padding: 20px; }
         .panel-title { font-size: 18px; font-weight: 800; color: var(--brand-ink); margin: 0 0 12px; }
         .hint { color: var(--brand-muted); font-size: 14px; line-height: 1.6; }
-        .course-list { display: grid; gap: 16px; }
-        .course-card { border: 1px solid var(--brand-border); border-radius: 18px; padding: 18px; background: #fff; }
-        .course-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
-        .course-title { margin: 0; font-size: 26px; font-weight: 800; color: var(--brand-ink); }
-        .course-meta { color: var(--brand-muted); font-size: 14px; }
-        .course-target-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-        .course-target-label { font-size: 12px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--brand-muted); }
-        .course-target-input { width: 88px; border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 10px; font-size: 14px; color: var(--brand-ink); text-align: center; }
-        .course-target-button { border: 1px solid #b9d7e8; background: #f4fbff; color: #075985; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
-        .course-target-button:hover { border-color: var(--brand-pnl-blue); }
-        .course-target-status { width: 100%; text-align: right; color: var(--brand-muted); font-size: 12px; min-height: 16px; }
-        .lesson-track { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 170px); gap: 12px; overflow-x: auto; padding-bottom: 6px; }
-        .lesson-track::-webkit-scrollbar { height: 10px; }
-        .lesson-track::-webkit-scrollbar-thumb { background: rgba(21, 94, 117, 0.25); border-radius: 999px; }
-        .lesson-cell { border: 1px solid var(--brand-border); border-radius: 16px; padding: 14px 14px 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%); min-height: 138px; display: flex; flex-direction: column; gap: 8px; }
-        .lesson-date { font-size: 15px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; color: var(--brand-ink); }
-        .lesson-records { font-size: 24px; font-weight: 900; color: var(--brand-ink); line-height: 1; }
-        .lesson-records-label { font-size: 13px; color: var(--brand-muted); }
-        .lesson-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
-        .lesson-pill { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; }
-        .lesson-pill.presente { background: #e7f7ee; color: #157347; }
-        .lesson-pill.prima_meta { background: #e9f1fb; color: #0f4c81; }
-        .lesson-pill.seconda_meta { background: #fff2d9; color: #946200; }
-        .lesson-pill.assente { background: #fde7ec; color: #b42318; }
+        .table-wrap { overflow: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 10px; border-bottom: 1px solid var(--brand-border); text-align: left; vertical-align: top; }
+        th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); }
+        .student-name { font-weight: 800; color: var(--brand-ink); }
+        .student-email { color: var(--brand-muted); font-size: 13px; margin-top: 3px; }
+        .missed-count { font-size: 20px; font-weight: 900; color: #b42318; }
+        .lesson-dots { display: flex; gap: 8px; flex-wrap: wrap; }
+        .lesson-dot { width: 34px; height: 34px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; border: 1px solid var(--brand-border); }
+        .lesson-dot.present { background: #e7f7ee; color: #157347; border-color: #bfe8d0; }
+        .lesson-dot.missing { background: #fde7ec; color: #b42318; border-color: #f7c2cc; }
         .empty { padding: 24px; border: 1px dashed var(--brand-border); border-radius: 16px; color: var(--brand-muted); background: #fafcfd; }
     </style>
 </head>
@@ -71,27 +58,27 @@
                 <a class="workspace-link" href="/">Home</a>
                 <a class="workspace-link" href="/attendance">Attendance</a>
                 <a class="workspace-link" href="/attendance/school">Analisi scuola</a>
-                <a class="workspace-link" href="/attendance/followups">Studenti da richiamare</a>
-                <span class="workspace-module-badge">Corsi importati</span>
+                <a class="workspace-link" href="/attendance/courses">Corsi importati</a>
+                <span class="workspace-module-badge">Studenti da richiamare</span>
             </nav>
         </div>
     </header>
 
     <main class="page">
         <section class="hero">
-            <h1>Corsi importati</h1>
-            <p>Vista cronologica dei corsi già consolidati. Ogni riga mostra le lezioni official del corso e quante presenze reali contengono, così si vede subito se la sequenza è completa o se ci sono buchi da indagare.</p>
+            <h1>Studenti da richiamare</h1>
+            <p>Controllo operativo sulle ultime lezioni official: segnala chi ha iniziato un corso ma manca implicitamente troppe volte di seguito.</p>
         </section>
 
         <section id="summary" class="summary-grid"></section>
 
         <section class="panel">
-            <h2 class="panel-title">Timeline corsi</h2>
-            <p class="hint">I dati arrivano solo da lesson official non ignorate. Ogni cella rappresenta una lezione del corso, ordinata per data crescente.</p>
-            <div id="courseContainer" class="course-list"></div>
+            <h2 class="panel-title">Alert presenze recenti</h2>
+            <p id="criteriaText" class="hint"></p>
+            <div id="followupContainer" class="table-wrap"></div>
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-courses.js"></script>
+    <script src="/attendance/static/js/attendance-followups.js"></script>
 </body>
 </html>
