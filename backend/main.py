@@ -297,10 +297,15 @@ async def attendance_home():
     body_html = """
         <section>
             <div class="cards">
-                <a class="card" href="/attendance/view">
-                    <span class="card-label">Attivo</span>
-                    <h2>Visualizzazione presenze</h2>
-                    <p>Apri la schermata attuale per caricare i file CSV trackcc-like, analizzare i dati e usare filtri ed export.</p>
+                <a class="card" href="/attendance/import">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Importa Zoom</h2>
+                    <p>Carica il CSV Zoom grezzo, lascia che il backend lo normalizzi e passa subito alla revisione del risultato.</p>
+                </a>
+                <a class="card" href="/attendance/drafts">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Draft importati</h2>
+                    <p>Apri i batch già salvati nel database e scorri lezioni e partecipanti direttamente dal modello dati persistito.</p>
                 </a>
                 <a class="card" href="/attendance/school">
                     <span class="card-label">MVP</span>
@@ -312,30 +317,10 @@ async def attendance_home():
                     <h2>Corsi importati</h2>
                     <p>Colpo d'occhio sui corsi official e sulle relative lezioni già importate, in sequenza cronologica.</p>
                 </a>
-                <a class="card" href="/attendance/manage">
-                    <span class="card-label">Attivo</span>
-                    <h2>Gestione presenze</h2>
-                    <p>Apri il flusso operativo Zoom: carica i report, lavora sui dati e esporta il formato normalizzato.</p>
-                </a>
-                <a class="card" href="/attendance/import">
-                    <span class="card-label">Nuovo</span>
-                    <h2>Importa Zoom</h2>
-                    <p>Carica il CSV Zoom grezzo, lascia che il backend lo normalizzi e passa subito alla revisione del risultato.</p>
-                </a>
-                <a class="card" href="/attendance/drafts">
-                    <span class="card-label">Nuovo</span>
-                    <h2>Draft importati</h2>
-                    <p>Apri i batch già salvati nel database e scorri lezioni e partecipanti direttamente dal modello dati persistito.</p>
-                </a>
                 <a class="card" href="/attendance/aliases">
                     <span class="card-label">Supporto</span>
                     <h2>Alias identità</h2>
                     <p>Controlla gli alias nome registrati nel database e verifica rapidamente se un'unione è stata salvata.</p>
-                </a>
-                <a class="card" href="/attendance/review">
-                    <span class="card-label">Nuovo</span>
-                    <h2>Revisione normalizzazione</h2>
-                    <p>Carica un risultato normalizzato già prodotto e scorri i casi borderline, i meeting strani e i record da correggere.</p>
                 </a>
             </div>
         </section>
