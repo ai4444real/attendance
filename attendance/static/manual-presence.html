@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Presenze manuali</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: var(--brand-surface); color: #1f2933; }
+        .workspace-header { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--brand-border); }
+        .workspace-header-inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+        .workspace-brand { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
+        .workspace-brand img { height: 42px; width: auto; display: block; }
+        .workspace-brand-text { display: flex; flex-direction: column; gap: 2px; }
+        .workspace-brand-title { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--brand-ink); }
+        .workspace-brand-subtitle { font-size: 12px; color: var(--brand-muted); }
+        .workspace-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .workspace-link { text-decoration: none; color: #155e75; font-weight: 600; font-size: 14px; }
+        .workspace-link:hover { text-decoration: underline; }
+        .workspace-module-badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: var(--brand-pnl-green-soft); color: var(--brand-pnl-green-dark); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+        .page { max-width: 1440px; margin: 0 auto; padding: 24px 20px 56px; }
+        .hero { background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%); color: white; border-radius: 20px; padding: 30px; margin-bottom: 22px; box-shadow: 0 14px 30px rgba(16, 42, 67, 0.16); }
+        .hero h1 { margin: 0 0 10px; font-size: 36px; }
+        .hero p { margin: 0; line-height: 1.6; max-width: 860px; font-size: 16px; }
+        .panel { background: white; border: 1px solid var(--brand-border); border-radius: 18px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); padding: 20px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
+        .field { display: flex; flex-direction: column; gap: 8px; }
+        .field label { font-size: 13px; font-weight: 800; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .field input, .field select, .field textarea { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+        .field textarea { min-height: 220px; resize: vertical; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+        .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+        .primary-button { border: 0; border-radius: 12px; background: var(--brand-pnl-blue); color: white; font-size: 14px; font-weight: 800; padding: 11px 16px; cursor: pointer; }
+        .primary-button:hover { filter: brightness(1.04); }
+        .status { color: var(--brand-muted); font-size: 14px; }
+        .status.ok { color: #157347; font-weight: 800; }
+        .status.error { color: #b42318; font-weight: 800; }
+    </style>
+</head>
+<body>
+    <header class="workspace-header">
+        <div class="workspace-header-inner">
+            <a class="workspace-brand" href="/">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="workspace-brand-text">
+                    <span class="workspace-brand-title">Rebekko Webapps</span>
+                    <span class="workspace-brand-subtitle">PNL Evolution</span>
+                </div>
+            </a>
+            <nav class="workspace-nav" aria-label="Workspace navigation">
+                <a class="workspace-link" href="/">Home</a>
+                <a class="workspace-link" href="/attendance">Attendance</a>
+                <a class="workspace-link" href="/attendance/school">Analisi scuola</a>
+                <a class="workspace-link" href="/attendance/courses">Corsi importati</a>
+                <span class="workspace-module-badge">Presenze manuali</span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page">
+        <section class="hero">
+            <h1>Presenze manuali</h1>
+            <p>Inserimento rapido di presenze gia' aggregate per lezioni in presenza, QR form o import manuali. I dati finiscono nelle stesse tabelle official usate dall'analisi scuola.</p>
+        </section>
+
+        <section class="panel">
+            <form id="manualPresenceForm">
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="courseName">Corso</label>
+                        <input id="courseName" name="course_name" required placeholder="Practitioner">
+                    </div>
+                    <div class="field">
+                        <label for="lessonDate">Data</label>
+                        <input id="lessonDate" name="lesson_date" required type="date">
+                    </div>
+                    <div class="field">
+                        <label for="presenceStatus">Stato default</label>
+                        <select id="presenceStatus" name="presence_status">
+                            <option value="presente">Presente</option>
+                            <option value="prima_meta">Prima meta'</option>
+                            <option value="seconda_meta">Seconda meta'</option>
+                            <option value="assente">Assente</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="presenceSource">Origine</label>
+                        <select id="presenceSource" name="presence_source">
+                            <option value="manual">Manuale</option>
+                            <option value="qr_form">QR form</option>
+                            <option value="csv_manual">CSV manuale</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="recordsText">Persone</label>
+                    <textarea id="recordsText" name="records" required placeholder="Mario Rossi&#10;Anna Bianchi, anna@example.com&#10;Luca Verdi; luca@example.com; prima_meta"></textarea>
+                </div>
+                <div class="actions">
+                    <button class="primary-button" type="submit">Importa presenze</button>
+                    <span id="status" class="status"></span>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script src="/attendance/static/js/manual-presence.js"></script>
+</body>
+</html>

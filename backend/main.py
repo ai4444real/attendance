@@ -24,6 +24,7 @@ from backend.attendance_app.services import (
     AttendanceIdentityAliasService,
     AttendanceImportService,
     AttendanceLessonStateService,
+    AttendanceManualPresenceService,
     AttendanceReviewActionService,
     _apply_identity_alias_maps,
     _load_identity_alias_maps,
@@ -67,6 +68,7 @@ ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliase
 ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.html")
 ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
 ATTENDANCE_FOLLOWUPS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-followups.html")
+ATTENDANCE_MANUAL_PRESENCE_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "manual-presence.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -319,6 +321,11 @@ async def attendance_home():
                     <h2>Studenti da richiamare</h2>
                     <p>Segnala gli studenti che risultano assenti implicitamente nelle ultime lezioni official di un corso.</p>
                 </a>
+                <a class="card" href="/attendance/manual">
+                    <span class="card-label">Nuovo</span>
+                    <h2>Presenze manuali</h2>
+                    <p>Inserisci presenze gia' aggregate per lezioni in presenza, QR form o import manuali.</p>
+                </a>
                 <a class="card" href="/attendance/courses">
                     <span class="card-label">Nuovo</span>
                     <h2>Corsi importati</h2>
@@ -410,6 +417,15 @@ async def attendance_courses():
 async def attendance_followups():
     return FileResponse(
         ATTENDANCE_FOLLOWUPS_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/manual")
+@app.get("/attendance/manual/")
+async def attendance_manual_presence():
+    return FileResponse(
+        ATTENDANCE_MANUAL_PRESENCE_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -600,6 +616,7 @@ async def attendance_lesson_detail(lesson_id: int):
                     "calculated_presence_status": participant.calculated_presence_status,
                     "manual_override_presence_status": participant.manual_override_presence_status,
                     "final_presence_status": participant.final_presence_status,
+                    "presence_source": participant.presence_source,
                     "flags": participant.flags,
                     "metadata": participant.metadata,
                     "source_details": source_segment_groups.get(participant.participant_key, []),
@@ -968,6 +985,37 @@ async def attendance_school_followups():
                 }
                 for item in followups
             ],
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.post("/api/attendance/manual-presence")
+async def attendance_manual_presence_import(payload: dict):
+    service = AttendanceManualPresenceService(
+        PostgresAttendanceDraftMutationRepository(),
+        PostgresAttendanceIdentityAliasRepository(),
+    )
+    try:
+        result = service.import_manual_presence(
+            course_name=str(payload.get("course_name") or ""),
+            lesson_date=str(payload.get("lesson_date") or ""),
+            presence_source=str(payload.get("presence_source") or "manual"),
+            created_by=str(payload.get("created_by") or "manual-ui"),
+            records=list(payload.get("records") or []),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Import manuale fallito: {exc}") from exc
+
+    return JSONResponse(
+        {
+            "lesson_id": result.lesson_id,
+            "course_name": result.course_name,
+            "lesson_date": result.lesson_date,
+            "records_processed": result.records_processed,
+            "participants_upserted": result.participants_upserted,
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )

@@ -17,6 +17,7 @@ Migrazioni schema attendance attuali:
 - `schema/003_attendance_identity_alias_types.sql`
 - `schema/004_attendance_lesson_source_segments.sql`
 - `schema/005_attendance_courses.sql`
+- `schema/006_attendance_presence_source.sql`
 
 Il database target è unico: `rebekko`.
 I domini applicativi convivono nello stesso database con naming esplicito, ad

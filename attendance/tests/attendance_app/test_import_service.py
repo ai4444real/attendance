@@ -13,6 +13,7 @@ from backend.attendance_app.models import (
     ImportBatch,
     ImportBatchCreate,
     ImportedLessonSummary,
+    ManualPresenceImportResult,
     PersistedDraftImport,
     SkippedDuplicateLesson,
 )
@@ -23,6 +24,7 @@ from backend.attendance_app.services import (
     AttendanceIdentityAliasService,
     AttendanceImportService,
     AttendanceLessonStateService,
+    AttendanceManualPresenceService,
     AttendanceReviewActionService,
 )
 from backend.attendance_normalization.service import (
@@ -112,6 +114,7 @@ class FakeAttendanceDraftMutationRepository:
         self.deleted_lessons = []
         self.deleted_batches = []
         self.course_expected_lessons = []
+        self.manual_imports = []
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
@@ -141,6 +144,16 @@ class FakeAttendanceDraftMutationRepository:
 
     def upsert_course_expected_lessons(self, course_name: str, expected_lessons_count: int | None) -> None:
         self.course_expected_lessons.append((course_name, expected_lessons_count))
+
+    def upsert_manual_presence_import(self, import_data):
+        self.manual_imports.append(import_data)
+        return ManualPresenceImportResult(
+            lesson_id=77,
+            course_name=import_data.course_name,
+            lesson_date=import_data.lesson_date,
+            records_processed=len(import_data.records),
+            participants_upserted=len(import_data.records),
+        )
 
 
 class AttendanceImportServiceTest(unittest.TestCase):
@@ -390,6 +403,7 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
                     calculated_presence_status="assente",
                     manual_override_presence_status=None,
                     final_presence_status="assente",
+                    presence_source="zoom",
                     flags=[],
                     metadata={
                         "first_name": "Mario",
@@ -445,6 +459,7 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
                     calculated_presence_status="prima_meta",
                     manual_override_presence_status=None,
                     final_presence_status="prima_meta",
+                    presence_source="zoom",
                     flags=[],
                     metadata={"segments": []},
                 )
@@ -510,6 +525,7 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
                     calculated_presence_status="seconda_meta",
                     manual_override_presence_status=None,
                     final_presence_status="seconda_meta",
+                    presence_source="zoom",
                     flags=[],
                     metadata={
                         "identity_sources": [
@@ -611,6 +627,7 @@ class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
                     calculated_presence_status="assente",
                     manual_override_presence_status=None,
                     final_presence_status="assente",
+                    presence_source="zoom",
                     flags=[],
                     metadata={
                         "segments": [["2026-01-28T20:15:00", "2026-01-28T21:30:00"]],
@@ -631,6 +648,7 @@ class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
                     calculated_presence_status="assente",
                     manual_override_presence_status=None,
                     final_presence_status="assente",
+                    presence_source="zoom",
                     flags=[],
                     metadata={
                         "segments": [["2026-01-28T21:25:00", "2026-01-28T21:54:00"]],
@@ -739,6 +757,57 @@ class FakeAttendanceIdentityAliasRepository:
             is_active=True,
             notes=kwargs.get("notes"),
         )
+
+
+class AttendanceManualPresenceServiceTest(unittest.TestCase):
+    def test_import_manual_presence_canonicalizes_and_delegates(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        aliases = FakeAttendanceIdentityAliasRepository()
+        aliases.aliases = [
+            AttendanceIdentityAlias(
+                id=1,
+                canonical_full_name="Mario Rossi",
+                canonical_email="mario@example.com",
+                alias_value="Mario R.",
+                alias_type="full_name",
+                created_by="test",
+                created_at=datetime(2026, 5, 13, 10, 0, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            )
+        ]
+        service = AttendanceManualPresenceService(mutation, aliases)
+
+        result = service.import_manual_presence(
+            course_name=" Practitioner ",
+            lesson_date="2026-05-13",
+            presence_source="manual",
+            created_by="test-ui",
+            records=[
+                {"full_name": "Mario R.", "presence_status": "presente"},
+                {"full_name": "Mario Rossi", "email": "mario@example.com", "presence_status": "presente"},
+            ],
+        )
+
+        self.assertEqual(77, result.lesson_id)
+        self.assertEqual(1, result.records_processed)
+        saved = mutation.manual_imports[0]
+        self.assertEqual("Practitioner", saved.course_name)
+        self.assertEqual("manual", saved.presence_source)
+        self.assertEqual("Mario Rossi", saved.records[0].full_name)
+        self.assertEqual("mario@example.com", saved.records[0].email)
+        self.assertEqual("presente", saved.records[0].presence_status)
+
+    def test_import_manual_presence_rejects_unknown_status(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceManualPresenceService(mutation)
+
+        with self.assertRaises(ValueError):
+            service.import_manual_presence(
+                course_name="Practitioner",
+                lesson_date="2026-05-13",
+                records=[{"full_name": "Mario Rossi", "presence_status": "forse"}],
+            )
 
 
 class AttendanceIdentityAliasServiceTest(unittest.TestCase):

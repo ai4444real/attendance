@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 
-from backend.attendance_app.models import DraftLessonSourceSegment, DraftLessonView
+from backend.attendance_app.models import (
+    DraftLessonSourceSegment,
+    DraftLessonView,
+    ManualPresenceImportCreate,
+    ManualPresenceImportResult,
+)
 
 from .connection import get_db_connection
 
@@ -318,6 +324,185 @@ class PostgresAttendanceDraftMutationRepository:
                     (course_name, expected_lessons_count),
                 )
             connection.commit()
+
+    def upsert_manual_presence_import(
+        self,
+        import_data: ManualPresenceImportCreate,
+    ) -> ManualPresenceImportResult:
+        lesson_date = _parse_date(import_data.lesson_date)
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                lesson_id = self._find_existing_official_lesson(
+                    cursor,
+                    course_name=import_data.course_name,
+                    lesson_date=lesson_date,
+                )
+                if lesson_id is None:
+                    batch_id = self._ensure_manual_batch(cursor, import_data.created_by)
+                    lesson_id = self._create_manual_lesson(
+                        cursor,
+                        batch_id=batch_id,
+                        course_name=import_data.course_name,
+                        lesson_date=lesson_date,
+                    )
+                upserted = 0
+                for record in import_data.records:
+                    participant_key = (record.email or "").strip().lower() or record.full_name.strip().lower()
+                    cursor.execute(
+                        """
+                        INSERT INTO attendance_lesson_participants (
+                            lesson_id,
+                            participant_key,
+                            canonical_full_name,
+                            raw_full_name,
+                            email,
+                            segment_count,
+                            minutes_first_half,
+                            minutes_second_half,
+                            duration_first_half,
+                            duration_second_half,
+                            total_minutes,
+                            calculated_presence_status,
+                            manual_override_presence_status,
+                            final_presence_status,
+                            presence_source,
+                            flags_json,
+                            metadata_json
+                        )
+                        VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 0, 0, %s, NULL, %s, %s, '[]'::jsonb, %s::jsonb)
+                        ON CONFLICT (lesson_id, participant_key)
+                        DO UPDATE SET
+                            canonical_full_name = EXCLUDED.canonical_full_name,
+                            raw_full_name = EXCLUDED.raw_full_name,
+                            email = EXCLUDED.email,
+                            calculated_presence_status = EXCLUDED.calculated_presence_status,
+                            manual_override_presence_status = NULL,
+                            final_presence_status = EXCLUDED.final_presence_status,
+                            presence_source = EXCLUDED.presence_source,
+                            metadata_json = EXCLUDED.metadata_json,
+                            updated_at = NOW()
+                        """,
+                        (
+                            lesson_id,
+                            participant_key,
+                            record.full_name,
+                            record.full_name,
+                            record.email,
+                            record.presence_status,
+                            record.presence_status,
+                            import_data.presence_source,
+                            json.dumps({
+                                "source": import_data.presence_source,
+                                "manual_import": True,
+                                "created_by": import_data.created_by,
+                            }),
+                        ),
+                    )
+                    upserted += 1
+            connection.commit()
+
+        return ManualPresenceImportResult(
+            lesson_id=lesson_id,
+            course_name=import_data.course_name,
+            lesson_date=import_data.lesson_date,
+            records_processed=len(import_data.records),
+            participants_upserted=upserted,
+        )
+
+    def _ensure_manual_batch(self, cursor, created_by: str | None) -> int:
+        cursor.execute(
+            """
+            INSERT INTO attendance_import_batches (
+                source_system,
+                source_file_name,
+                imported_by,
+                status,
+                notes
+            )
+            VALUES ('manual', 'manual-presence-entry', %s, 'official', 'Contenitore tecnico per presenze inserite manualmente')
+            RETURNING id
+            """,
+            (created_by,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Failed to create manual attendance batch.")
+        return int(row[0])
+
+    def _find_existing_official_lesson(
+        self,
+        cursor,
+        *,
+        course_name: str,
+        lesson_date: date,
+    ) -> int | None:
+        cursor.execute(
+            """
+            SELECT id
+            FROM attendance_lessons
+            WHERE course_name = %s
+              AND lesson_date = %s
+              AND status = 'official'
+              AND is_ignored = FALSE
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (course_name, lesson_date),
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            return int(row[0])
+        return None
+
+    def _create_manual_lesson(
+        self,
+        cursor,
+        *,
+        batch_id: int,
+        course_name: str,
+        lesson_date: date,
+    ) -> int:
+        lesson_start = datetime.combine(lesson_date, time(0, 0), tzinfo=ZoneInfo("Europe/Zurich"))
+        lesson_end = datetime.combine(lesson_date, time(23, 59), tzinfo=ZoneInfo("Europe/Zurich"))
+        cursor.execute(
+            """
+            INSERT INTO attendance_lessons (
+                import_batch_id,
+                source_system,
+                source_meeting_id,
+                course_name,
+                lesson_date,
+                meeting_start_at,
+                meeting_end_at,
+                effective_start_at,
+                effective_end_at,
+                threshold_ratio,
+                break_source,
+                effective_start_source,
+                effective_end_source,
+                status,
+                officialized_at,
+                diagnostics_json
+            )
+            VALUES (%s, 'manual', %s, %s, %s, %s, %s, %s, %s, 0.8000, 'manual', 'manual', 'manual', 'official', NOW(), %s::jsonb)
+            RETURNING id
+            """,
+            (
+                batch_id,
+                f"manual:{course_name}:{lesson_date.isoformat()}",
+                course_name,
+                lesson_date,
+                lesson_start,
+                lesson_end,
+                lesson_start,
+                lesson_end,
+                json.dumps({"source": "manual"}),
+            ),
+        )
+        inserted = cursor.fetchone()
+        if inserted is None:
+            raise RuntimeError("Failed to create manual attendance lesson.")
+        return int(inserted[0])
 
 
 def _parse_datetime(value: str) -> datetime:

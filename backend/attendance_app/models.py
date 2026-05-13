@@ -135,6 +135,7 @@ class DraftLessonParticipantView:
     calculated_presence_status: str
     manual_override_presence_status: Optional[str]
     final_presence_status: str
+    presence_source: str
     flags: list[str]
     metadata: dict[str, Any]
 
@@ -246,3 +247,28 @@ class SchoolStudentFollowupView:
     missed_lessons_count: int
     attended_lessons_count: int
     recent_lessons: list[dict[str, str | bool]]
+
+
+@dataclass(frozen=True)
+class ManualPresenceRecordCreate:
+    full_name: str
+    email: Optional[str]
+    presence_status: str
+
+
+@dataclass(frozen=True)
+class ManualPresenceImportCreate:
+    course_name: str
+    lesson_date: str
+    presence_source: str
+    created_by: Optional[str]
+    records: list[ManualPresenceRecordCreate]
+
+
+@dataclass(frozen=True)
+class ManualPresenceImportResult:
+    lesson_id: int
+    course_name: str
+    lesson_date: str
+    records_processed: int
+    participants_upserted: int

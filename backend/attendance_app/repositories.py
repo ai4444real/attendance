@@ -13,6 +13,8 @@ from .models import (
     ImportBatchCreate,
     ImportBatchSummary,
     LessonDraft,
+    ManualPresenceImportCreate,
+    ManualPresenceImportResult,
     PersistedDraftImport,
     SkippedDuplicateLesson,
 )
@@ -136,3 +138,9 @@ class AttendanceDraftMutationRepository(Protocol):
         expected_lessons_count: int | None,
     ) -> None:
         """Create or update the expected lesson count for one course."""
+
+    def upsert_manual_presence_import(
+        self,
+        import_data: ManualPresenceImportCreate,
+    ) -> ManualPresenceImportResult:
+        """Create/update one manual lesson presence import in the canonical tables."""

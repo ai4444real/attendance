@@ -211,6 +211,7 @@ class PostgresAttendanceDraftQueryRepository:
                         p.calculated_presence_status,
                         p.manual_override_presence_status,
                         p.final_presence_status,
+                        p.presence_source,
                         p.flags_json,
                         p.metadata_json
                     FROM attendance_lesson_participants AS p
@@ -236,8 +237,9 @@ class PostgresAttendanceDraftQueryRepository:
                         calculated_presence_status=str(row[11]),
                         manual_override_presence_status=row[12],
                         final_presence_status=str(row[13]),
-                        flags=list(row[14] or []),
-                        metadata=dict(row[15] or {}),
+                        presence_source=str(row[14]),
+                        flags=list(row[15] or []),
+                        metadata=dict(row[16] or {}),
                     )
                     for row in participant_rows
                 ]

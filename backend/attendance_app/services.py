@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from backend.attendance_normalization.identity_rules import load_identity_rules
 from backend.attendance_normalization.presence_rules import determine_presence_status
@@ -17,6 +17,9 @@ from .models import (
     ImportBatchCreate,
     LessonDraft,
     LessonParticipantDraft,
+    ManualPresenceImportCreate,
+    ManualPresenceImportResult,
+    ManualPresenceRecordCreate,
     PersistedDraftImport,
 )
 from .repositories import (
@@ -576,6 +579,82 @@ class AttendanceCourseConfigService:
         self._mutation_repository.upsert_course_expected_lessons(
             normalized_course_name,
             expected_lessons_count,
+        )
+
+
+class AttendanceManualPresenceService:
+    """Import already-aggregated attendance rows into the canonical model."""
+
+    _ALLOWED_STATUSES = {"presente", "prima_meta", "seconda_meta", "assente"}
+    _ALLOWED_SOURCES = {"manual", "qr_form", "csv_manual"}
+
+    def __init__(
+        self,
+        mutation_repository: AttendanceDraftMutationRepository,
+        identity_alias_repository: AttendanceIdentityAliasRepository | None = None,
+    ) -> None:
+        self._mutation_repository = mutation_repository
+        self._identity_alias_repository = identity_alias_repository
+
+    def import_manual_presence(
+        self,
+        *,
+        course_name: str,
+        lesson_date: str,
+        presence_source: str = "manual",
+        created_by: str | None = None,
+        records: list[dict],
+    ) -> ManualPresenceImportResult:
+        normalized_course_name = " ".join((course_name or "").strip().split())
+        if not normalized_course_name:
+            raise ValueError("course_name is required")
+        try:
+            date.fromisoformat(lesson_date)
+        except ValueError as exc:
+            raise ValueError("lesson_date must be YYYY-MM-DD") from exc
+        if presence_source not in self._ALLOWED_SOURCES:
+            raise ValueError(f"Unsupported presence_source: {presence_source}")
+
+        name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
+        normalized_records: list[ManualPresenceRecordCreate] = []
+        seen_keys: set[str] = set()
+        for record in records:
+            raw_name = " ".join(str(record.get("full_name") or "").strip().split())
+            raw_email = str(record.get("email") or "").strip() or None
+            status = str(record.get("presence_status") or "").strip()
+            if not raw_name:
+                continue
+            if status not in self._ALLOWED_STATUSES:
+                raise ValueError(f"Unsupported presence status: {status}")
+            canonical_full_name, canonical_email = _apply_identity_alias_maps(
+                raw_name,
+                raw_email,
+                name_alias_map,
+                email_alias_map,
+            )
+            dedupe_key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            normalized_records.append(
+                ManualPresenceRecordCreate(
+                    full_name=canonical_full_name,
+                    email=canonical_email,
+                    presence_status=status,
+                )
+            )
+
+        if not normalized_records:
+            raise ValueError("At least one valid manual presence record is required")
+
+        return self._mutation_repository.upsert_manual_presence_import(
+            ManualPresenceImportCreate(
+                course_name=normalized_course_name,
+                lesson_date=lesson_date,
+                presence_source=presence_source,
+                created_by=created_by,
+                records=normalized_records,
+            )
         )
 
 
