@@ -78,13 +78,11 @@ const AttendanceCoursesApp = {
                             <div class="lesson-cell" title="${this._escapeAttr(`${course.course_name} · ${this._formatDate(lesson.lesson_date)} · meeting ${lesson.source_meeting_id}`)}">
                                 <div class="lesson-date">${this._escapeHtml(this._formatDate(lesson.lesson_date))}</div>
                                 <div class="lesson-records">${lesson.total_records || 0}</div>
-                                <div class="lesson-records-label">presenze registrate</div>
-                                <div class="lesson-meeting">meeting ${this._escapeHtml(lesson.source_meeting_id)}</div>
+                                <div class="lesson-records-label">presenze</div>
                                 <div class="lesson-status-row">
                                     <span class="lesson-pill presente">P ${lesson.presente_count || 0}</span>
                                     <span class="lesson-pill prima_meta">1ª ${lesson.prima_meta_count || 0}</span>
                                     <span class="lesson-pill seconda_meta">2ª ${lesson.seconda_meta_count || 0}</span>
-                                    <span class="lesson-pill assente">A ${lesson.assente_count || 0}</span>
                                 </div>
                             </div>
                         `).join('')}
