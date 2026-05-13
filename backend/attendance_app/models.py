@@ -258,6 +258,7 @@ class ManualPresenceRecordCreate:
 
 @dataclass(frozen=True)
 class ManualPresenceImportCreate:
+    lesson_id: Optional[int]
     course_name: str
     lesson_date: str
     presence_source: str

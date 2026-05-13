@@ -930,6 +930,32 @@ async def attendance_school_courses():
     )
 
 
+@app.get("/api/attendance/manual-presence-targets")
+async def attendance_manual_presence_targets():
+    repository = PostgresAttendanceDraftQueryRepository()
+    courses = repository.list_school_course_overview()
+    return JSONResponse(
+        {
+            "courses": [
+                {
+                    "course_name": course.course_name,
+                    "lessons": [
+                        {
+                            "lesson_id": lesson.lesson_id,
+                            "lesson_date": lesson.lesson_date,
+                            "source_meeting_id": lesson.source_meeting_id,
+                            "total_records": lesson.total_records,
+                        }
+                        for lesson in course.lessons
+                    ],
+                }
+                for course in courses
+            ],
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.post("/api/attendance/courses/expected-lessons")
 async def attendance_set_course_expected_lessons(payload: dict):
     course_name = str(payload.get("course_name") or "")
@@ -998,6 +1024,7 @@ async def attendance_manual_presence_import(payload: dict):
     )
     try:
         result = service.import_manual_presence(
+            lesson_id=int(payload["lesson_id"]) if payload.get("lesson_id") else None,
             course_name=str(payload.get("course_name") or ""),
             lesson_date=str(payload.get("lesson_date") or ""),
             presence_source=str(payload.get("presence_source") or "manual"),

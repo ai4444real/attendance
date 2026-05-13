@@ -599,6 +599,7 @@ class AttendanceManualPresenceService:
     def import_manual_presence(
         self,
         *,
+        lesson_id: int | None = None,
         course_name: str,
         lesson_date: str,
         presence_source: str = "manual",
@@ -606,12 +607,16 @@ class AttendanceManualPresenceService:
         records: list[dict],
     ) -> ManualPresenceImportResult:
         normalized_course_name = " ".join((course_name or "").strip().split())
-        if not normalized_course_name:
+        normalized_lesson_date = (lesson_date or "").strip()
+        if lesson_id is None and not normalized_course_name:
             raise ValueError("course_name is required")
-        try:
-            date.fromisoformat(lesson_date)
-        except ValueError as exc:
-            raise ValueError("lesson_date must be YYYY-MM-DD") from exc
+        if lesson_id is None and not normalized_lesson_date:
+            raise ValueError("lesson_date is required")
+        if normalized_lesson_date:
+            try:
+                date.fromisoformat(normalized_lesson_date)
+            except ValueError as exc:
+                raise ValueError("lesson_date must be YYYY-MM-DD") from exc
         if presence_source not in self._ALLOWED_SOURCES:
             raise ValueError(f"Unsupported presence_source: {presence_source}")
 
@@ -649,8 +654,9 @@ class AttendanceManualPresenceService:
 
         return self._mutation_repository.upsert_manual_presence_import(
             ManualPresenceImportCreate(
+                lesson_id=lesson_id,
                 course_name=normalized_course_name,
-                lesson_date=lesson_date,
+                lesson_date=normalized_lesson_date,
                 presence_source=presence_source,
                 created_by=created_by,
                 records=normalized_records,

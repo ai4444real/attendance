@@ -330,14 +330,21 @@ class PostgresAttendanceDraftMutationRepository:
         import_data: ManualPresenceImportCreate,
     ) -> ManualPresenceImportResult:
         lesson_date = _parse_date(import_data.lesson_date)
+        result_course_name = import_data.course_name
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
-                lesson_id = self._find_existing_official_lesson(
-                    cursor,
-                    course_name=import_data.course_name,
-                    lesson_date=lesson_date,
+                existing_lesson = (
+                    self._find_existing_lesson_by_id(cursor, import_data.lesson_id)
+                    if import_data.lesson_id is not None
+                    else self._find_existing_official_lesson(
+                        cursor,
+                        course_name=import_data.course_name,
+                        lesson_date=lesson_date,
+                    )
                 )
-                if lesson_id is None:
+                if existing_lesson is not None:
+                    lesson_id, result_course_name = existing_lesson
+                else:
                     batch_id = self._ensure_manual_batch(cursor, import_data.created_by)
                     lesson_id = self._create_manual_lesson(
                         cursor,
@@ -403,7 +410,7 @@ class PostgresAttendanceDraftMutationRepository:
 
         return ManualPresenceImportResult(
             lesson_id=lesson_id,
-            course_name=import_data.course_name,
+            course_name=result_course_name,
             lesson_date=import_data.lesson_date,
             records_processed=len(import_data.records),
             participants_upserted=upserted,
@@ -429,18 +436,34 @@ class PostgresAttendanceDraftMutationRepository:
             raise RuntimeError("Failed to create manual attendance batch.")
         return int(row[0])
 
+    def _find_existing_lesson_by_id(self, cursor, lesson_id: int) -> tuple[int, str] | None:
+        cursor.execute(
+            """
+            SELECT id, course_name
+            FROM attendance_lessons
+            WHERE id = %s
+              AND status = 'official'
+              AND is_ignored = FALSE
+            """,
+            (lesson_id,),
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            return int(row[0]), str(row[1])
+        raise LookupError(f"Attendance lesson {lesson_id} not found or not official.")
+
     def _find_existing_official_lesson(
         self,
         cursor,
         *,
         course_name: str,
         lesson_date: date,
-    ) -> int | None:
+    ) -> tuple[int, str] | None:
         cursor.execute(
             """
-            SELECT id
+            SELECT id, course_name
             FROM attendance_lessons
-            WHERE course_name = %s
+            WHERE lower(course_name) = lower(%s)
               AND lesson_date = %s
               AND status = 'official'
               AND is_ignored = FALSE
@@ -451,7 +474,7 @@ class PostgresAttendanceDraftMutationRepository:
         )
         row = cursor.fetchone()
         if row is not None:
-            return int(row[0])
+            return int(row[0]), str(row[1])
         return None
 
     def _create_manual_lesson(

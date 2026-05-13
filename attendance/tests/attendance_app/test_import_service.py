@@ -798,6 +798,22 @@ class AttendanceManualPresenceServiceTest(unittest.TestCase):
         self.assertEqual("mario@example.com", saved.records[0].email)
         self.assertEqual("presente", saved.records[0].presence_status)
 
+    def test_import_manual_presence_accepts_existing_lesson_without_course_or_date(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceManualPresenceService(mutation)
+
+        service.import_manual_presence(
+            lesson_id=123,
+            course_name="",
+            lesson_date="",
+            records=[{"full_name": "Mario Rossi", "presence_status": "presente"}],
+        )
+
+        saved = mutation.manual_imports[0]
+        self.assertEqual(123, saved.lesson_id)
+        self.assertEqual("", saved.course_name)
+        self.assertEqual("", saved.lesson_date)
+
     def test_import_manual_presence_rejects_unknown_status(self) -> None:
         mutation = FakeAttendanceDraftMutationRepository()
         service = AttendanceManualPresenceService(mutation)

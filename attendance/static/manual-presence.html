@@ -29,6 +29,10 @@
         .field label { font-size: 13px; font-weight: 800; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; }
         .field input, .field select, .field textarea { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
         .field textarea { min-height: 220px; resize: vertical; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+        .mode-switch { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 18px; }
+        .mode-switch label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 12px; font-weight: 800; color: var(--brand-ink); cursor: pointer; }
+        .mode-switch input { margin: 0; }
+        .hidden { display: none !important; }
         .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
         .primary-button { border: 0; border-radius: 12px; background: var(--brand-pnl-blue); color: white; font-size: 14px; font-weight: 800; padding: 11px 16px; cursor: pointer; }
         .primary-button:hover { filter: brightness(1.04); }
@@ -65,15 +69,38 @@
 
         <section class="panel">
             <form id="manualPresenceForm">
-                <div class="form-grid">
+                <div class="mode-switch" aria-label="Modalita inserimento">
+                    <label><input type="radio" name="target_mode" value="existing" checked> Usa lezione esistente</label>
+                    <label><input type="radio" name="target_mode" value="manual"> Crea/trova a mano</label>
+                </div>
+
+                <div id="existingTargetFields" class="form-grid">
+                    <div class="field">
+                        <label for="existingCourse">Corso esistente</label>
+                        <select id="existingCourse" name="existing_course">
+                            <option value="">Caricamento corsi...</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="existingLesson">Lezione esistente</label>
+                        <select id="existingLesson" name="lesson_id">
+                            <option value="">Scegli prima un corso</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="manualTargetFields" class="form-grid hidden">
                     <div class="field">
                         <label for="courseName">Corso</label>
-                        <input id="courseName" name="course_name" required placeholder="Practitioner">
+                        <input id="courseName" name="course_name" placeholder="Practitioner">
                     </div>
                     <div class="field">
                         <label for="lessonDate">Data</label>
-                        <input id="lessonDate" name="lesson_date" required type="date">
+                        <input id="lessonDate" name="lesson_date" type="date">
                     </div>
+                </div>
+
+                <div class="form-grid">
                     <div class="field">
                         <label for="presenceStatus">Stato default</label>
                         <select id="presenceStatus" name="presence_status">
