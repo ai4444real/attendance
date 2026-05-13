@@ -230,4 +230,6 @@ class SchoolCourseLessonView:
 @dataclass(frozen=True)
 class SchoolCourseOverviewView:
     course_name: str
+    expected_lessons_count: int
+    expected_lessons_source: str
     lessons: list[SchoolCourseLessonView]

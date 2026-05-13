@@ -859,16 +859,20 @@ async def attendance_school_courses():
     courses = repository.list_school_course_overview()
     total_lessons = sum(len(course.lessons) for course in courses)
     total_records = sum(lesson.total_records for course in courses for lesson in course.lessons)
+    total_expected_lessons = sum(course.expected_lessons_count for course in courses)
     return JSONResponse(
         {
             "summary": {
                 "courses": len(courses),
                 "lessons": total_lessons,
+                "expected_lessons": total_expected_lessons,
                 "records": total_records,
             },
             "courses": [
                 {
                     "course_name": course.course_name,
+                    "expected_lessons_count": course.expected_lessons_count,
+                    "expected_lessons_source": course.expected_lessons_source,
                     "lessons": [
                         {
                             "lesson_id": lesson.lesson_id,

@@ -32,7 +32,6 @@ const AttendanceCoursesApp = {
         let presenti = 0;
         let primeMeta = 0;
         let secondeMeta = 0;
-        let assenti = 0;
 
         for (const course of this._courses) {
             for (const lesson of course.lessons || []) {
@@ -40,19 +39,18 @@ const AttendanceCoursesApp = {
                 presenti += lesson.presente_count || 0;
                 primeMeta += lesson.prima_meta_count || 0;
                 secondeMeta += lesson.seconda_meta_count || 0;
-                assenti += lesson.assente_count || 0;
             }
         }
 
         this._els.summary.innerHTML = `
             <article class="summary-card"><div class="summary-label">Corsi</div><div class="summary-value">${this._summary.courses || 0}</div></article>
             <article class="summary-card"><div class="summary-label">Lezioni</div><div class="summary-value">${this._summary.lessons || 0}</div></article>
+            <article class="summary-card"><div class="summary-label">Lezioni attese</div><div class="summary-value">${this._summary.expected_lessons || 0}</div></article>
             <article class="summary-card"><div class="summary-label">Date coperte</div><div class="summary-value">${lessonDates.size}</div></article>
             <article class="summary-card"><div class="summary-label">Record presenza</div><div class="summary-value">${this._summary.records || 0}</div></article>
             <article class="summary-card"><div class="summary-label">Presenti</div><div class="summary-value">${presenti}</div></article>
             <article class="summary-card"><div class="summary-label">1ª metà</div><div class="summary-value">${primeMeta}</div></article>
             <article class="summary-card"><div class="summary-label">2ª metà</div><div class="summary-value">${secondeMeta}</div></article>
-            <article class="summary-card"><div class="summary-label">Assenti</div><div class="summary-value">${assenti}</div></article>
         `;
     },
 
@@ -65,12 +63,15 @@ const AttendanceCoursesApp = {
         this._els.courseContainer.innerHTML = this._courses.map((course) => {
             const lessons = course.lessons || [];
             const records = lessons.reduce((sum, lesson) => sum + (lesson.total_records || 0), 0);
+            const expectedSource = course.expected_lessons_source === 'configured'
+                ? 'configurato'
+                : 'da lezioni official';
             return `
                 <article class="course-card">
                     <div class="course-header">
                         <div>
                             <h3 class="course-title">${this._escapeHtml(course.course_name)}</h3>
-                            <div class="course-meta">${lessons.length} lezioni official · ${records} record presenza</div>
+                            <div class="course-meta">${lessons.length}/${course.expected_lessons_count || lessons.length} lezioni · ${this._escapeHtml(expectedSource)} · ${records} record presenza</div>
                         </div>
                     </div>
                     <div class="lesson-track">
