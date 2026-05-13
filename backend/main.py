@@ -31,6 +31,7 @@ from backend.attendance_app.services import (
 )
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
 from backend.db.attendance_identity_alias_repository import PostgresAttendanceIdentityAliasRepository
+from backend.db.attendance_instructor_repository import PostgresAttendanceInstructorRepository
 from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
@@ -69,6 +70,7 @@ ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.
 ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
 ATTENDANCE_FOLLOWUPS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-followups.html")
 ATTENDANCE_MANUAL_PRESENCE_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "manual-presence.html")
+ATTENDANCE_INSTRUCTORS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-instructors.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
@@ -336,6 +338,11 @@ async def attendance_home():
                     <h2>Alias identità</h2>
                     <p>Controlla gli alias nome registrati nel database e verifica rapidamente se un'unione è stata salvata.</p>
                 </a>
+                <a class="card" href="/attendance/instructors">
+                    <span class="card-label">Supporto</span>
+                    <h2>Docenti</h2>
+                    <p>Gestisci nomi e alias dei docenti usati dalle prossime funzionalità scuola.</p>
+                </a>
             </div>
         </section>
     """
@@ -426,6 +433,15 @@ async def attendance_followups():
 async def attendance_manual_presence():
     return FileResponse(
         ATTENDANCE_MANUAL_PRESENCE_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/instructors")
+@app.get("/attendance/instructors/")
+async def attendance_instructors():
+    return FileResponse(
+        ATTENDANCE_INSTRUCTORS_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -862,6 +878,71 @@ async def attendance_list_identity_aliases():
             for alias in aliases
         ]
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/attendance/instructors")
+async def attendance_list_instructors():
+    repository = PostgresAttendanceInstructorRepository()
+    instructors = repository.list_instructors()
+    return JSONResponse(
+        {
+            "instructors": [
+                {
+                    "id": instructor.id,
+                    "instructor_name": instructor.instructor_name,
+                    "alias_of_id": instructor.alias_of_id,
+                    "canonical_name": instructor.canonical_name,
+                    "notes": instructor.notes,
+                    "created_at": instructor.created_at.isoformat(),
+                    "updated_at": instructor.updated_at.isoformat(),
+                }
+                for instructor in instructors
+            ],
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.post("/api/attendance/instructors")
+async def attendance_create_instructor(payload: dict):
+    instructor_name = " ".join(str(payload.get("instructor_name") or "").strip().split())
+    raw_alias_of_id = payload.get("alias_of_id")
+    alias_of_id = None
+    if raw_alias_of_id not in (None, ""):
+        try:
+            alias_of_id = int(raw_alias_of_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="alias_of_id must be empty or an integer.") from exc
+    notes = str(payload.get("notes") or "").strip() or None
+    if not instructor_name:
+        raise HTTPException(status_code=400, detail="instructor_name is required.")
+
+    repository = PostgresAttendanceInstructorRepository()
+    try:
+        instructor = repository.create_instructor(
+            instructor_name=instructor_name,
+            alias_of_id=alias_of_id,
+            notes=notes,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Salvataggio docente fallito: {exc}") from exc
+
+    return JSONResponse(
+        {
+            "instructor": {
+                "id": instructor.id,
+                "instructor_name": instructor.instructor_name,
+                "alias_of_id": instructor.alias_of_id,
+                "canonical_name": instructor.canonical_name,
+                "notes": instructor.notes,
+                "created_at": instructor.created_at.isoformat(),
+                "updated_at": instructor.updated_at.isoformat(),
+            },
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.get("/api/attendance/school-records")

@@ -273,3 +273,14 @@ class ManualPresenceImportResult:
     lesson_date: str
     records_processed: int
     participants_upserted: int
+
+
+@dataclass(frozen=True)
+class AttendanceInstructor:
+    id: int
+    instructor_name: str
+    alias_of_id: Optional[int]
+    canonical_name: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
