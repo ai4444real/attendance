@@ -129,3 +129,10 @@ class AttendanceDraftMutationRepository(Protocol):
 
     def delete_batch(self, batch_id: int) -> None:
         """Delete one import batch and all dependent lessons and draft data."""
+
+    def upsert_course_expected_lessons(
+        self,
+        course_name: str,
+        expected_lessons_count: int | None,
+    ) -> None:
+        """Create or update the expected lesson count for one course."""

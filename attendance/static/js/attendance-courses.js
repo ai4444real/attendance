@@ -6,6 +6,8 @@ const AttendanceCoursesApp = {
             summary: document.getElementById('summary'),
             courseContainer: document.getElementById('courseContainer'),
         };
+        this._courses = [];
+        this._summary = {};
         await this._load();
     },
 
@@ -21,6 +23,7 @@ const AttendanceCoursesApp = {
             this._summary = payload.summary || {};
             this._renderSummary();
             this._renderCourses();
+            this._bindCourseTargetForms();
         } catch (error) {
             console.error(error);
             this._els.courseContainer.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
@@ -73,6 +76,21 @@ const AttendanceCoursesApp = {
                             <h3 class="course-title">${this._escapeHtml(course.course_name)}</h3>
                             <div class="course-meta">${lessons.length}/${course.expected_lessons_count || lessons.length} lezioni · ${this._escapeHtml(expectedSource)} · ${records} record presenza</div>
                         </div>
+                        <form class="course-target-form" data-course-name="${this._escapeAttr(course.course_name)}">
+                            <label class="course-target-label" for="expected-${this._escapeAttr(this._courseInputId(course.course_name))}">Lezioni totali</label>
+                            <input
+                                id="expected-${this._escapeAttr(this._courseInputId(course.course_name))}"
+                                class="course-target-input"
+                                name="expected_lessons_count"
+                                type="number"
+                                min="1"
+                                step="1"
+                                value="${course.expected_lessons_source === 'configured' ? this._escapeAttr(course.expected_lessons_count) : ''}"
+                                placeholder="${this._escapeAttr(course.expected_lessons_count || lessons.length)}"
+                            >
+                            <button class="course-target-button" type="submit">Update</button>
+                            <div class="course-target-status" aria-live="polite"></div>
+                        </form>
                     </div>
                     <div class="lesson-track">
                         ${lessons.map((lesson) => `
@@ -93,6 +111,43 @@ const AttendanceCoursesApp = {
         }).join('');
     },
 
+    _bindCourseTargetForms() {
+        this._els.courseContainer.querySelectorAll('.course-target-form').forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await this._saveCourseTarget(form);
+            });
+        });
+    },
+
+    async _saveCourseTarget(form) {
+        const courseName = form.getAttribute('data-course-name') || '';
+        const input = form.querySelector('input[name="expected_lessons_count"]');
+        const status = form.querySelector('.course-target-status');
+        const rawValue = input ? input.value.trim() : '';
+        if (status) status.textContent = 'Salvo...';
+
+        try {
+            const response = await fetch('/api/attendance/courses/expected-lessons', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    course_name: courseName,
+                    expected_lessons_count: rawValue,
+                }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Aggiornamento non riuscito.');
+            }
+            if (status) status.textContent = 'Aggiornato';
+            await this._load();
+        } catch (error) {
+            console.error(error);
+            if (status) status.textContent = error.message;
+        }
+    },
+
     _formatDate(value) {
         const date = new Date(value);
         return date.toLocaleDateString('it-CH', {
@@ -100,6 +155,13 @@ const AttendanceCoursesApp = {
             month: '2-digit',
             day: '2-digit',
         });
+    },
+
+    _courseInputId(courseName) {
+        return String(courseName)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'course';
     },
 
     _escapeHtml(value) {

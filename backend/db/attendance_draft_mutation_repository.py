@@ -295,6 +295,30 @@ class PostgresAttendanceDraftMutationRepository:
                     raise LookupError(f"Attendance import batch {batch_id} not found.")
             connection.commit()
 
+    def upsert_course_expected_lessons(
+        self,
+        course_name: str,
+        expected_lessons_count: int | None,
+    ) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO attendance_courses (
+                        course_name,
+                        expected_lessons_count,
+                        updated_at
+                    )
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (course_name)
+                    DO UPDATE SET
+                        expected_lessons_count = EXCLUDED.expected_lessons_count,
+                        updated_at = NOW()
+                    """,
+                    (course_name, expected_lessons_count),
+                )
+            connection.commit()
+
 
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)

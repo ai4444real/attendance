@@ -17,6 +17,7 @@ from backend.attendance_app.models import (
     SkippedDuplicateLesson,
 )
 from backend.attendance_app.services import (
+    AttendanceCourseConfigService,
     AttendanceDraftRecalculationService,
     AttendanceLessonIdentityRebuildService,
     AttendanceIdentityAliasService,
@@ -110,6 +111,7 @@ class FakeAttendanceDraftMutationRepository:
         self.source_segments_inserted = []
         self.deleted_lessons = []
         self.deleted_batches = []
+        self.course_expected_lessons = []
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
@@ -136,6 +138,9 @@ class FakeAttendanceDraftMutationRepository:
 
     def delete_batch(self, batch_id: int) -> None:
         self.deleted_batches.append(batch_id)
+
+    def upsert_course_expected_lessons(self, course_name: str, expected_lessons_count: int | None) -> None:
+        self.course_expected_lessons.append((course_name, expected_lessons_count))
 
 
 class AttendanceImportServiceTest(unittest.TestCase):
@@ -693,6 +698,24 @@ class AttendanceLessonStateServiceTest(unittest.TestCase):
         service.delete_batch(10)
 
         self.assertEqual([10], mutation.deleted_batches)
+
+
+class AttendanceCourseConfigServiceTest(unittest.TestCase):
+    def test_set_expected_lessons_count_delegates_to_repository(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceCourseConfigService(mutation)
+
+        service.set_expected_lessons_count(" Practitioner ", 32)
+
+        self.assertEqual([("Practitioner", 32)], mutation.course_expected_lessons)
+
+    def test_set_expected_lessons_count_accepts_none_for_fallback(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceCourseConfigService(mutation)
+
+        service.set_expected_lessons_count("Practitioner", None)
+
+        self.assertEqual([("Practitioner", None)], mutation.course_expected_lessons)
 
 
 class FakeAttendanceIdentityAliasRepository:

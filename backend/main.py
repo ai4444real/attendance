@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_app.models import ImportBatchCreate
 from backend.attendance_app.services import (
+    AttendanceCourseConfigService,
     AttendanceDraftRecalculationService,
     AttendanceLessonIdentityRebuildService,
     AttendanceIdentityAliasService,
@@ -890,6 +891,34 @@ async def attendance_school_courses():
                 }
                 for course in courses
             ],
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.post("/api/attendance/courses/expected-lessons")
+async def attendance_set_course_expected_lessons(payload: dict):
+    course_name = str(payload.get("course_name") or "")
+    raw_value = payload.get("expected_lessons_count")
+    expected_lessons_count = None
+    if raw_value is not None and raw_value != "":
+        try:
+            expected_lessons_count = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="expected_lessons_count must be a positive integer or empty.") from exc
+
+    service = AttendanceCourseConfigService(PostgresAttendanceDraftMutationRepository())
+    try:
+        service.set_expected_lessons_count(course_name, expected_lessons_count)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Aggiornamento corso fallito: {exc}") from exc
+
+    return JSONResponse(
+        {
+            "course_name": course_name,
+            "expected_lessons_count": expected_lessons_count,
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )

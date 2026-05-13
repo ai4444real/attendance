@@ -557,6 +557,28 @@ class AttendanceLessonStateService:
         self._mutation_repository.delete_batch(batch_id)
 
 
+class AttendanceCourseConfigService:
+    """Manage lightweight course configuration used by school reports."""
+
+    def __init__(self, mutation_repository: AttendanceDraftMutationRepository) -> None:
+        self._mutation_repository = mutation_repository
+
+    def set_expected_lessons_count(
+        self,
+        course_name: str,
+        expected_lessons_count: int | None,
+    ) -> None:
+        normalized_course_name = " ".join((course_name or "").strip().split())
+        if not normalized_course_name:
+            raise ValueError("course_name is required")
+        if expected_lessons_count is not None and expected_lessons_count <= 0:
+            raise ValueError("expected_lessons_count must be positive")
+        self._mutation_repository.upsert_course_expected_lessons(
+            normalized_course_name,
+            expected_lessons_count,
+        )
+
+
 class AttendanceIdentityAliasService:
     """Manage persistent identity aliases used by future imports."""
 
