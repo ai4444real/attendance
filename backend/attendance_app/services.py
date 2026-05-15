@@ -744,6 +744,10 @@ class AttendanceLessonSplitService:
             "meeting_start_at": lesson.meeting_start_at,
             "meeting_end_at": lesson.meeting_end_at,
         }
+        diagnostics["timeline"] = self._filter_timeline(diagnostics.get("timeline"), meeting_start, meeting_end)
+        diagnostics["peak_active_count"] = max(
+            [int(point.get("active_count") or 0) for point in diagnostics["timeline"] if isinstance(point, dict)] or [0]
+        )
         diagnostics["participant_count"] = len(participants)
         return LessonDraft(
             source_system="zoom",
@@ -856,6 +860,27 @@ class AttendanceLessonSplitService:
         names = [str(source.get("raw_full_name") or "").strip() for source in identity_sources]
         names = [name for name in names if name]
         return max(names, key=len) if names else fallback
+
+    def _filter_timeline(self, timeline, window_start: datetime, window_end: datetime) -> list[dict]:
+        if not isinstance(timeline, list):
+            return []
+        filtered = []
+        for point in timeline:
+            if not isinstance(point, dict):
+                continue
+            timestamp = point.get("timestamp")
+            if not isinstance(timestamp, str):
+                continue
+            try:
+                point_time = _coerce_segment_datetime(timestamp, window_start.tzinfo)
+            except ValueError:
+                continue
+            if window_start <= point_time <= window_end:
+                filtered.append({
+                    "timestamp": point_time.isoformat(),
+                    "active_count": int(point.get("active_count") or 0),
+                })
+        return filtered
 
     def _clamp_start(self, value: datetime, minimum: datetime, maximum: datetime) -> datetime:
         if value <= minimum or value >= maximum:

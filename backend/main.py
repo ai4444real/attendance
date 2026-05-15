@@ -794,6 +794,27 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
     }
 
 
+@app.post("/api/attendance/lessons/{lesson_id}/recalculate")
+async def attendance_recalculate_lesson(lesson_id: int):
+    try:
+        lesson = AttendanceDraftRecalculationService(
+            PostgresAttendanceDraftQueryRepository(),
+            PostgresAttendanceDraftMutationRepository(),
+            PostgresAttendanceIdentityAliasRepository(),
+        ).recalculate_lesson(lesson_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Ricalcolo lezione fallito: {exc}") from exc
+    return {
+        "lesson_id": lesson.id,
+        "recalculated": True,
+        "summary": lesson.summary,
+    }
+
+
 @app.post("/api/attendance/review-actions/{action_id}/delete")
 async def attendance_delete_review_action(action_id: int):
     service = AttendanceReviewActionService(PostgresAttendanceReviewActionRepository())

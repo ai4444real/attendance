@@ -415,7 +415,14 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
             effective_start_source="snap",
             effective_end_source="meeting_end",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:30:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T16:57:00+00:00", "active_count": 4},
+                ]
+            },
             summary={"presente": 1, "prima_meta": 0, "seconda_meta": 0, "assente": 0},
             participants=[
                 DraftLessonParticipantView(
@@ -471,7 +478,14 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
             effective_start_source="snap",
             effective_end_source="meeting_end",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:30:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T16:57:00+00:00", "active_count": 4},
+                ]
+            },
             summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
             participants=[
                 DraftLessonParticipantView(
@@ -537,7 +551,14 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
             effective_start_source="snap",
             effective_end_source="meeting_end",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:30:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T16:57:00+00:00", "active_count": 4},
+                ]
+            },
             summary={"presente": 0, "prima_meta": 0, "seconda_meta": 1, "assente": 0},
             participants=[
                 DraftLessonParticipantView(
@@ -639,7 +660,14 @@ class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
             effective_start_source="snap",
             effective_end_source="meeting_end",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:30:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T16:57:00+00:00", "active_count": 4},
+                ]
+            },
             summary={"presente": 0, "prima_meta": 0, "seconda_meta": 0, "assente": 2},
             participants=[
                 DraftLessonParticipantView(
@@ -767,7 +795,14 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
             effective_start_source="auto",
             effective_end_source="auto",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:30:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T16:57:00+00:00", "active_count": 4},
+                ]
+            },
             summary={},
             participants=[],
             review_actions=[],
@@ -820,7 +855,14 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
             effective_start_source="auto",
             effective_end_source="auto",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:30:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T16:57:00+00:00", "active_count": 4},
+                ]
+            },
             summary={},
             participants=[],
             review_actions=[],
@@ -857,6 +899,13 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
         self.assertEqual("2026-02-08T10:01:00+00:00", first_lesson.break_point_at)
         self.assertEqual("presente", first_participant.final_presence_status)
         self.assertGreater(first_participant.minutes_second_half / first_participant.duration_second_half, 0.9)
+        self.assertEqual(
+            [
+                {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
+            ],
+            first_lesson.diagnostics["timeline"],
+        )
 
     def test_split_lesson_second_part_never_keeps_original_effective_start(self) -> None:
         lesson = DraftLessonView(
@@ -876,7 +925,14 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
             effective_start_source="auto",
             effective_end_source="auto",
             warnings=[],
-            diagnostics={},
+            diagnostics={
+                "timeline": [
+                    {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
+                    {"timestamp": "2026-02-08T11:00:00+00:00", "active_count": 10},
+                    {"timestamp": "2026-02-08T13:00:00+00:00", "active_count": 8},
+                    {"timestamp": "2026-02-08T17:05:03+00:00", "active_count": 3},
+                ]
+            },
             summary={},
             participants=[],
             review_actions=[],
@@ -913,6 +969,13 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
         self.assertEqual("2026-02-08T15:02:31.500000+00:00", second_lesson.break_point_at)
         self.assertEqual("presente", second_participant.final_presence_status)
         self.assertGreater(second_participant.minutes_first_half / second_participant.duration_first_half, 0.9)
+        self.assertEqual(
+            [
+                {"timestamp": "2026-02-08T13:00:00+00:00", "active_count": 8},
+                {"timestamp": "2026-02-08T17:05:03+00:00", "active_count": 3},
+            ],
+            second_lesson.diagnostics["timeline"],
+        )
 
     def test_split_lesson_rejects_lessons_with_review_actions(self) -> None:
         lesson = DraftLessonView(

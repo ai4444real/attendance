@@ -283,8 +283,8 @@ const DraftImportsApp = {
         const diagnostics = lesson.diagnostics || {};
         const summary = lesson.summary || {};
         const threshold = lesson.threshold_ratio || 0.8;
-        const timeline = diagnostics.timeline || [];
-        const peak = diagnostics.peak_active_count || Math.max(...timeline.map((point) => point.active_count), 1);
+        const timeline = this._filterTimelineForLesson(diagnostics.timeline || [], lesson);
+        const peak = Math.max(...timeline.map((point) => point.active_count), 1);
         const bars = timeline.length > 0
             ? timeline.map((point) => this._buildTimelineBar(point, peak, lesson.meeting_start_at)).join('')
             : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
@@ -1027,6 +1027,18 @@ const DraftImportsApp = {
             </article>
         `;
         }).join('');
+    },
+
+    _filterTimelineForLesson(timeline, lesson) {
+        const startMs = new Date(lesson.meeting_start_at).getTime();
+        const endMs = new Date(lesson.meeting_end_at).getTime();
+        if (!Array.isArray(timeline) || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+            return [];
+        }
+        return timeline.filter((point) => {
+            const pointMs = new Date(point.timestamp).getTime();
+            return Number.isFinite(pointMs) && pointMs >= startMs && pointMs <= endMs;
+        });
     },
 
     _buildTimelineBar(point, peak, referenceValue) {
