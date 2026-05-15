@@ -52,6 +52,18 @@ class ZoomParserTests(unittest.TestCase):
         self.assertEqual(meeting.start_time.isoformat(), "2025-01-30T18:54:02+01:00")
         self.assertEqual(segment.join_time.isoformat(), "2025-01-30T18:58:37+01:00")
 
+    def test_meeting_bounds_include_guest_segments_when_zoom_metadata_is_too_short(self):
+        csv_text = """Argomento,Digita,ID,Nome organizzatore,E-mail organizzatore,Ora di inizio,Ora di fine,Partecipanti,Durata (minuti),Minuti totali dei partecipanti,Reparto,Gruppo,Origine,Visualizzatori unici,Max visualizzazioni simultanee,Ora di creazione,Nome (nome originale),E-mail,Ora di ingresso,Ora di uscita,Durata (minuti),Guest,Risposta di esclusione di responsabilità per la registrazione,In sala d’attesa
+MASTER,Riunione,886 5440 3922,PNL EVOLUTION,segreteria@pnlevolution.com,04/20/2026 06:27:00 PM,04/20/2026 06:55:00 PM,2,28,100,,,Zoom,-,-,04/20/2026 06:00:00 PM,Andrea Facchi,apfacchi@gmail.com,04/20/2026 07:08:00 PM,04/20/2026 09:58:00 PM,170,Sì,,No
+"""
+
+        parsed = parse_zoom_csv_text(csv_text)
+
+        meeting = parsed.meetings[0]
+        self.assertEqual(meeting.start_time.isoformat(), "2026-04-20T18:27:00+02:00")
+        self.assertEqual(meeting.end_time.isoformat(), "2026-04-20T21:58:00+02:00")
+        self.assertEqual(meeting.duration_minutes, 211.0)
+
 
 if __name__ == "__main__":
     unittest.main()

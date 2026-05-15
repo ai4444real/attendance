@@ -27,6 +27,8 @@ class PostgresAttendanceDraftMutationRepository:
         lesson: DraftLessonView,
         *,
         threshold_ratio: float,
+        meeting_start_at: str | None = None,
+        meeting_end_at: str | None = None,
         effective_start_at: str,
         break_point_at: str | None,
         effective_end_at: str,
@@ -43,6 +45,8 @@ class PostgresAttendanceDraftMutationRepository:
                     UPDATE attendance_lessons
                     SET
                         threshold_ratio = %s,
+                        meeting_start_at = COALESCE(%s, meeting_start_at),
+                        meeting_end_at = COALESCE(%s, meeting_end_at),
                         effective_start_at = %s,
                         break_point_at = %s,
                         effective_end_at = %s,
@@ -55,6 +59,8 @@ class PostgresAttendanceDraftMutationRepository:
                     """,
                     (
                         threshold_ratio,
+                        _parse_datetime(meeting_start_at) if meeting_start_at else None,
+                        _parse_datetime(meeting_end_at) if meeting_end_at else None,
                         _parse_datetime(effective_start_at),
                         _parse_datetime(break_point_at) if break_point_at else None,
                         _parse_datetime(effective_end_at),

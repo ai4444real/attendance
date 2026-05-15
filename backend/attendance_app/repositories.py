@@ -97,6 +97,8 @@ class AttendanceDraftMutationRepository(Protocol):
         lesson: DraftLessonView,
         *,
         threshold_ratio: float,
+        meeting_start_at: str | None = None,
+        meeting_end_at: str | None = None,
         effective_start_at: str,
         break_point_at: str | None,
         effective_end_at: str,

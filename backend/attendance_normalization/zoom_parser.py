@@ -118,6 +118,10 @@ def _build_meeting(rows: list[dict[str, str]], warnings: list[str]) -> ZoomMeeti
             )
         )
 
+    if segments:
+        start_time = min([start_time, *(segment.join_time for segment in segments)])
+        end_time = max([end_time, *(segment.leave_time for segment in segments)])
+
     return ZoomMeeting(
         course=first.get("Argomento", ""),
         meeting_id=first.get("ID", ""),

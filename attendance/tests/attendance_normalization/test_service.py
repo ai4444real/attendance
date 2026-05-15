@@ -216,15 +216,15 @@ class NormalizationServiceTests(unittest.TestCase):
 
         self.assertEqual(len(result.records), 1)
         record = result.records[0]
-        self.assertEqual(record.effective_end, "2025-01-30T20:26:29")
+        self.assertEqual(record.effective_end, "2025-01-30T20:26:29+01:00")
         self.assertEqual(record.trim_end_minutes, 11)
         self.assertEqual(record.duration_second_half, 37.7)
-        self.assertEqual(result.meetings[0].effective_end, "2025-01-30T20:26:29")
+        self.assertEqual(result.meetings[0].effective_end, "2025-01-30T20:26:29+01:00")
         self.assertEqual(result.meetings[0].trim_end_minutes, 11)
-        self.assertEqual(result.meetings[0].meeting_start, "2025-01-30T18:54:02")
-        self.assertEqual(result.meetings[0].meeting_end, "2025-01-30T20:37:29")
-        self.assertEqual(result.meetings[0].timeline[0].timestamp, "2025-01-30T18:54:02")
-        self.assertEqual(result.meetings[0].timeline[-1].timestamp, "2025-01-30T20:37:29")
+        self.assertEqual(result.meetings[0].meeting_start, "2025-01-30T18:54:02+01:00")
+        self.assertEqual(result.meetings[0].meeting_end, "2025-01-30T20:37:29+01:00")
+        self.assertEqual(result.meetings[0].timeline[0].timestamp, "2025-01-30T18:54:02+01:00")
+        self.assertEqual(result.meetings[0].timeline[-1].timestamp, "2025-01-30T20:37:29+01:00")
 
     def test_applies_trim_start_minutes_meeting_override(self):
         with TemporaryDirectory() as temp_dir:
@@ -255,9 +255,9 @@ class NormalizationServiceTests(unittest.TestCase):
 
         self.assertEqual(len(result.records), 1)
         record = result.records[0]
-        self.assertEqual(record.effective_start, "2025-01-30T19:30:00")
+        self.assertEqual(record.effective_start, "2025-01-30T19:30:00+01:00")
         self.assertEqual(record.trim_start_minutes, 30)
-        self.assertEqual(result.meetings[0].effective_start, "2025-01-30T19:30:00")
+        self.assertEqual(result.meetings[0].effective_start, "2025-01-30T19:30:00+01:00")
         self.assertEqual(result.meetings[0].trim_start_minutes, 30)
 
     def test_applies_threshold_meeting_override(self):
@@ -322,10 +322,10 @@ class NormalizationServiceTests(unittest.TestCase):
 
         diagnostic = result.meetings[0]
         self.assertEqual(diagnostic.suggestion_confidence, "high")
-        self.assertEqual(diagnostic.suggested_effective_start, "2025-01-14T18:59:00")
-        self.assertEqual(diagnostic.suggested_effective_end, "2025-01-14T22:40:00")
-        self.assertEqual(diagnostic.effective_start, "2025-01-14T18:59:00")
-        self.assertEqual(diagnostic.effective_end, "2025-01-14T22:40:00")
+        self.assertEqual(diagnostic.suggested_effective_start, "2025-01-14T18:59:00+01:00")
+        self.assertEqual(diagnostic.suggested_effective_end, "2025-01-14T22:40:00+01:00")
+        self.assertEqual(diagnostic.effective_start, "2025-01-14T18:59:00+01:00")
+        self.assertEqual(diagnostic.effective_end, "2025-01-14T22:40:00+01:00")
         self.assertEqual(diagnostic.effective_start_source, "auto_suggest")
         self.assertEqual(diagnostic.effective_end_source, "auto_suggest")
 
@@ -432,8 +432,8 @@ class NormalizationServiceTests(unittest.TestCase):
             )
 
         diagnostic = result.meetings[0]
-        self.assertEqual(diagnostic.suggested_effective_start, "2025-01-14T18:59:00")
-        self.assertEqual(diagnostic.effective_start, "2025-01-14T19:08:00")
+        self.assertEqual(diagnostic.suggested_effective_start, "2025-01-14T18:59:00+01:00")
+        self.assertEqual(diagnostic.effective_start, "2025-01-14T19:08:00+01:00")
         self.assertEqual(diagnostic.effective_start_source, "trim_start_minutes")
 
 

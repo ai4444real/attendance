@@ -396,15 +396,40 @@ class AttendanceDraftRecalculationService:
             elif action.action_type == "clear_manual_presence_status" and action.participant_id is not None:
                 manual_overrides[action.participant_id] = None
 
+        source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
         effective_start = datetime.fromisoformat(str(effective_start_at))
         effective_end = datetime.fromisoformat(str(effective_end_at))
+        meeting_start_at = lesson.meeting_start_at
+        meeting_end_at = lesson.meeting_end_at
+        bounds_were_expanded = False
+        source_bounds = self._source_segment_bounds(source_segments, effective_start.tzinfo)
+        if use_current_markers and source_bounds is not None:
+            source_start, source_end = source_bounds
+            meeting_start = datetime.fromisoformat(lesson.meeting_start_at)
+            meeting_end = datetime.fromisoformat(lesson.meeting_end_at)
+            if source_start < meeting_start:
+                meeting_start_at = source_start.isoformat()
+                bounds_were_expanded = True
+                if effective_start < source_start:
+                    effective_start = source_start
+                    effective_start_at = effective_start.isoformat()
+                    effective_start_source = "source_segments"
+            if source_end > meeting_end:
+                meeting_end_at = source_end.isoformat()
+                bounds_were_expanded = True
+                if effective_end <= meeting_end:
+                    effective_end = source_end
+                    effective_end_at = effective_end.isoformat()
+                    effective_end_source = "source_segments"
+
         requested_break_point = datetime.fromisoformat(str(break_point_at)) if break_point_at else None
+        if bounds_were_expanded and break_source in {"midpoint", "recalculate_resolved"}:
+            requested_break_point = None
         resolved_break_point = self._resolve_break_point(effective_start, effective_end, requested_break_point)
         if requested_break_point is None or resolved_break_point != requested_break_point:
             break_source = "recalculate_resolved"
         break_point_at = resolved_break_point.isoformat()
 
-        source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
         participants_have_segments = bool(source_segments) or all(
             isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
             for participant in lesson.participants
@@ -440,6 +465,8 @@ class AttendanceDraftRecalculationService:
         self._mutation_repository.update_lesson_after_recalculation(
             lesson,
             threshold_ratio=threshold_ratio,
+            meeting_start_at=meeting_start_at,
+            meeting_end_at=meeting_end_at,
             effective_start_at=effective_start_at,
             break_point_at=break_point_at,
             effective_end_at=effective_end_at,
@@ -451,6 +478,25 @@ class AttendanceDraftRecalculationService:
         )
 
         return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _source_segment_bounds(
+        self,
+        source_segments: list[DraftLessonSourceSegment],
+        target_tz,
+    ) -> tuple[datetime, datetime] | None:
+        if not source_segments:
+            return None
+        starts = []
+        ends = []
+        for segment in source_segments:
+            try:
+                starts.append(_coerce_segment_datetime(segment.join_time, target_tz))
+                ends.append(_coerce_segment_datetime(segment.leave_time, target_tz))
+            except ValueError:
+                continue
+        if not starts or not ends:
+            return None
+        return min(starts), max(ends)
 
     def _build_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict, *, use_current_markers: bool = False) -> dict:
         if use_current_markers:
