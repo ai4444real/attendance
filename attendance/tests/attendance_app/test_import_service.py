@@ -460,6 +460,87 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertIsNotNone(mutation.last_update)
         self.assertEqual(1, len(mutation.last_update["participants"]))
 
+    def test_recalculate_lesson_can_use_current_markers_instead_of_old_baseline(self) -> None:
+        lesson = DraftLessonView(
+            id=53,
+            course_name="COUNSELING",
+            lesson_date="2026-02-08",
+            source_meeting_id="811 9746 9144#split-2",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.7,
+            meeting_start_at="2026-02-08T13:00:00+00:00",
+            meeting_end_at="2026-02-08T17:05:03+00:00",
+            effective_start_at="2026-02-08T13:01:00+00:00",
+            break_point_at="2026-02-08T14:01:00+00:00",
+            effective_end_at="2026-02-08T16:57:00+00:00",
+            break_source="split_fix",
+            effective_start_source="split_fix",
+            effective_end_source="split_fix",
+            warnings=[],
+            diagnostics={
+                "review_action_baseline": {
+                    "threshold_ratio": 0.7,
+                    "effective_start_at": "2026-02-08T08:02:00+00:00",
+                    "break_point_at": "2026-02-08T12:33:31.5+00:00",
+                    "effective_end_at": "2026-02-08T16:57:00+00:00",
+                    "break_source": "old",
+                    "effective_start_source": "old",
+                    "effective_end_source": "old",
+                }
+            },
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=3,
+                    participant_key="guya@example.com",
+                    canonical_full_name="Guya Fiorineschi",
+                    raw_full_name="Guya Fiorineschi",
+                    email="guya@example.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=0.0,
+                    duration_second_half=0.0,
+                    total_minutes=0.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "segments": [["2026-02-08T13:01:00+00:00", "2026-02-08T14:01:00+00:00"]],
+                    },
+                )
+            ],
+            review_actions=[
+                DraftReviewActionView(
+                    id=4,
+                    lesson_id=53,
+                    participant_id=None,
+                    action_type="set_break_point",
+                    payload={"at": "2026-02-08T12:33:31.5+00:00"},
+                    created_by="test",
+                    created_at="2026-05-05T10:00:00+00:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            ],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(53, use_current_markers=True)
+
+        self.assertEqual("2026-02-08T14:01:00+00:00", mutation.last_update["break_point_at"])
+        self.assertEqual("split_fix", mutation.last_update["break_source"])
+        self.assertTrue(mutation.last_update["diagnostics"]["recalculated_from_current_markers"])
+        participant_update = mutation.last_update["participants"][0]
+        self.assertEqual(60.0, participant_update["minutes_first_half"])
+        self.assertEqual(60.0, participant_update["duration_first_half"])
+
     def test_recalculate_lesson_applies_latest_manual_presence_override(self) -> None:
         lesson = DraftLessonView(
             id=51,

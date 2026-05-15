@@ -353,12 +353,12 @@ class AttendanceDraftRecalculationService:
         self._mutation_repository = mutation_repository
         self._identity_alias_repository = identity_alias_repository
 
-    def recalculate_lesson(self, lesson_id: int) -> DraftLessonView:
+    def recalculate_lesson(self, lesson_id: int, *, use_current_markers: bool = False) -> DraftLessonView:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
         action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
 
         diagnostics = dict(lesson.diagnostics or {})
-        baseline = self._build_recalculation_baseline(lesson, diagnostics)
+        baseline = self._build_recalculation_baseline(lesson, diagnostics, use_current_markers=use_current_markers)
         threshold_ratio = baseline["threshold_ratio"]
         effective_start_at = baseline["effective_start_at"]
         break_point_at = baseline["break_point_at"]
@@ -373,6 +373,13 @@ class AttendanceDraftRecalculationService:
 
         for action in action_sequence:
             payload = action.payload or {}
+            if use_current_markers and action.action_type in {
+                "set_threshold_ratio",
+                "set_effective_start",
+                "set_break_point",
+                "set_effective_end",
+            }:
+                continue
             if action.action_type == "set_threshold_ratio":
                 threshold_ratio = float(payload["threshold_ratio"])
             elif action.action_type == "set_effective_start":
@@ -410,12 +417,14 @@ class AttendanceDraftRecalculationService:
                 manual_overrides=manual_overrides,
             )
 
-        diagnostics["review_action_baseline"] = baseline
+        if not use_current_markers:
+            diagnostics["review_action_baseline"] = baseline
         diagnostics["threshold_ratio"] = threshold_ratio
         diagnostics["effective_start"] = effective_start_at
         diagnostics["break_point"] = break_point_at
         diagnostics["effective_end"] = effective_end_at
         diagnostics["recalculated_from_review_actions"] = True
+        diagnostics["recalculated_from_current_markers"] = use_current_markers
         diagnostics["recalculation_mode"] = "segments" if participants_have_segments else "threshold_only"
 
         self._mutation_repository.update_lesson_after_recalculation(
@@ -433,7 +442,9 @@ class AttendanceDraftRecalculationService:
 
         return self._query_repository.get_lesson_detail(lesson_id)
 
-    def _build_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict) -> dict:
+    def _build_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict, *, use_current_markers: bool = False) -> dict:
+        if use_current_markers:
+            return self._current_lesson_baseline(lesson)
         existing = diagnostics.get("review_action_baseline")
         if isinstance(existing, dict):
             return {
@@ -445,6 +456,9 @@ class AttendanceDraftRecalculationService:
                 "effective_start_source": str(existing.get("effective_start_source") or lesson.effective_start_source),
                 "effective_end_source": str(existing.get("effective_end_source") or lesson.effective_end_source),
             }
+        return self._current_lesson_baseline(lesson)
+
+    def _current_lesson_baseline(self, lesson: DraftLessonView) -> dict:
         return {
             "threshold_ratio": lesson.threshold_ratio,
             "effective_start_at": lesson.effective_start_at,
