@@ -315,6 +315,15 @@ const DraftImportsApp = {
                 <div class="lesson-body">
                     <div class="meeting-diagnostics">
                         <div class="meeting-diagnostics-note">${this._escapeHtml(diagnosisText)}</div>
+                        <div class="marker-setter" data-marker-setter="1">
+                            <div class="marker-setter-main">
+                                <span class="marker-setter-label">Imposta</span>
+                                <button type="button" class="marker-button" data-marker-mode="set-start">inizio</button>
+                                <button type="button" class="marker-button" data-marker-mode="set-break">pausa</button>
+                                <button type="button" class="marker-button" data-marker-mode="set-end">fine</button>
+                            </div>
+                            <span class="marker-setter-hint" data-marker-hint>scegli cosa impostare, poi clicca sul grafico</span>
+                        </div>
                         <div class="meeting-chart" data-marker-chart="1" data-lesson-id="${lesson.id}">
                             <div class="meeting-bars">${bars}</div>
                             <div class="meeting-markers">
@@ -344,15 +353,6 @@ const DraftImportsApp = {
                                 <span>${this._escapeHtml(this._formatTime(lesson.meeting_start_at))}</span>
                                 <span>${this._escapeHtml(this._formatTime(lesson.meeting_end_at))}</span>
                             </div>
-                        </div>
-                        <div class="marker-setter" data-marker-setter="1">
-                            <div class="marker-setter-main">
-                                <span class="marker-setter-label">Imposta</span>
-                                <button type="button" class="marker-button" data-marker-mode="set-start">inizio</button>
-                                <button type="button" class="marker-button" data-marker-mode="set-break">pausa</button>
-                                <button type="button" class="marker-button" data-marker-mode="set-end">fine</button>
-                            </div>
-                            <span class="marker-setter-hint" data-marker-hint>scegli cosa impostare, poi clicca sul grafico</span>
                         </div>
                     </div>
                     <div class="threshold-strip">
