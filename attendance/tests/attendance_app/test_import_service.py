@@ -802,6 +802,62 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
         self.assertEqual("presente", mutation.last_split["first_lesson"].participants[0].final_presence_status)
         self.assertEqual("presente", mutation.last_split["second_lesson"].participants[0].final_presence_status)
 
+    def test_split_lesson_first_part_never_keeps_original_effective_end(self) -> None:
+        lesson = DraftLessonView(
+            id=56,
+            course_name="Counseling",
+            lesson_date="2026-02-08",
+            source_meeting_id="811 9746 9144",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.7,
+            meeting_start_at="2026-02-08T07:47:21+00:00",
+            meeting_end_at="2026-02-08T16:57:00+00:00",
+            effective_start_at="2026-02-08T08:02:00+00:00",
+            break_point_at="2026-02-08T12:22:00+00:00",
+            effective_end_at="2026-02-08T16:57:00+00:00",
+            break_source="auto",
+            effective_start_source="auto",
+            effective_end_source="auto",
+            warnings=[],
+            diagnostics={},
+            summary={},
+            participants=[],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Antonia Colombo",
+                observed_email="antonia@example.com",
+                join_time="2026-02-08T08:01:00+00:00",
+                leave_time="2026-02-08T12:00:00+00:00",
+                metadata={},
+            ),
+            DraftLessonSourceSegment(
+                observed_full_name="Mario Rossi",
+                observed_email="mario@example.com",
+                join_time="2026-02-08T13:30:00+00:00",
+                leave_time="2026-02-08T16:30:00+00:00",
+                metadata={},
+            ),
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonSplitService(query, mutation, FakeAttendanceIdentityAliasRepository())
+
+        service.split_lesson(
+            56,
+            first_end_at="2026-02-08T12:00:00+00:00",
+            second_start_at="2026-02-08T13:00:00+00:00",
+        )
+
+        first_lesson = mutation.last_split["first_lesson"]
+        first_participant = first_lesson.participants[0]
+        self.assertEqual("2026-02-08T12:00:00+00:00", first_lesson.effective_end_at)
+        self.assertEqual("2026-02-08T10:01:00+00:00", first_lesson.break_point_at)
+        self.assertEqual("presente", first_participant.final_presence_status)
+        self.assertGreater(first_participant.minutes_second_half / first_participant.duration_second_half, 0.9)
+
     def test_split_lesson_rejects_lessons_with_review_actions(self) -> None:
         lesson = DraftLessonView(
             id=55,

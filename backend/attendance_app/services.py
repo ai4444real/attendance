@@ -642,7 +642,7 @@ class AttendanceLessonSplitService:
         first_effective_end = first_end
         first_break = self._midpoint(first_effective_start, first_effective_end)
         second_effective_start = second_start
-        second_effective_end = self._clamp_end(effective_end, second_start, meeting_end)
+        second_effective_end = meeting_end
         second_break = self._midpoint(second_effective_start, second_effective_end)
 
         first_lesson = self._build_split_lesson(
@@ -860,11 +860,6 @@ class AttendanceLessonSplitService:
     def _clamp_start(self, value: datetime, minimum: datetime, maximum: datetime) -> datetime:
         if value <= minimum or value >= maximum:
             return minimum
-        return value
-
-    def _clamp_end(self, value: datetime, minimum: datetime, maximum: datetime) -> datetime:
-        if value <= minimum or value >= maximum:
-            return maximum
         return value
 
     def _midpoint(self, start: datetime, end: datetime) -> datetime:
