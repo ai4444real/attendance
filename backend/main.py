@@ -72,11 +72,14 @@ ATTENDANCE_FOLLOWUPS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-foll
 ATTENDANCE_MANUAL_PRESENCE_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "manual-presence.html")
 ATTENDANCE_INSTRUCTORS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-instructors.html")
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
+UTILITIES_STATIC_DIR = os.path.join(WORKSPACE_DIR, "utilities")
+UTILITIES_CLASSROOM_MANAGER_FILE = os.path.join(UTILITIES_STATIC_DIR, "classroom-manager.html")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
 # Mount current module static files
 app.mount("/attendance/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), name="attendance-static")
 app.mount("/attendance/manage", StaticFiles(directory=ATTENDANCE_ADAPTER_DIR, html=True), name="attendance-manage")
+app.mount("/utilities/static", StaticFiles(directory=UTILITIES_STATIC_DIR), name="utilities-static")
 app.mount("/assets", StaticFiles(directory=GLOBAL_ASSETS_DIR), name="global-assets")
 
 _identity_alias_bootstrap_done = False
@@ -284,6 +287,11 @@ async def workspace_home():
                     <h2>Attendance</h2>
                     <p>Caricamento e analisi presenze su dati trackcc-like, con filtri, statistiche ed export.</p>
                 </a>
+                <a class="card" href="/utilities">
+                    <span class="card-label">Disponibile</span>
+                    <h2>Utilities</h2>
+                    <p>Strumenti operativi di supporto, a partire dalla gestione Google Classroom e calendari.</p>
+                </a>
             </div>
         </section>
     """
@@ -293,6 +301,39 @@ async def workspace_home():
             "Workspace applicativo per i servizi interni Rebekko. Da qui si accede ai moduli attivi, a partire da Attendance.",
             body_html
         ),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/utilities")
+@app.get("/utilities/")
+async def utilities_home():
+    body_html = """
+        <section>
+            <div class="cards">
+                <a class="card" href="/utilities/classroom-manager">
+                    <span class="card-label">Google</span>
+                    <h2>Classroom Manager</h2>
+                    <p>Gestione corsi Google Classroom, calendari, eventi condivisi ed export operativi.</p>
+                </a>
+            </div>
+        </section>
+    """
+    return HTMLResponse(
+        render_module_shell(
+            "Utilities",
+            "Strumenti operativi separati dai moduli principali, integrati nel workspace Rebekko.",
+            body_html
+        ),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/utilities/classroom-manager")
+@app.get("/utilities/classroom-manager/")
+async def utilities_classroom_manager():
+    return FileResponse(
+        UTILITIES_CLASSROOM_MANAGER_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
