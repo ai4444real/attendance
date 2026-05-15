@@ -553,7 +553,7 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
             meeting_start_at="2026-02-08T13:00:00+00:00",
             meeting_end_at="2026-02-08T17:05:03+00:00",
             effective_start_at="2026-02-08T13:01:00+00:00",
-            break_point_at="2026-02-08T14:01:00+00:00",
+            break_point_at="2026-02-08T12:33:31.5+00:00",
             effective_end_at="2026-02-08T16:57:00+00:00",
             break_source="split_fix",
             effective_start_source="split_fix",
@@ -590,7 +590,7 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
                 observed_full_name="Guya Fiorineschi",
                 observed_email="guya@example.com",
                 join_time="2026-02-08T13:01:00+00:00",
-                leave_time="2026-02-08T14:01:00+00:00",
+                leave_time="2026-02-08T14:59:00+00:00",
                 metadata={},
             )
         ]
@@ -600,8 +600,10 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         service.recalculate_lesson(54, use_current_markers=True)
 
         participant_update = mutation.last_update["participants"][0]
-        self.assertEqual(60.0, participant_update["minutes_first_half"])
-        self.assertEqual(60.0, participant_update["duration_first_half"])
+        self.assertEqual("2026-02-08T14:59:00+00:00", mutation.last_update["break_point_at"])
+        self.assertEqual("recalculate_resolved", mutation.last_update["break_source"])
+        self.assertEqual(118.0, participant_update["minutes_first_half"])
+        self.assertEqual(118.0, participant_update["duration_first_half"])
         self.assertEqual("prima_meta", participant_update["final_presence_status"])
         self.assertEqual("segments", mutation.last_update["diagnostics"]["recalculation_mode"])
 

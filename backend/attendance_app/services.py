@@ -396,6 +396,14 @@ class AttendanceDraftRecalculationService:
             elif action.action_type == "clear_manual_presence_status" and action.participant_id is not None:
                 manual_overrides[action.participant_id] = None
 
+        effective_start = datetime.fromisoformat(str(effective_start_at))
+        effective_end = datetime.fromisoformat(str(effective_end_at))
+        requested_break_point = datetime.fromisoformat(str(break_point_at)) if break_point_at else None
+        resolved_break_point = self._resolve_break_point(effective_start, effective_end, requested_break_point)
+        if requested_break_point is None or resolved_break_point != requested_break_point:
+            break_source = "recalculate_resolved"
+        break_point_at = resolved_break_point.isoformat()
+
         source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
         participants_have_segments = bool(source_segments) or all(
             isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
@@ -566,10 +574,13 @@ class AttendanceDraftRecalculationService:
         break_point: datetime | None,
     ) -> datetime:
         candidate = break_point or (effective_start + (effective_end - effective_start) / 2)
+        midpoint = effective_start + (effective_end - effective_start) / 2
         min_break = effective_start + timedelta(minutes=5)
         max_break = effective_end - timedelta(minutes=5)
         if max_break <= min_break:
-            return effective_start + (effective_end - effective_start) / 2
+            return midpoint
+        if candidate <= effective_start or candidate >= effective_end:
+            return midpoint
         if candidate < min_break:
             return min_break
         if candidate > max_break:
