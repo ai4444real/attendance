@@ -176,15 +176,19 @@ class PostgresAttendanceDraftImportRepository:
                 import_batch_id
             FROM attendance_lessons
             WHERE course_name = %s
-              AND source_meeting_id = %s
               AND lesson_date = %s
+              AND (
+                  source_meeting_id = %s
+                  OR diagnostics_json #>> '{split_created_from,source_meeting_id}' = %s
+              )
             ORDER BY id ASC
             LIMIT 1
             """,
             (
                 lesson.course_name,
-                lesson.source_meeting_id,
                 _parse_date(lesson.lesson_date),
+                lesson.source_meeting_id,
+                lesson.source_meeting_id,
             ),
         )
         row = cursor.fetchone()

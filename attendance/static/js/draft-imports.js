@@ -391,6 +391,7 @@ const DraftImportsApp = {
                                     <span class="alias-merge-note">Salva la regola identità nel database e ricompone subito questa lezione draft.</span>
                                 </div>
                             </div>
+                            ${this._renderLessonSplitBox(lesson)}
                             <div class="review-actions">
                                 ${this._renderReviewActions(lesson.review_actions || [])}
                             </div>
@@ -464,6 +465,10 @@ const DraftImportsApp = {
                 }
                 if (action === 'merge-alias') {
                     await this._createIdentityAliasFromLesson(lesson);
+                    return;
+                }
+                if (action === 'split-lesson') {
+                    await this._splitLesson(lesson);
                 }
             });
         });
@@ -606,6 +611,66 @@ const DraftImportsApp = {
         return participant.email
             ? `${participant.canonical_full_name} (${participant.email})`
             : participant.canonical_full_name;
+    },
+
+    _renderLessonSplitBox(lesson) {
+        const canSplit = lesson.status === 'draft' && !lesson.is_ignored && !(lesson.review_actions || []).length;
+        if (!canSplit) {
+            return `
+                <div class="split-box disabled">
+                    <div class="split-title">Split giornata</div>
+                    <div class="split-note">Disponibile solo su lezioni draft non ignorate e senza correzioni.</div>
+                </div>
+            `;
+        }
+        return `
+            <div class="split-box">
+                <div class="split-title">Split giornata</div>
+                <div class="split-grid">
+                    <label>
+                        <span>Fine mattina</span>
+                        <input id="splitFirstEnd" type="time" step="300">
+                    </label>
+                    <label>
+                        <span>Inizio pomeriggio</span>
+                        <input id="splitSecondStart" type="time" step="300">
+                    </label>
+                    <button type="button" class="action-button" data-action="split-lesson" data-lesson-id="${lesson.id}">Dividi in due lezioni</button>
+                </div>
+                <div class="split-note">Crea due lezioni draft normali e cancella l'originale. I segmenti che attraversano la pausa vengono tagliati.</div>
+            </div>
+        `;
+    },
+
+    async _splitLesson(lesson) {
+        const firstEndInput = document.getElementById('splitFirstEnd');
+        const secondStartInput = document.getElementById('splitSecondStart');
+        const firstEndAt = this._buildIsoForLessonTime(lesson, firstEndInput?.value || '');
+        const secondStartAt = this._buildIsoForLessonTime(lesson, secondStartInput?.value || '');
+        if (!firstEndAt || !secondStartAt) {
+            window.alert('Inserisci fine mattina e inizio pomeriggio in formato ora.');
+            return;
+        }
+        if (!window.confirm('Dividere questa lezione in due lezioni draft e cancellare l\'originale?')) {
+            return;
+        }
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lesson.id}/split`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    first_end_at: firstEndAt,
+                    second_start_at: secondStartAt,
+                }),
+            });
+            const data = await this._readApiPayload(response);
+            if (!response.ok) throw new Error(data.detail || 'Impossibile dividere la lezione.');
+            await this._reloadCurrentBatch(data.first_lesson_id);
+            window.alert(`Split completato: create lezioni #${data.first_lesson_id} e #${data.second_lesson_id}.`);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
     },
 
     _renderPresenceOverrideControl(lessonId, participant) {

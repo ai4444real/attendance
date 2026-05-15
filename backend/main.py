@@ -23,6 +23,7 @@ from backend.attendance_app.services import (
     AttendanceLessonIdentityRebuildService,
     AttendanceIdentityAliasService,
     AttendanceImportService,
+    AttendanceLessonSplitService,
     AttendanceLessonStateService,
     AttendanceManualPresenceService,
     AttendanceReviewActionService,
@@ -825,6 +826,36 @@ async def attendance_delete_lesson(lesson_id: int):
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"lesson_id": lesson_id, "deleted": True}
+
+
+@app.post("/api/attendance/lessons/{lesson_id}/split")
+async def attendance_split_lesson(lesson_id: int, payload: dict):
+    first_end_at = str(payload.get("first_end_at") or "").strip()
+    second_start_at = str(payload.get("second_start_at") or "").strip()
+    service = AttendanceLessonSplitService(
+        PostgresAttendanceDraftQueryRepository(),
+        PostgresAttendanceDraftMutationRepository(),
+        PostgresAttendanceIdentityAliasRepository(),
+    )
+    try:
+        result = service.split_lesson(
+            lesson_id,
+            first_end_at=first_end_at,
+            second_start_at=second_start_at,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Split lezione fallito: {exc}") from exc
+    return {
+        "original_lesson_id": result.original_lesson_id,
+        "first_lesson_id": result.first_lesson_id,
+        "second_lesson_id": result.second_lesson_id,
+        "first_participants_count": result.first_participants_count,
+        "second_participants_count": result.second_participants_count,
+    }
 
 
 @app.post("/api/attendance/import-batches/{batch_id}/delete")

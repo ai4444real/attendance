@@ -23,6 +23,7 @@ from .models import (
     ManualPresenceImportResult,
     ManualPresenceRecordCreate,
     PersistedDraftImport,
+    SplitLessonResult,
 )
 from .repositories import (
     AttendanceDraftImportRepository,
@@ -560,6 +561,285 @@ class AttendanceLessonStateService:
         if batch_id <= 0:
             raise ValueError("batch_id must be positive")
         self._mutation_repository.delete_batch(batch_id)
+
+
+class AttendanceLessonSplitService:
+    """Split one untouched draft lesson into two normal draft lessons."""
+
+    def __init__(
+        self,
+        query_repository: AttendanceDraftQueryRepository,
+        mutation_repository: AttendanceDraftMutationRepository,
+        identity_alias_repository: AttendanceIdentityAliasRepository | None = None,
+    ) -> None:
+        self._query_repository = query_repository
+        self._mutation_repository = mutation_repository
+        self._identity_alias_repository = identity_alias_repository
+
+    def split_lesson(
+        self,
+        lesson_id: int,
+        *,
+        first_end_at: str,
+        second_start_at: str,
+    ) -> SplitLessonResult:
+        if lesson_id <= 0:
+            raise ValueError("lesson_id must be positive")
+        lesson = self._query_repository.get_lesson_detail(lesson_id)
+        self._validate_split_allowed(lesson)
+
+        meeting_start = datetime.fromisoformat(lesson.meeting_start_at)
+        meeting_end = datetime.fromisoformat(lesson.meeting_end_at)
+        effective_start = datetime.fromisoformat(lesson.effective_start_at)
+        effective_end = datetime.fromisoformat(lesson.effective_end_at)
+        first_end = _coerce_segment_datetime(first_end_at, meeting_start.tzinfo)
+        second_start = _coerce_segment_datetime(second_start_at, meeting_start.tzinfo)
+        if not (meeting_start < first_end < second_start < meeting_end):
+            raise ValueError("Lo split deve stare dentro la lezione: inizio Zoom < fine mattina < inizio pomeriggio < fine Zoom.")
+
+        source_segments = self._query_repository.get_lesson_source_segments(lesson_id)
+        if not source_segments:
+            source_segments = _extract_source_segments_from_lesson(lesson)
+        if not source_segments:
+            raise ValueError("Questa lezione non ha segmenti grezzi sufficienti per lo split.")
+
+        first_sources = self._split_source_segments(source_segments, meeting_start, first_end, "1")
+        second_sources = self._split_source_segments(source_segments, second_start, meeting_end, "2")
+        if not first_sources or not second_sources:
+            raise ValueError("Lo split produrrebbe una delle due lezioni senza segmenti: correggi gli orari.")
+
+        name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
+        first_effective_start = self._clamp_start(effective_start, meeting_start, first_end)
+        first_effective_end = first_end
+        first_break = self._midpoint(first_effective_start, first_effective_end)
+        second_effective_start = second_start
+        second_effective_end = self._clamp_end(effective_end, second_start, meeting_end)
+        second_break = self._midpoint(second_effective_start, second_effective_end)
+
+        first_lesson = self._build_split_lesson(
+            lesson,
+            part="1",
+            source_segments=first_sources,
+            meeting_start=meeting_start,
+            meeting_end=first_end,
+            effective_start=first_effective_start,
+            break_point=first_break,
+            effective_end=first_effective_end,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+        )
+        second_lesson = self._build_split_lesson(
+            lesson,
+            part="2",
+            source_segments=second_sources,
+            meeting_start=second_start,
+            meeting_end=meeting_end,
+            effective_start=second_effective_start,
+            break_point=second_break,
+            effective_end=second_effective_end,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+        )
+        return self._mutation_repository.split_lesson(
+            lesson.id,
+            first_lesson,
+            first_sources,
+            second_lesson,
+            second_sources,
+        )
+
+    def _validate_split_allowed(self, lesson: DraftLessonView) -> None:
+        if lesson.status != "draft":
+            raise ValueError("Lo split e' consentito solo su lezioni draft.")
+        if lesson.is_ignored:
+            raise ValueError("Lo split non e' consentito su lezioni ignorate.")
+        if lesson.review_actions:
+            raise ValueError("Lo split e' consentito solo prima di qualsiasi correzione.")
+
+    def _split_source_segments(
+        self,
+        source_segments: list[DraftLessonSourceSegment],
+        window_start: datetime,
+        window_end: datetime,
+        part: str,
+    ) -> list[DraftLessonSourceSegment]:
+        result: list[DraftLessonSourceSegment] = []
+        for segment in source_segments:
+            segment_start = _coerce_segment_datetime(segment.join_time, window_start.tzinfo)
+            segment_end = _coerce_segment_datetime(segment.leave_time, window_start.tzinfo)
+            clipped_start = max(segment_start, window_start)
+            clipped_end = min(segment_end, window_end)
+            if clipped_end <= clipped_start:
+                continue
+            metadata = dict(segment.metadata or {})
+            metadata["split_part"] = part
+            result.append(
+                DraftLessonSourceSegment(
+                    observed_full_name=segment.observed_full_name,
+                    observed_email=segment.observed_email,
+                    join_time=clipped_start.isoformat(),
+                    leave_time=clipped_end.isoformat(),
+                    metadata=metadata,
+                )
+            )
+        return result
+
+    def _build_split_lesson(
+        self,
+        lesson: DraftLessonView,
+        *,
+        part: str,
+        source_segments: list[DraftLessonSourceSegment],
+        meeting_start: datetime,
+        meeting_end: datetime,
+        effective_start: datetime,
+        break_point: datetime,
+        effective_end: datetime,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> LessonDraft:
+        participants = self._build_participants_from_sources(
+            source_segments,
+            effective_start=effective_start,
+            break_point=break_point,
+            effective_end=effective_end,
+            threshold=lesson.threshold_ratio,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+        )
+        diagnostics = dict(lesson.diagnostics or {})
+        diagnostics["split_from_lesson_id"] = lesson.id
+        diagnostics["split_part"] = part
+        diagnostics["split_created_from"] = {
+            "source_meeting_id": lesson.source_meeting_id,
+            "meeting_start_at": lesson.meeting_start_at,
+            "meeting_end_at": lesson.meeting_end_at,
+        }
+        diagnostics["participant_count"] = len(participants)
+        return LessonDraft(
+            source_system="zoom",
+            source_meeting_id=f"{lesson.source_meeting_id}#split-{part}",
+            course_name=lesson.course_name,
+            lesson_date=lesson.lesson_date,
+            meeting_start_at=meeting_start.isoformat(),
+            meeting_end_at=meeting_end.isoformat(),
+            effective_start_at=effective_start.isoformat(),
+            break_point_at=break_point.isoformat(),
+            effective_end_at=effective_end.isoformat(),
+            threshold_ratio=lesson.threshold_ratio,
+            break_source="split_midpoint",
+            effective_start_source="split",
+            effective_end_source="split",
+            warnings=[*lesson.warnings, f"Split parte {part} da lesson #{lesson.id}"],
+            diagnostics=diagnostics,
+            participants=participants,
+        )
+
+    def _build_participants_from_sources(
+        self,
+        source_segments: list[DraftLessonSourceSegment],
+        *,
+        effective_start: datetime,
+        break_point: datetime,
+        effective_end: datetime,
+        threshold: float,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> list[LessonParticipantDraft]:
+        aggregated = _aggregate_source_segments_by_final_identity(
+            source_segments,
+            effective_start=effective_start,
+            break_point=break_point,
+            effective_end=effective_end,
+            threshold=threshold,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+            forced_identity_pairs=set(),
+            forced_canonical_full_name=None,
+            forced_canonical_email=None,
+        )
+        source_groups = self._group_identity_sources(source_segments, name_alias_map, email_alias_map)
+        participants: list[LessonParticipantDraft] = []
+        for participant_key, record in aggregated.items():
+            identity_sources = source_groups.get(participant_key, [])
+            raw_full_name = self._pick_raw_name(identity_sources, record["canonical_full_name"])
+            first_name, last_name = _split_full_name(record["canonical_full_name"])
+            metadata = {
+                "first_name": first_name,
+                "last_name": last_name,
+                "segments": record["segments"],
+                "identity_sources": identity_sources,
+                "canonicalized_by_identity_alias": raw_full_name != record["canonical_full_name"],
+            }
+            participants.append(
+                LessonParticipantDraft(
+                    participant_key=participant_key,
+                    canonical_full_name=record["canonical_full_name"],
+                    raw_full_name=raw_full_name,
+                    email=record["canonical_email"],
+                    segment_count=record["segment_count"],
+                    minutes_first_half=record["minutes_first_half"],
+                    minutes_second_half=record["minutes_second_half"],
+                    duration_first_half=record["duration_first_half"],
+                    duration_second_half=record["duration_second_half"],
+                    total_minutes=record["total_minutes"],
+                    calculated_presence_status=record["calculated_presence_status"],
+                    final_presence_status=record["calculated_presence_status"],
+                    flags=[],
+                    metadata=metadata,
+                )
+            )
+        return sorted(participants, key=lambda item: item.canonical_full_name.lower())
+
+    def _group_identity_sources(
+        self,
+        source_segments: list[DraftLessonSourceSegment],
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> dict[str, list[dict]]:
+        grouped: dict[str, dict[tuple[str, str], dict]] = {}
+        for segment in source_segments:
+            canonical_full_name, canonical_email = _apply_identity_alias_maps(
+                segment.observed_full_name,
+                segment.observed_email,
+                name_alias_map,
+                email_alias_map,
+            )
+            participant_key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
+            raw_name = (segment.observed_full_name or "").strip()
+            raw_email = (segment.observed_email or "").strip()
+            source_key = (raw_name.casefold(), raw_email.casefold())
+            entry = grouped.setdefault(participant_key, {}).setdefault(
+                source_key,
+                {
+                    "raw_full_name": raw_name,
+                    "email": raw_email,
+                    "segments": [],
+                },
+            )
+            entry["segments"].append([segment.join_time, segment.leave_time])
+        return {
+            participant_key: list(sources.values())
+            for participant_key, sources in grouped.items()
+        }
+
+    def _pick_raw_name(self, identity_sources: list[dict], fallback: str) -> str:
+        names = [str(source.get("raw_full_name") or "").strip() for source in identity_sources]
+        names = [name for name in names if name]
+        return max(names, key=len) if names else fallback
+
+    def _clamp_start(self, value: datetime, minimum: datetime, maximum: datetime) -> datetime:
+        if value <= minimum or value >= maximum:
+            return minimum
+        return value
+
+    def _clamp_end(self, value: datetime, minimum: datetime, maximum: datetime) -> datetime:
+        if value <= minimum or value >= maximum:
+            return maximum
+        return value
+
+    def _midpoint(self, start: datetime, end: datetime) -> datetime:
+        return start + (end - start) / 2
 
 
 class AttendanceCourseConfigService:

@@ -17,6 +17,7 @@ from .models import (
     ManualPresenceImportResult,
     PersistedDraftImport,
     SkippedDuplicateLesson,
+    SplitLessonResult,
 )
 
 
@@ -131,6 +132,16 @@ class AttendanceDraftMutationRepository(Protocol):
 
     def delete_batch(self, batch_id: int) -> None:
         """Delete one import batch and all dependent lessons and draft data."""
+
+    def split_lesson(
+        self,
+        original_lesson_id: int,
+        first_lesson: LessonDraft,
+        first_source_segments: list[DraftLessonSourceSegment],
+        second_lesson: LessonDraft,
+        second_source_segments: list[DraftLessonSourceSegment],
+    ) -> SplitLessonResult:
+        """Create two replacement draft lessons and delete the original in one transaction."""
 
     def upsert_course_expected_lessons(
         self,

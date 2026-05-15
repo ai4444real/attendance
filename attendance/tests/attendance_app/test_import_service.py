@@ -16,6 +16,7 @@ from backend.attendance_app.models import (
     ManualPresenceImportResult,
     PersistedDraftImport,
     SkippedDuplicateLesson,
+    SplitLessonResult,
 )
 from backend.attendance_app.services import (
     AttendanceCourseConfigService,
@@ -23,6 +24,7 @@ from backend.attendance_app.services import (
     AttendanceLessonIdentityRebuildService,
     AttendanceIdentityAliasService,
     AttendanceImportService,
+    AttendanceLessonSplitService,
     AttendanceLessonStateService,
     AttendanceManualPresenceService,
     AttendanceReviewActionService,
@@ -115,6 +117,7 @@ class FakeAttendanceDraftMutationRepository:
         self.deleted_batches = []
         self.course_expected_lessons = []
         self.manual_imports = []
+        self.last_split = None
 
     def update_lesson_after_recalculation(self, lesson, **kwargs) -> None:
         self.last_update = kwargs
@@ -141,6 +144,22 @@ class FakeAttendanceDraftMutationRepository:
 
     def delete_batch(self, batch_id: int) -> None:
         self.deleted_batches.append(batch_id)
+
+    def split_lesson(self, original_lesson_id, first_lesson, first_source_segments, second_lesson, second_source_segments):
+        self.last_split = {
+            "original_lesson_id": original_lesson_id,
+            "first_lesson": first_lesson,
+            "first_source_segments": first_source_segments,
+            "second_lesson": second_lesson,
+            "second_source_segments": second_source_segments,
+        }
+        return SplitLessonResult(
+            original_lesson_id=original_lesson_id,
+            first_lesson_id=101,
+            second_lesson_id=102,
+            first_participants_count=len(first_lesson.participants),
+            second_participants_count=len(second_lesson.participants),
+        )
 
     def upsert_course_expected_lessons(self, course_name: str, expected_lessons_count: int | None) -> None:
         self.course_expected_lessons.append((course_name, expected_lessons_count))
@@ -716,6 +735,110 @@ class AttendanceLessonStateServiceTest(unittest.TestCase):
         service.delete_batch(10)
 
         self.assertEqual([10], mutation.deleted_batches)
+
+
+class AttendanceLessonSplitServiceTest(unittest.TestCase):
+    def test_split_lesson_cuts_crossing_segments_and_deletes_original_via_repository(self) -> None:
+        lesson = DraftLessonView(
+            id=55,
+            course_name="Practitioner",
+            lesson_date="2026-05-15",
+            source_meeting_id="891 9285 7355",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-05-15T09:00:00+02:00",
+            meeting_end_at="2026-05-15T17:00:00+02:00",
+            effective_start_at="2026-05-15T09:00:00+02:00",
+            break_point_at="2026-05-15T13:00:00+02:00",
+            effective_end_at="2026-05-15T17:00:00+02:00",
+            break_source="midpoint",
+            effective_start_source="auto",
+            effective_end_source="auto",
+            warnings=[],
+            diagnostics={},
+            summary={},
+            participants=[],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Mario Rossi",
+                observed_email="mario@example.com",
+                join_time="2026-05-15T09:15:00+02:00",
+                leave_time="2026-05-15T16:45:00+02:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonSplitService(query, mutation, FakeAttendanceIdentityAliasRepository())
+
+        result = service.split_lesson(
+            55,
+            first_end_at="2026-05-15T12:30:00+02:00",
+            second_start_at="2026-05-15T13:30:00+02:00",
+        )
+
+        self.assertEqual(101, result.first_lesson_id)
+        self.assertEqual(102, result.second_lesson_id)
+        self.assertIsNotNone(mutation.last_split)
+        self.assertEqual(55, mutation.last_split["original_lesson_id"])
+        self.assertEqual("891 9285 7355#split-1", mutation.last_split["first_lesson"].source_meeting_id)
+        self.assertEqual("891 9285 7355#split-2", mutation.last_split["second_lesson"].source_meeting_id)
+        self.assertEqual("2026-05-15T12:30:00+02:00", mutation.last_split["first_source_segments"][0].leave_time)
+        self.assertEqual("2026-05-15T13:30:00+02:00", mutation.last_split["second_source_segments"][0].join_time)
+        self.assertEqual("presente", mutation.last_split["first_lesson"].participants[0].final_presence_status)
+        self.assertEqual("presente", mutation.last_split["second_lesson"].participants[0].final_presence_status)
+
+    def test_split_lesson_rejects_lessons_with_review_actions(self) -> None:
+        lesson = DraftLessonView(
+            id=55,
+            course_name="Practitioner",
+            lesson_date="2026-05-15",
+            source_meeting_id="891",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-05-15T09:00:00+02:00",
+            meeting_end_at="2026-05-15T17:00:00+02:00",
+            effective_start_at="2026-05-15T09:00:00+02:00",
+            break_point_at="2026-05-15T13:00:00+02:00",
+            effective_end_at="2026-05-15T17:00:00+02:00",
+            break_source="midpoint",
+            effective_start_source="auto",
+            effective_end_source="auto",
+            warnings=[],
+            diagnostics={},
+            summary={},
+            participants=[],
+            review_actions=[
+                DraftReviewActionView(
+                    id=1,
+                    lesson_id=55,
+                    participant_id=None,
+                    action_type="set_break_point",
+                    payload={"at": "2026-05-15T12:00:00+02:00"},
+                    created_by="test",
+                    created_at="2026-05-15T10:00:00+02:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            ],
+        )
+        service = AttendanceLessonSplitService(
+            FakeAttendanceDraftQueryRepository(lesson),
+            FakeAttendanceDraftMutationRepository(),
+            FakeAttendanceIdentityAliasRepository(),
+        )
+
+        with self.assertRaises(ValueError):
+            service.split_lesson(
+                55,
+                first_end_at="2026-05-15T12:30:00+02:00",
+                second_start_at="2026-05-15T13:30:00+02:00",
+            )
 
 
 class AttendanceCourseConfigServiceTest(unittest.TestCase):

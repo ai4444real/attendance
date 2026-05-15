@@ -96,6 +96,15 @@ class PersistedDraftImport:
 
 
 @dataclass(frozen=True)
+class SplitLessonResult:
+    original_lesson_id: int
+    first_lesson_id: int
+    second_lesson_id: int
+    first_participants_count: int
+    second_participants_count: int
+
+
+@dataclass(frozen=True)
 class AttendanceIdentityAlias:
     id: int
     canonical_full_name: str
