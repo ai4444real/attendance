@@ -315,7 +315,7 @@ const DraftImportsApp = {
                 <div class="lesson-body">
                     <div class="meeting-diagnostics">
                         <div class="meeting-diagnostics-note">${this._escapeHtml(diagnosisText)}</div>
-                        <div class="meeting-chart">
+                        <div class="meeting-chart" data-marker-chart="1" data-lesson-id="${lesson.id}">
                             <div class="meeting-bars">${bars}</div>
                             <div class="meeting-markers">
                                 <div class="meeting-marker zoom-start" style="left:${this._markerPosition(lesson.meeting_start_at, lesson.meeting_start_at, lesson.meeting_end_at)}%">
@@ -344,6 +344,15 @@ const DraftImportsApp = {
                                 <span>${this._escapeHtml(this._formatTime(lesson.meeting_start_at))}</span>
                                 <span>${this._escapeHtml(this._formatTime(lesson.meeting_end_at))}</span>
                             </div>
+                        </div>
+                        <div class="marker-setter" data-marker-setter="1">
+                            <div class="marker-setter-main">
+                                <span class="marker-setter-label">Imposta</span>
+                                <button type="button" class="marker-button" data-marker-mode="set-start">inizio</button>
+                                <button type="button" class="marker-button" data-marker-mode="set-break">pausa</button>
+                                <button type="button" class="marker-button" data-marker-mode="set-end">fine</button>
+                            </div>
+                            <span class="marker-setter-hint" data-marker-hint>scegli cosa impostare, poi clicca sul grafico</span>
                         </div>
                     </div>
                     <div class="threshold-strip">
@@ -441,6 +450,7 @@ const DraftImportsApp = {
     },
 
     _wireLessonActionButtons(lesson) {
+        this._wireMarkerSetter(lesson);
         this._els.lessonsContainer.querySelectorAll('[data-action]').forEach((button) => {
             button.addEventListener('click', async () => {
                 const action = button.getAttribute('data-action');
@@ -486,6 +496,58 @@ const DraftImportsApp = {
                     this._openSourceModal(lesson, participant);
                 }
             });
+        });
+    },
+
+    _wireMarkerSetter(lesson) {
+        let markerMode = null;
+        const chart = this._els.lessonsContainer.querySelector('[data-marker-chart]');
+        const buttons = Array.from(this._els.lessonsContainer.querySelectorAll('[data-marker-mode]'));
+        const hint = this._els.lessonsContainer.querySelector('[data-marker-hint]');
+        const actionConfig = {
+            'set-start': { label: 'inizio', type: 'set_effective_start' },
+            'set-break': { label: 'pausa', type: 'set_break_point' },
+            'set-end': { label: 'fine', type: 'set_effective_end' },
+        };
+
+        if (!chart || buttons.length === 0) return;
+
+        const setMode = (nextMode) => {
+            markerMode = markerMode === nextMode ? null : nextMode;
+            buttons.forEach((button) => {
+                button.classList.toggle('active', button.getAttribute('data-marker-mode') === markerMode);
+            });
+            chart.classList.toggle('setting-mode', Boolean(markerMode));
+            if (hint) {
+                hint.textContent = markerMode
+                    ? `clicca sul grafico per impostare ${actionConfig[markerMode].label}`
+                    : 'scegli cosa impostare, poi clicca sul grafico';
+            }
+        };
+
+        buttons.forEach((button) => {
+            button.addEventListener('click', () => {
+                setMode(button.getAttribute('data-marker-mode'));
+            });
+        });
+
+        chart.addEventListener('mousemove', (event) => {
+            if (!markerMode || !hint) return;
+            const iso = this._buildIsoFromChartClick(lesson, chart, event.clientX);
+            hint.textContent = `${actionConfig[markerMode].label}: ${this._formatTime(iso, lesson.meeting_start_at)} · click per salvare`;
+        });
+
+        chart.addEventListener('mouseleave', () => {
+            if (!markerMode || !hint) return;
+            hint.textContent = `clicca sul grafico per impostare ${actionConfig[markerMode].label}`;
+        });
+
+        chart.addEventListener('click', async (event) => {
+            if (!markerMode) return;
+            const config = actionConfig[markerMode];
+            const iso = this._buildIsoFromChartClick(lesson, chart, event.clientX);
+            setMode(null);
+            await this._createLessonReviewAction(lesson.id, config.type, { at: iso });
         });
     },
 
@@ -904,6 +966,39 @@ const DraftImportsApp = {
         if (Number.isNaN(base.getTime())) return null;
         base.setHours(hours, minutes, 0, 0);
         return base.toISOString();
+    },
+
+    _buildIsoFromChartClick(lesson, chart, clientX) {
+        const rect = chart.getBoundingClientRect();
+        const startMs = new Date(lesson.meeting_start_at).getTime();
+        const endMs = new Date(lesson.meeting_end_at).getTime();
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || rect.width <= 0) {
+            return lesson.meeting_start_at;
+        }
+        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const totalMinutes = (endMs - startMs) / 60000;
+        const snappedMinutes = Math.max(0, Math.min(totalMinutes, Math.round((totalMinutes * ratio) / 5) * 5));
+        return this._buildIsoFromTimestampForLesson(lesson, startMs + snappedMinutes * 60000);
+    },
+
+    _buildIsoFromTimestampForLesson(lesson, timestampMs) {
+        const selected = new Date(timestampMs);
+        const offsetMatch = String(lesson.meeting_start_at || '').match(/(Z|[+\-]\d{2}:\d{2})$/);
+        const offset = offsetMatch ? offsetMatch[1] : '';
+        const pad = (value) => String(value).padStart(2, '0');
+        return [
+            selected.getFullYear(),
+            '-',
+            pad(selected.getMonth() + 1),
+            '-',
+            pad(selected.getDate()),
+            'T',
+            pad(selected.getHours()),
+            ':',
+            pad(selected.getMinutes()),
+            ':00',
+            offset,
+        ].join('');
     },
 
     _parseThresholdInput(value) {

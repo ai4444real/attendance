@@ -18,6 +18,7 @@ from .zoom_parser import parse_zoom_csv_file
 MIN_MEETING_DURATION_MINUTES = 20.0
 MIN_RECORD_TOTAL_MINUTES = 5.0
 MIN_BREAK_EDGE_MINUTES = 5.0
+MAX_AUTO_END_TRIM_MINUTES = 60.0
 
 
 @dataclass(frozen=True)
@@ -382,11 +383,12 @@ def _suggest_effective_bounds(meeting) -> tuple[datetime | None, datetime | None
     if peak < 3:
         return None, None, None
 
-    active_cutoff = max(3, ceil(peak * 0.75))
+    start_cutoff = max(3, ceil(peak * 0.75))
+    end_cutoff = max(3, ceil(peak * 0.35))
     sustained_minutes = 15
     minimum_trim_minutes = 12
-    first_run = _find_first_sustained_run(counts, active_cutoff, sustained_minutes)
-    last_run = _find_last_sustained_run(counts, active_cutoff, sustained_minutes)
+    first_run = _find_first_sustained_run(counts, start_cutoff, sustained_minutes)
+    last_run = _find_last_sustained_run(counts, end_cutoff, sustained_minutes)
 
     if first_run is None or last_run is None:
         return None, None, None
@@ -399,7 +401,7 @@ def _suggest_effective_bounds(meeting) -> tuple[datetime | None, datetime | None
 
     if start_trim < minimum_trim_minutes:
         suggested_start = None
-    if end_trim < minimum_trim_minutes:
+    if end_trim < minimum_trim_minutes or end_trim > MAX_AUTO_END_TRIM_MINUTES:
         suggested_end = None
 
     if suggested_start is None and suggested_end is None:

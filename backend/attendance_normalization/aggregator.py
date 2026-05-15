@@ -10,8 +10,11 @@ That keeps aggregation deterministic and easy to test.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Iterable
+
+
+MAX_RECONNECT_GAP_MINUTES = 5.0
 
 
 @dataclass(frozen=True)
@@ -82,20 +85,25 @@ def aggregate_meeting(
     records: list[AttendanceAggregationRecord] = []
     for participant_segments in _group_by_participant(meeting.segments).values():
         first = participant_segments[0]
+        raw_intervals = [
+            (segment.join_time, segment.leave_time)
+            for segment in participant_segments
+        ]
+        attendance_intervals = _merge_nearby_intervals(raw_intervals)
 
         minutes_first_half = 0.0
         minutes_second_half = 0.0
 
-        for segment in participant_segments:
+        for segment_start, segment_end in attendance_intervals:
             minutes_first_half += _overlap_minutes(
-                segment.join_time,
-                segment.leave_time,
+                segment_start,
+                segment_end,
                 effective_start,
                 first_half_end,
             )
             minutes_second_half += _overlap_minutes(
-                segment.join_time,
-                segment.leave_time,
+                segment_start,
+                segment_end,
                 second_half_start,
                 effective_meeting_end,
             )
@@ -118,10 +126,7 @@ def aggregate_meeting(
                 duration_second_half=_round1(duration_second_half),
                 total_minutes=_round1(minutes_first_half + minutes_second_half),
                 segment_count=len(participant_segments),
-                segments=[
-                    (segment.join_time, segment.leave_time)
-                    for segment in participant_segments
-                ],
+                segments=raw_intervals,
                 first_half_end=first_half_end,
                 second_half_start=second_half_start,
             )
@@ -149,6 +154,27 @@ def _overlap_minutes(
     start = max(segment_start, range_start)
     end = min(segment_end, range_end)
     return max(0.0, (end - start).total_seconds() / 60)
+
+
+def _merge_nearby_intervals(
+    intervals: list[tuple[datetime, datetime]],
+    max_gap: timedelta = timedelta(minutes=MAX_RECONNECT_GAP_MINUTES),
+) -> list[tuple[datetime, datetime]]:
+    if not intervals:
+        return []
+
+    ordered = sorted(intervals, key=lambda interval: interval[0])
+    merged: list[list[datetime]] = [[ordered[0][0], ordered[0][1]]]
+
+    for start, end in ordered[1:]:
+        last = merged[-1]
+        if start <= last[1] + max_gap:
+            if end > last[1]:
+                last[1] = end
+        else:
+            merged.append([start, end])
+
+    return [(start, end) for start, end in merged]
 
 
 def _minutes_between(start: datetime, end: datetime) -> float:

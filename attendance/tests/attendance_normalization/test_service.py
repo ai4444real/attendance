@@ -1,10 +1,13 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from datetime import datetime
 import unittest
 import json
 
+from backend.attendance_normalization.aggregator import ZoomMeeting, ZoomSegment
 from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.attendance_normalization.service import _resolve_break_point
+from backend.attendance_normalization.service import _suggest_effective_bounds
 from backend.attendance_normalization.temporal_markers import BreakWindow
 
 
@@ -337,6 +340,69 @@ class NormalizationServiceTests(unittest.TestCase):
         self.assertIsNone(diagnostic.suggested_effective_start)
         self.assertIsNone(diagnostic.suggested_effective_end)
         self.assertIsNone(diagnostic.suggestion_confidence)
+
+    def test_effective_end_suggestion_allows_lower_second_half_plateau(self):
+        start = datetime.fromisoformat("2026-04-10T18:49:00")
+        end = datetime.fromisoformat("2026-04-10T22:36:00")
+        segments = []
+
+        for index in range(20):
+            leave_time = (
+                datetime.fromisoformat("2026-04-10T22:12:00")
+                if index < 11
+                else datetime.fromisoformat("2026-04-10T20:27:00")
+            )
+            segments.append(
+                ZoomSegment(
+                    first_name=f"Persona{index}",
+                    last_name="Test",
+                    email=f"persona{index}@example.com",
+                    full_name=f"Persona {index}",
+                    join_time=datetime.fromisoformat("2026-04-10T19:05:00"),
+                    leave_time=leave_time,
+                )
+            )
+
+        meeting = ZoomMeeting(
+            course="PRACTITIONER",
+            meeting_id="lower-second-half",
+            start_time=start,
+            end_time=end,
+            duration_minutes=227,
+            segments=segments,
+        )
+
+        _, suggested_end, confidence = _suggest_effective_bounds(meeting)
+
+        self.assertEqual(suggested_end, datetime.fromisoformat("2026-04-10T22:12:00"))
+        self.assertEqual(confidence, "high")
+
+    def test_effective_end_suggestion_rejects_mid_lesson_drop_as_lesson_end(self):
+        start = datetime.fromisoformat("2026-04-10T18:49:00")
+        end = datetime.fromisoformat("2026-04-10T22:36:00")
+        segments = [
+            ZoomSegment(
+                first_name=f"Persona{index}",
+                last_name="Test",
+                email=f"persona{index}@example.com",
+                full_name=f"Persona {index}",
+                join_time=datetime.fromisoformat("2026-04-10T19:05:00"),
+                leave_time=datetime.fromisoformat("2026-04-10T20:27:00"),
+            )
+            for index in range(20)
+        ]
+        meeting = ZoomMeeting(
+            course="PRACTITIONER",
+            meeting_id="mid-drop",
+            start_time=start,
+            end_time=end,
+            duration_minutes=227,
+            segments=segments,
+        )
+
+        _, suggested_end, _ = _suggest_effective_bounds(meeting)
+
+        self.assertIsNone(suggested_end)
 
     def test_manual_time_override_wins_over_auto_suggest(self):
         with TemporaryDirectory() as temp_dir:

@@ -9,6 +9,8 @@ from backend.attendance_normalization.identity_rules import load_identity_rules
 from backend.attendance_normalization.presence_rules import determine_presence_status
 from backend.attendance_normalization.service import NormalizationResult
 
+MAX_RECONNECT_GAP_MINUTES = 5.0
+
 from .models import (
     AttendanceIdentityAlias,
     DraftLessonSourceSegment,
@@ -1266,11 +1268,12 @@ def _extract_source_segments_from_lesson(lesson: DraftLessonView) -> list[DraftL
 def _merge_overlapping_intervals(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
     if not intervals:
         return []
+    max_gap = timedelta(minutes=MAX_RECONNECT_GAP_MINUTES)
     ordered = sorted(intervals, key=lambda item: (item[0], item[1]))
     merged: list[list[datetime]] = [[ordered[0][0], ordered[0][1]]]
     for start, end in ordered[1:]:
         last = merged[-1]
-        if start <= last[1]:
+        if start <= last[1] + max_gap:
             if end > last[1]:
                 last[1] = end
         else:

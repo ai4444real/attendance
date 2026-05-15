@@ -99,6 +99,7 @@
         .threshold-badge-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-muted); font-weight: 800; }
         .threshold-badge-value { font-size: 18px; font-weight: 900; color: var(--brand-pnl-blue); }
         .meeting-chart { margin-top: 14px; padding: 18px 14px 12px; border: 1px solid var(--brand-border); border-radius: 16px; background: linear-gradient(180deg, #fbfdff 0%, #f5f9fc 100%); }
+        .meeting-chart.setting-mode { cursor: crosshair; border-color: var(--brand-pnl-blue); box-shadow: inset 0 0 0 2px rgba(0, 80, 144, 0.12); }
         .meeting-bars { display: flex; align-items: end; gap: 3px; min-height: 110px; padding-bottom: 10px; }
         .meeting-bar { flex: 1; min-width: 8px; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #1d5f91 0%, #18a34a 100%); opacity: 0.95; }
         .meeting-markers { position: relative; height: 86px; border-top: 2px solid rgba(15, 23, 42, 0.1); margin-top: 8px; }
@@ -114,6 +115,13 @@
         .meeting-marker.zoom-start::before,
         .meeting-marker.zoom-end::before { height: 12px; }
         .meeting-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--brand-muted); margin-top: 6px; }
+        .marker-setter { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--brand-border); border-radius: 14px; background: #fafcfd; }
+        .marker-setter-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .marker-setter-label { font-size: 12px; font-weight: 900; color: var(--brand-ink); text-transform: uppercase; letter-spacing: 0.06em; }
+        .marker-button { border: 1px solid var(--brand-border); background: white; color: var(--brand-ink); border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .marker-button:hover { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
+        .marker-button.active { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue); color: #fff; }
+        .marker-setter-hint { font-size: 12px; color: var(--brand-muted); font-weight: 700; }
         .action-panel { margin: 16px 0; border: 1px solid var(--brand-border); border-radius: 14px; background: #fafcfd; overflow: hidden; }
         .action-panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; padding: 14px 16px; cursor: pointer; list-style: none; }
         .action-panel-head::-webkit-details-marker { display: none; }

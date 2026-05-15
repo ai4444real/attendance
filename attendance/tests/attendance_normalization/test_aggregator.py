@@ -89,6 +89,62 @@ class AggregateMeetingTests(unittest.TestCase):
         self.assertEqual(record.total_minutes, 50.0)
         self.assertEqual(record.segment_count, 2)
 
+    def test_merges_reconnect_gaps_and_overlaps_for_attendance_minutes(self):
+        meeting = ZoomMeeting(
+            course="PNL Practicum",
+            meeting_id="m-reconnect",
+            start_time=dt("2026-04-10T19:00:00"),
+            end_time=dt("2026-04-10T21:00:00"),
+            duration_minutes=120,
+            segments=[
+                ZoomSegment(
+                    first_name="Mario",
+                    last_name="Rossi",
+                    email="mario@example.com",
+                    full_name="Mario Rossi",
+                    join_time=dt("2026-04-10T19:00:00"),
+                    leave_time=dt("2026-04-10T19:03:00"),
+                ),
+                ZoomSegment(
+                    first_name="Mario",
+                    last_name="Rossi",
+                    email="mario@example.com",
+                    full_name="Mario Rossi",
+                    join_time=dt("2026-04-10T19:03:00"),
+                    leave_time=dt("2026-04-10T19:04:00"),
+                ),
+                ZoomSegment(
+                    first_name="Mario",
+                    last_name="Rossi",
+                    email="mario@example.com",
+                    full_name="Mario Rossi",
+                    join_time=dt("2026-04-10T19:06:00"),
+                    leave_time=dt("2026-04-10T19:08:00"),
+                ),
+                ZoomSegment(
+                    first_name="Mario",
+                    last_name="Rossi",
+                    email="mario@example.com",
+                    full_name="Mario Rossi",
+                    join_time=dt("2026-04-10T19:06:00"),
+                    leave_time=dt("2026-04-10T19:08:00"),
+                ),
+            ],
+        )
+
+        records = aggregate_meeting(
+            meeting=meeting,
+            effective_start=dt("2026-04-10T19:00:00"),
+            break_point=dt("2026-04-10T20:00:00"),
+        )
+
+        record = records[0]
+
+        self.assertEqual(record.minutes_first_half, 8.0)
+        self.assertEqual(record.total_minutes, 8.0)
+        self.assertEqual(record.segment_count, 4)
+        self.assertEqual(len(record.segments), 4)
+
     def test_effective_start_trims_minutes_before_the_real_lesson_start(self):
         meeting = ZoomMeeting(
             course="PNL Practicum",
