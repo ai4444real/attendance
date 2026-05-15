@@ -461,6 +461,16 @@ class AttendanceDraftRecalculationService:
         diagnostics["recalculated_from_review_actions"] = True
         diagnostics["recalculated_from_current_markers"] = use_current_markers
         diagnostics["recalculation_mode"] = "segments" if participants_have_segments else "threshold_only"
+        if source_segments:
+            diagnostics["timeline"] = self._build_timeline_from_source_segments(
+                source_segments,
+                datetime.fromisoformat(str(meeting_start_at)),
+                datetime.fromisoformat(str(meeting_end_at)),
+            )
+            diagnostics["peak_active_count"] = max(
+                [int(point.get("active_count") or 0) for point in diagnostics["timeline"] if isinstance(point, dict)] or [0]
+            )
+            diagnostics["sampled_every_minutes"] = 10.0
 
         self._mutation_repository.update_lesson_after_recalculation(
             lesson,
@@ -497,6 +507,48 @@ class AttendanceDraftRecalculationService:
         if not starts or not ends:
             return None
         return min(starts), max(ends)
+
+    def _build_timeline_from_source_segments(
+        self,
+        source_segments: list[DraftLessonSourceSegment],
+        window_start: datetime,
+        window_end: datetime,
+        step_minutes: float = 10.0,
+    ) -> list[dict]:
+        if window_end <= window_start:
+            return [{"timestamp": window_start.isoformat(), "active_count": 0}]
+        step = timedelta(minutes=step_minutes)
+        current = window_start
+        points = []
+        while current < window_end:
+            points.append({
+                "timestamp": current.isoformat(),
+                "active_count": self._count_active_source_segments(source_segments, current, window_end),
+            })
+            current += step
+        points.append({
+            "timestamp": window_end.isoformat(),
+            "active_count": self._count_active_source_segments(source_segments, window_end, window_end),
+        })
+        return points
+
+    def _count_active_source_segments(
+        self,
+        source_segments: list[DraftLessonSourceSegment],
+        probe_time: datetime,
+        window_end: datetime,
+    ) -> int:
+        adjusted_probe = probe_time if probe_time < window_end else window_end - timedelta(seconds=1)
+        active = set()
+        for segment in source_segments:
+            try:
+                join_time = _coerce_segment_datetime(segment.join_time, adjusted_probe.tzinfo)
+                leave_time = _coerce_segment_datetime(segment.leave_time, adjusted_probe.tzinfo)
+            except ValueError:
+                continue
+            if join_time <= adjusted_probe < leave_time:
+                active.add(segment.observed_email or segment.observed_full_name)
+        return len(active)
 
     def _build_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict, *, use_current_markers: bool = False) -> dict:
         if use_current_markers:

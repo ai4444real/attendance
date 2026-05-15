@@ -674,6 +674,10 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertEqual(104.0, participant_update["duration_first_half"])
         self.assertEqual(104.0, participant_update["minutes_second_half"])
         self.assertEqual(104.0, participant_update["duration_second_half"])
+        self.assertEqual(23, len(mutation.last_update["diagnostics"]["timeline"]))
+        self.assertGreater(mutation.last_update["diagnostics"]["peak_active_count"], 0)
+        self.assertEqual("2026-04-20T16:27:00+00:00", mutation.last_update["diagnostics"]["timeline"][0]["timestamp"])
+        self.assertEqual("2026-04-20T19:58:00+00:00", mutation.last_update["diagnostics"]["timeline"][-1]["timestamp"])
 
     def test_recalculate_lesson_applies_latest_manual_presence_override(self) -> None:
         lesson = DraftLessonView(
