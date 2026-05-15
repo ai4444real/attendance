@@ -983,22 +983,7 @@ const DraftImportsApp = {
 
     _buildIsoFromTimestampForLesson(lesson, timestampMs) {
         const selected = new Date(timestampMs);
-        const offsetMatch = String(lesson.meeting_start_at || '').match(/(Z|[+\-]\d{2}:\d{2})$/);
-        const offset = offsetMatch ? offsetMatch[1] : '';
-        const pad = (value) => String(value).padStart(2, '0');
-        return [
-            selected.getFullYear(),
-            '-',
-            pad(selected.getMonth() + 1),
-            '-',
-            pad(selected.getDate()),
-            'T',
-            pad(selected.getHours()),
-            ':',
-            pad(selected.getMinutes()),
-            ':00',
-            offset,
-        ].join('');
+        return selected.toISOString();
     },
 
     _parseThresholdInput(value) {
