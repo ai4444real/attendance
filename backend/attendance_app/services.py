@@ -396,7 +396,8 @@ class AttendanceDraftRecalculationService:
             elif action.action_type == "clear_manual_presence_status" and action.participant_id is not None:
                 manual_overrides[action.participant_id] = None
 
-        participants_have_segments = all(
+        source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
+        participants_have_segments = bool(source_segments) or all(
             isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
             for participant in lesson.participants
         )
@@ -409,6 +410,7 @@ class AttendanceDraftRecalculationService:
                 break_point_at=break_point_at,
                 effective_end_at=effective_end_at,
                 manual_overrides=manual_overrides,
+                source_segments=source_segments,
             )
         else:
             participants = self._recalculate_threshold_only(
@@ -478,12 +480,12 @@ class AttendanceDraftRecalculationService:
         break_point_at: str | None,
         effective_end_at: str,
         manual_overrides: dict[int, str | None],
+        source_segments: list[DraftLessonSourceSegment] | None = None,
     ) -> list[dict]:
         effective_start = datetime.fromisoformat(effective_start_at)
         effective_end = datetime.fromisoformat(effective_end_at)
         break_point = datetime.fromisoformat(break_point_at) if break_point_at else None
         break_point = self._resolve_break_point(effective_start, effective_end, break_point)
-        source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
         if not source_segments:
             source_segments = _extract_source_segments_from_lesson(lesson)
 
