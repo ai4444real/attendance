@@ -469,6 +469,11 @@ const DraftImportsApp = {
                 }
                 if (action === 'split-lesson') {
                     await this._splitLesson(lesson);
+                    return;
+                }
+                if (action === 'delete-review-action') {
+                    const actionId = Number(button.getAttribute('data-action-id'));
+                    await this._deleteReviewAction(actionId, lesson.id);
                 }
             });
         });
@@ -962,6 +967,25 @@ const DraftImportsApp = {
         }
     },
 
+    async _deleteReviewAction(actionId, lessonId) {
+        if (!actionId) return;
+        if (!window.confirm('Cancellare questa correzione e ricalcolare la lezione con le correzioni rimaste?')) {
+            return;
+        }
+        try {
+            const response = await fetch(`/api/attendance/review-actions/${actionId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await this._readApiPayload(response);
+            if (!response.ok) throw new Error(data.detail || 'Impossibile cancellare la correzione.');
+            await this._reloadCurrentBatch(data.lesson_id || lessonId);
+        } catch (error) {
+            console.error(error);
+            window.alert(error.message);
+        }
+    },
+
     async _reloadCurrentBatch(preferredLessonId = null) {
         if (!this._selectedBatchId) return;
         const response = await fetch(`/api/attendance/import-batches/${this._selectedBatchId}`, { cache: 'no-store' });
@@ -997,6 +1021,7 @@ const DraftImportsApp = {
                 <div class="review-action-top">
                     <span class="review-action-type">${this._escapeHtml(action.action_type)}</span>
                     <span class="review-action-meta">${this._escapeHtml(this._formatDateTime(action.created_at))}${action.created_by ? ` · ${this._escapeHtml(action.created_by)}` : ''}</span>
+                    <button type="button" class="review-action-delete" data-action="delete-review-action" data-action-id="${action.id}" title="Cancella correzione" aria-label="Cancella correzione ${action.id}">×</button>
                 </div>
                 <div class="review-action-payload">${this._escapeHtml(JSON.stringify(action.payload, null, 2))}</div>
             </article>

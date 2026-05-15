@@ -76,6 +76,24 @@ class PostgresAttendanceReviewActionRepository:
             notes=row[9],
         )
 
+    def delete_lesson_review_action(self, action_id: int) -> int:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM attendance_review_actions
+                    WHERE id = %s
+                    RETURNING lesson_id
+                    """,
+                    (action_id,),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+
+        if row is None:
+            raise LookupError(f"Attendance review action {action_id} not found.")
+        return int(row[0])
+
 
 def _ensure_datetime(value: object) -> datetime:
     if not isinstance(value, datetime):

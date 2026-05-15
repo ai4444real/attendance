@@ -794,6 +794,29 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
     }
 
 
+@app.post("/api/attendance/review-actions/{action_id}/delete")
+async def attendance_delete_review_action(action_id: int):
+    service = AttendanceReviewActionService(PostgresAttendanceReviewActionRepository())
+    try:
+        lesson_id = service.delete_lesson_review_action(action_id)
+        recalculated_lesson = AttendanceDraftRecalculationService(
+            PostgresAttendanceDraftQueryRepository(),
+            PostgresAttendanceDraftMutationRepository(),
+            PostgresAttendanceIdentityAliasRepository(),
+        ).recalculate_lesson(lesson_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Cancellazione correzione fallita: {exc}") from exc
+    return {
+        "action_id": action_id,
+        "lesson_id": recalculated_lesson.id,
+        "deleted": True,
+    }
+
+
 @app.post("/api/attendance/lessons/{lesson_id}/ignore")
 async def attendance_set_lesson_ignored(lesson_id: int, payload: dict):
     is_ignored = bool(payload.get("is_ignored"))

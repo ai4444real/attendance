@@ -314,6 +314,11 @@ class AttendanceReviewActionService:
             participant_id=participant_id,
         )
 
+    def delete_lesson_review_action(self, action_id: int) -> int:
+        if action_id <= 0:
+            raise ValueError("action_id must be positive")
+        return self._repository.delete_lesson_review_action(action_id)
+
     def _validate_payload(self, action_type: str, payload: dict) -> None:
         if action_type == "set_manual_presence_status":
             presence_status = payload.get("presence_status")
@@ -352,15 +357,17 @@ class AttendanceDraftRecalculationService:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
         action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
 
-        threshold_ratio = lesson.threshold_ratio
-        effective_start_at = lesson.effective_start_at
-        break_point_at = lesson.break_point_at
-        effective_end_at = lesson.effective_end_at
-        break_source = lesson.break_source
-        effective_start_source = lesson.effective_start_source
-        effective_end_source = lesson.effective_end_source
+        diagnostics = dict(lesson.diagnostics or {})
+        baseline = self._build_recalculation_baseline(lesson, diagnostics)
+        threshold_ratio = baseline["threshold_ratio"]
+        effective_start_at = baseline["effective_start_at"]
+        break_point_at = baseline["break_point_at"]
+        effective_end_at = baseline["effective_end_at"]
+        break_source = baseline["break_source"]
+        effective_start_source = baseline["effective_start_source"]
+        effective_end_source = baseline["effective_end_source"]
         manual_overrides = {
-            participant.id: participant.manual_override_presence_status
+            participant.id: None
             for participant in lesson.participants
         }
 
@@ -403,7 +410,7 @@ class AttendanceDraftRecalculationService:
                 manual_overrides=manual_overrides,
             )
 
-        diagnostics = dict(lesson.diagnostics or {})
+        diagnostics["review_action_baseline"] = baseline
         diagnostics["threshold_ratio"] = threshold_ratio
         diagnostics["effective_start"] = effective_start_at
         diagnostics["break_point"] = break_point_at
@@ -425,6 +432,28 @@ class AttendanceDraftRecalculationService:
         )
 
         return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _build_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict) -> dict:
+        existing = diagnostics.get("review_action_baseline")
+        if isinstance(existing, dict):
+            return {
+                "threshold_ratio": float(existing.get("threshold_ratio", lesson.threshold_ratio)),
+                "effective_start_at": str(existing.get("effective_start_at") or lesson.effective_start_at),
+                "break_point_at": existing.get("break_point_at"),
+                "effective_end_at": str(existing.get("effective_end_at") or lesson.effective_end_at),
+                "break_source": str(existing.get("break_source") or lesson.break_source),
+                "effective_start_source": str(existing.get("effective_start_source") or lesson.effective_start_source),
+                "effective_end_source": str(existing.get("effective_end_source") or lesson.effective_end_source),
+            }
+        return {
+            "threshold_ratio": lesson.threshold_ratio,
+            "effective_start_at": lesson.effective_start_at,
+            "break_point_at": lesson.break_point_at,
+            "effective_end_at": lesson.effective_end_at,
+            "break_source": lesson.break_source,
+            "effective_start_source": lesson.effective_start_source,
+            "effective_end_source": lesson.effective_end_source,
+        }
 
     def _recalculate_from_segments(
         self,

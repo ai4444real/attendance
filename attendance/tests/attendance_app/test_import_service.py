@@ -77,6 +77,7 @@ class FakeAttendanceDraftImportRepository:
 class FakeAttendanceReviewActionRepository:
     def __init__(self) -> None:
         self.calls = []
+        self.deleted_action_ids = []
 
     def create_lesson_review_action(self, lesson_id, action_type, payload, **kwargs):
         self.calls.append((lesson_id, action_type, payload, kwargs))
@@ -92,6 +93,10 @@ class FakeAttendanceReviewActionRepository:
             is_applied=False,
             notes=kwargs.get("notes"),
         )
+
+    def delete_lesson_review_action(self, action_id: int) -> int:
+        self.deleted_action_ids.append(action_id)
+        return 12
 
 
 class FakeAttendanceDraftQueryRepository:
@@ -383,6 +388,12 @@ class AttendanceReviewActionServiceTest(unittest.TestCase):
 
         self.assertEqual("set_manual_presence_status", action.action_type)
         self.assertEqual(1, len(self.repository.calls))
+
+    def test_delete_lesson_review_action_delegates_to_repository(self) -> None:
+        lesson_id = self.service.delete_lesson_review_action(99)
+
+        self.assertEqual(12, lesson_id)
+        self.assertEqual([99], self.repository.deleted_action_ids)
 
 
 class AttendanceDraftRecalculationServiceTest(unittest.TestCase):

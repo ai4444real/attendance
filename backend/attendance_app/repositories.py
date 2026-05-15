@@ -85,6 +85,9 @@ class AttendanceReviewActionRepository(Protocol):
     ) -> DraftReviewActionView:
         """Persist one review action and return the created row."""
 
+    def delete_lesson_review_action(self, action_id: int) -> int:
+        """Delete one review action and return its lesson id."""
+
 
 class AttendanceDraftMutationRepository(Protocol):
     """Update one lesson draft after recomputation."""
