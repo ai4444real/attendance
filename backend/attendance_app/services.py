@@ -353,9 +353,16 @@ class AttendanceDraftRecalculationService:
         self._mutation_repository = mutation_repository
         self._identity_alias_repository = identity_alias_repository
 
-    def recalculate_lesson(self, lesson_id: int, *, use_current_markers: bool = False) -> DraftLessonView:
+    def recalculate_lesson(
+        self,
+        lesson_id: int,
+        *,
+        use_current_markers: bool = False,
+        apply_marker_action_ids: set[int] | None = None,
+    ) -> DraftLessonView:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
         action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
+        apply_marker_action_ids = apply_marker_action_ids or set()
 
         diagnostics = dict(lesson.diagnostics or {})
         baseline = self._build_recalculation_baseline(lesson, diagnostics, use_current_markers=use_current_markers)
@@ -378,7 +385,7 @@ class AttendanceDraftRecalculationService:
                 "set_effective_start",
                 "set_break_point",
                 "set_effective_end",
-            }:
+            } and action.id not in apply_marker_action_ids:
                 continue
             if action.action_type == "set_threshold_ratio":
                 threshold_ratio = float(payload["threshold_ratio"])
@@ -424,6 +431,10 @@ class AttendanceDraftRecalculationService:
 
         requested_break_point = datetime.fromisoformat(str(break_point_at)) if break_point_at else None
         if bounds_were_expanded and break_source in {"midpoint", "recalculate_resolved"}:
+            requested_break_point = None
+        if requested_break_point is not None and (
+            requested_break_point <= effective_start or requested_break_point >= effective_end
+        ):
             requested_break_point = None
         resolved_break_point = self._resolve_break_point(effective_start, effective_end, requested_break_point)
         if requested_break_point is None or resolved_break_point != requested_break_point:

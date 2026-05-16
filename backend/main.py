@@ -771,7 +771,11 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
             query_repository,
             PostgresAttendanceDraftMutationRepository(),
             PostgresAttendanceIdentityAliasRepository(),
-        ).recalculate_lesson(lesson_id)
+        ).recalculate_lesson(
+            lesson_id,
+            use_current_markers=action_type in {"set_threshold_ratio", "set_effective_start", "set_break_point", "set_effective_end"},
+            apply_marker_action_ids={action.id},
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
