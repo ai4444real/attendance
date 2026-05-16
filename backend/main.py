@@ -1000,6 +1000,20 @@ async def attendance_list_identity_aliases():
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
+@app.post("/api/attendance/identity-aliases/rebuild-all")
+async def attendance_rebuild_all_identity_aliases():
+    _bootstrap_identity_aliases_if_needed()
+    try:
+        result = AttendanceLessonIdentityRebuildService(
+            PostgresAttendanceDraftQueryRepository(),
+            PostgresAttendanceDraftMutationRepository(),
+            PostgresAttendanceIdentityAliasRepository(),
+        ).rebuild_all_lessons_with_current_aliases()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Rebuild identità fallito: {exc}") from exc
+    return JSONResponse(result, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
 @app.get("/api/attendance/instructors")
 async def attendance_list_instructors():
     repository = PostgresAttendanceInstructorRepository()

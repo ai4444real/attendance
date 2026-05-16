@@ -37,7 +37,13 @@
         .alias-delete-button { width: 30px; height: 30px; border-radius: 999px; border: 1px solid #f3c6cf; background: #fff5f7; color: #b42318; font-size: 20px; line-height: 1; cursor: pointer; }
         .alias-delete-button:hover { background: #ffe4e8; }
         .alias-delete-button:disabled { opacity: 0.5; cursor: wait; }
+        .primary-action { border: 0; border-radius: 999px; padding: 10px 14px; background: var(--brand-pnl-blue); color: white; font-weight: 800; cursor: pointer; }
+        .primary-action:hover { filter: brightness(0.95); }
+        .primary-action:disabled { opacity: 0.55; cursor: wait; }
         .empty { padding: 24px; border: 1px dashed var(--brand-border); border-radius: 16px; color: var(--brand-muted); background: #fafcfd; }
+        .action-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+        .action-result { font-size: 13px; color: var(--brand-muted); }
+        .action-result.is-error { color: #b42318; font-weight: 800; }
     </style>
 </head>
 <body>
@@ -72,6 +78,10 @@
                     <div class="hint">Ordine semplice, nessuna logica extra: è solo una vista di controllo del contenuto persistito.</div>
                 </div>
                 <div id="aliasesMeta" class="meta-strip"></div>
+            </div>
+            <div class="action-row">
+                <button id="rebuildAliasesButton" class="primary-action" type="button">Applica alias alle lezioni</button>
+                <span id="rebuildAliasesResult" class="action-result">Ricostruisce solo le identità normalizzate, senza toccare origine, marker o stato lezioni.</span>
             </div>
             <div id="aliasesBody" class="empty">Carico alias...</div>
         </section>

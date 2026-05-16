@@ -102,10 +102,14 @@ class FakeAttendanceReviewActionRepository:
 class FakeAttendanceDraftQueryRepository:
     def __init__(self, lesson: DraftLessonView) -> None:
         self.lesson = lesson
+        self.lesson_ids_for_identity_rebuild: list[int] = []
         self.source_segments: list[DraftLessonSourceSegment] = []
 
     def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
         return self.lesson
+
+    def list_lesson_ids_for_identity_rebuild(self) -> list[int]:
+        return list(self.lesson_ids_for_identity_rebuild)
 
     def get_lesson_source_segments(self, lesson_id: int) -> list[DraftLessonSourceSegment]:
         return list(self.source_segments)
@@ -1309,6 +1313,96 @@ class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
         self.assertEqual(11, participants[0]["survivor_id"])
         self.assertEqual([12], participants[0]["obsolete_ids"])
         self.assertEqual("apfacchi@gmail.com", participants[0]["participant_key"])
+
+    def test_rebuild_all_lessons_with_current_aliases_reports_processed_lessons(self) -> None:
+        lesson = DraftLessonView(
+            id=128,
+            course_name="PRACTITIONER",
+            lesson_date="2026-01-28",
+            source_meeting_id="891 9285 7355",
+            status="official",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-01-28T19:25:00+00:00",
+            meeting_end_at="2026-01-28T23:47:00+00:00",
+            effective_start_at="2026-01-28T20:04:00+00:00",
+            break_point_at="2026-01-28T20:59:00+00:00",
+            effective_end_at="2026-01-28T21:54:00+00:00",
+            break_source="midpoint",
+            effective_start_source="snap",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 0, "seconda_meta": 0, "assente": 2},
+            participants=[
+                DraftLessonParticipantView(
+                    id=11,
+                    participant_key="apfacchi@gmail.cim",
+                    canonical_full_name="Andrea Facchi",
+                    raw_full_name="Andrea Facchi",
+                    email="apfacchi@gmail.cim",
+                    segment_count=1,
+                    minutes_first_half=39.0,
+                    minutes_second_half=26.0,
+                    duration_first_half=55.0,
+                    duration_second_half=55.0,
+                    total_minutes=65.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={"segments": [["2026-01-28T20:15:00", "2026-01-28T21:30:00"]]},
+                ),
+                DraftLessonParticipantView(
+                    id=12,
+                    participant_key="apfacchi@gmail.com",
+                    canonical_full_name="Andrea Facchi",
+                    raw_full_name="Andrea Facchi",
+                    email="apfacchi@gmail.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=29.0,
+                    duration_first_half=55.0,
+                    duration_second_half=55.0,
+                    total_minutes=29.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={"segments": [["2026-01-28T21:25:00", "2026-01-28T21:54:00"]]},
+                ),
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.lesson_ids_for_identity_rebuild = [128]
+        mutation = FakeAttendanceDraftMutationRepository()
+        alias_repo = FakeAttendanceIdentityAliasRepository()
+        alias_repo.aliases = [
+            AttendanceIdentityAlias(
+                id=1,
+                canonical_full_name="Andrea Facchi",
+                canonical_email="apfacchi@gmail.com",
+                alias_value="apfacchi@gmail.cim",
+                alias_type="email",
+                created_by="test",
+                created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            )
+        ]
+        service = AttendanceLessonIdentityRebuildService(query, mutation, alias_repo)
+
+        result = service.rebuild_all_lessons_with_current_aliases()
+
+        self.assertEqual(1, result["candidate_lessons"])
+        self.assertEqual(1, result["rebuilt_lessons"])
+        self.assertEqual(0, result["error_lessons"])
+        self.assertEqual(128, result["rebuilt"][0]["lesson_id"])
+        self.assertIsNotNone(mutation.last_identity_rebuild)
+        self.assertEqual(1, len(mutation.last_identity_rebuild["participants"]))
 
 
 class AttendanceLessonStateServiceTest(unittest.TestCase):

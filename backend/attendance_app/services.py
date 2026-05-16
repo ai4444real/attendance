@@ -1234,6 +1234,39 @@ class AttendanceLessonIdentityRebuildService:
     def rebuild_lesson_with_current_aliases(self, lesson_id: int) -> DraftLessonView:
         return self.rebuild_lesson_with_current_aliases_and_hint(lesson_id)
 
+    def rebuild_all_lessons_with_current_aliases(self) -> dict:
+        lesson_ids = self._query_repository.list_lesson_ids_for_identity_rebuild()
+        rebuilt = []
+        skipped = []
+        errors = []
+        for lesson_id in lesson_ids:
+            try:
+                before = self._query_repository.get_lesson_detail(lesson_id)
+                before_count = len(before.participants)
+                after = self.rebuild_lesson_with_current_aliases(lesson_id)
+                rebuilt.append(
+                    {
+                        "lesson_id": lesson_id,
+                        "course_name": after.course_name,
+                        "lesson_date": after.lesson_date,
+                        "before_participants": before_count,
+                        "after_participants": len(after.participants),
+                    }
+                )
+            except ValueError as exc:
+                skipped.append({"lesson_id": lesson_id, "reason": str(exc)})
+            except Exception as exc:
+                errors.append({"lesson_id": lesson_id, "reason": str(exc)})
+        return {
+            "candidate_lessons": len(lesson_ids),
+            "rebuilt_lessons": len(rebuilt),
+            "skipped_lessons": len(skipped),
+            "error_lessons": len(errors),
+            "rebuilt": rebuilt,
+            "skipped": skipped,
+            "errors": errors,
+        }
+
     def rebuild_lesson_with_current_aliases_and_hint(
         self,
         lesson_id: int,

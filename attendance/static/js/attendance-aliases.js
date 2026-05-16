@@ -5,7 +5,17 @@ const AttendanceAliasesApp = {
         this._els = {
             aliasesMeta: document.getElementById('aliasesMeta'),
             aliasesBody: document.getElementById('aliasesBody'),
+            rebuildAliasesButton: document.getElementById('rebuildAliasesButton'),
+            rebuildAliasesResult: document.getElementById('rebuildAliasesResult'),
         };
+
+        this._els.rebuildAliasesButton.addEventListener('click', () => {
+            this._rebuildAllLessons().catch((error) => {
+                console.error(error);
+                this._els.rebuildAliasesResult.textContent = error.message || 'Rebuild identità fallito.';
+                this._els.rebuildAliasesResult.classList.add('is-error');
+            });
+        });
 
         this._els.aliasesBody.addEventListener('click', (event) => {
             const button = event.target.closest('[data-action="deactivate-alias"]');
@@ -23,6 +33,40 @@ const AttendanceAliasesApp = {
         });
 
         await this._loadAliases();
+    },
+
+    async _rebuildAllLessons() {
+        if (!window.confirm('Applicare gli alias attivi a tutte le lezioni importate? Verranno ricostruiti solo i nomi/identità dei partecipanti.')) {
+            return;
+        }
+
+        this._els.rebuildAliasesButton.disabled = true;
+        this._els.rebuildAliasesResult.classList.remove('is-error');
+        this._els.rebuildAliasesResult.textContent = 'Rebuild identità in corso...';
+        try {
+            const response = await fetch('/api/attendance/identity-aliases/rebuild-all', {
+                method: 'POST',
+                cache: 'no-store',
+            });
+            let payload = {};
+            try {
+                payload = await response.json();
+            } catch (error) {
+                payload = {};
+            }
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Rebuild identità fallito.');
+            }
+
+            const pieces = [
+                `${payload.rebuilt_lessons || 0} lezioni ricostruite`,
+                `${payload.skipped_lessons || 0} saltate`,
+                `${payload.error_lessons || 0} errori`,
+            ];
+            this._els.rebuildAliasesResult.textContent = pieces.join(' · ');
+        } finally {
+            this._els.rebuildAliasesButton.disabled = false;
+        }
     },
 
     async _loadAliases() {

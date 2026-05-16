@@ -66,6 +66,9 @@ class AttendanceDraftQueryRepository(Protocol):
     def get_lesson_detail(self, lesson_id: int) -> DraftLessonView:
         """Return one lesson with full participant detail."""
 
+    def list_lesson_ids_for_identity_rebuild(self) -> list[int]:
+        """Return lesson ids that can be rebuilt using current identity aliases."""
+
     def get_lesson_source_segments(self, lesson_id: int) -> list[DraftLessonSourceSegment]:
         """Return persisted raw/source segments for one lesson."""
 

@@ -350,6 +350,25 @@ class PostgresAttendanceDraftQueryRepository:
             for row in rows
         ]
 
+    def list_lesson_ids_for_identity_rebuild(self) -> list[int]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT l.id
+                    FROM attendance_lessons AS l
+                    WHERE l.is_ignored = FALSE
+                      AND EXISTS (
+                          SELECT 1
+                          FROM attendance_lesson_source_segments AS s
+                          WHERE s.lesson_id = l.id
+                      )
+                    ORDER BY l.id ASC
+                    """
+                )
+                rows = cursor.fetchall()
+        return [int(row[0]) for row in rows]
+
     def list_school_attendance_records(self) -> list[SchoolAttendanceRecordView]:
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
