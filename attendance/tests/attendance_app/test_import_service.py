@@ -855,6 +855,92 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertEqual("2026-04-20T18:17:00+00:00", mutation.last_update["break_point_at"])
         self.assertEqual("recalculate_resolved", mutation.last_update["break_source"])
 
+    def test_recalculate_lesson_current_markers_ignores_stale_marker_actions_after_delete(self) -> None:
+        lesson = DraftLessonView(
+            id=58,
+            course_name="MASTER",
+            lesson_date="2026-04-20",
+            source_meeting_id="886 5440 3922",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-04-20T16:27:35+00:00",
+            meeting_end_at="2026-04-20T20:04:38+00:00",
+            effective_start_at="2026-04-20T17:07:35+00:00",
+            break_point_at="2026-04-20T18:17:00+00:00",
+            effective_end_at="2026-04-20T20:04:38+00:00",
+            break_source="recalculate_resolved",
+            effective_start_source="review_action",
+            effective_end_source="source_segments",
+            warnings=[],
+            diagnostics={
+                "review_action_baseline": {
+                    "threshold_ratio": 0.8,
+                    "effective_start_at": "2026-04-20T16:30:00+00:00",
+                    "break_point_at": "2026-04-20T17:01:33.5+00:00",
+                    "effective_end_at": "2026-04-20T16:55:32+00:00",
+                    "break_source": "old",
+                    "effective_start_source": "old",
+                    "effective_end_source": "old",
+                }
+            },
+            summary={"presente": 0, "prima_meta": 0, "seconda_meta": 1, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=9,
+                    participant_key="apfacchi@gmail.com",
+                    canonical_full_name="Andrea Facchi",
+                    raw_full_name="Andrea Facchi",
+                    email="apfacchi@gmail.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=69.4,
+                    duration_second_half=107.6,
+                    total_minutes=0.0,
+                    calculated_presence_status="seconda_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="seconda_meta",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={},
+                )
+            ],
+            review_actions=[
+                DraftReviewActionView(
+                    id=12,
+                    lesson_id=58,
+                    participant_id=None,
+                    action_type="set_effective_start",
+                    payload={"at": "2026-04-20T17:00:00+00:00"},
+                    created_by="test",
+                    created_at="2026-05-16T10:00:00+00:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            ],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Andrea Facchi",
+                observed_email="apfacchi@gmail.com",
+                join_time="2026-04-20T17:08:00+00:00",
+                leave_time="2026-04-20T20:04:38+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(58, use_current_markers=True)
+
+        self.assertEqual("2026-04-20T17:07:35+00:00", mutation.last_update["effective_start_at"])
+        self.assertEqual("2026-04-20T18:17:00+00:00", mutation.last_update["break_point_at"])
+        self.assertLess(mutation.last_update["effective_start_at"], mutation.last_update["break_point_at"])
+        self.assertLess(mutation.last_update["break_point_at"], mutation.last_update["effective_end_at"])
+
     def test_recalculate_lesson_applies_latest_manual_presence_override(self) -> None:
         lesson = DraftLessonView(
             id=51,

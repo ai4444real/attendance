@@ -828,7 +828,7 @@ async def attendance_delete_review_action(action_id: int):
             PostgresAttendanceDraftQueryRepository(),
             PostgresAttendanceDraftMutationRepository(),
             PostgresAttendanceIdentityAliasRepository(),
-        ).recalculate_lesson(lesson_id)
+        ).recalculate_lesson(lesson_id, use_current_markers=True)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
