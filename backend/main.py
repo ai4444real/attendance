@@ -773,7 +773,7 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
             PostgresAttendanceIdentityAliasRepository(),
         ).recalculate_lesson(
             lesson_id,
-            use_current_markers=action_type in {"set_threshold_ratio", "set_effective_start", "set_break_point", "set_effective_end"},
+            use_current_markers=True,
             apply_marker_action_ids={action.id},
         )
     except ValueError as exc:
