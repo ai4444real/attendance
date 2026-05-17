@@ -455,7 +455,9 @@ class PostgresAttendanceDraftQueryRepository:
                         l.id,
                         l.course_name,
                         l.lesson_date,
-                        p.canonical_full_name,
+                        MIN(p.canonical_full_name) OVER (
+                            PARTITION BY lower(p.canonical_full_name), lower(COALESCE(p.email, ''))
+                        ) AS canonical_full_name,
                         p.email,
                         p.final_presence_status,
                         COALESCE(c.expected_lessons_count, lc.official_lessons_count) AS expected_lessons_count,
