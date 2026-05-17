@@ -57,15 +57,26 @@ const AttendanceSchoolApp = {
 
     _populateStudentFilter() {
         const filteredByCourse = this._records.filter((record) => !this._filters.course || record.course_name === this._filters.course);
-        const students = [...new Set(filteredByCourse.map((record) => record.canonical_full_name))].sort((a, b) => a.localeCompare(b, 'it'));
-        this._els.studentFilter.innerHTML = ['<option value="">Tutti gli studenti</option>', ...students.map((student) => `<option value="${this._escapeAttr(student)}">${this._escapeHtml(student)}</option>`)].join('');
+        const studentByKey = new Map();
+        for (const record of filteredByCourse) {
+            const key = this._studentKey(record);
+            const current = studentByKey.get(key);
+            if (!current || record.canonical_full_name.localeCompare(current, 'it', { sensitivity: 'base' }) < 0) {
+                studentByKey.set(key, record.canonical_full_name);
+            }
+        }
+        const students = [...studentByKey.entries()].sort((left, right) => left[1].localeCompare(right[1], 'it', { sensitivity: 'base' }));
+        this._els.studentFilter.innerHTML = [
+            '<option value="">Tutti gli studenti</option>',
+            ...students.map(([key, label]) => `<option value="${this._escapeAttr(key)}">${this._escapeHtml(label)}</option>`),
+        ].join('');
         this._els.studentFilter.value = this._filters.student;
     },
 
     _getFilteredRecords() {
         return this._records.filter((record) => {
             if (this._filters.course && record.course_name !== this._filters.course) return false;
-            if (this._filters.student && record.canonical_full_name !== this._filters.student) return false;
+            if (this._filters.student && this._studentKey(record) !== this._filters.student) return false;
             return true;
         });
     },
@@ -78,7 +89,7 @@ const AttendanceSchoolApp = {
 
     _renderSummary(records) {
         const uniqueCourses = new Set(records.map((record) => record.course_name)).size;
-        const uniqueStudents = new Set(records.map((record) => record.canonical_full_name)).size;
+        const uniqueStudents = new Set(records.map((record) => this._studentKey(record))).size;
         const lessons = new Set(records.map((record) => `${record.course_name}|${record.lesson_date}|${record.lesson_id}`)).size;
         const counts = { presente: 0, prima_meta: 0, seconda_meta: 0, assente: 0 };
         records.forEach((record) => {
@@ -187,7 +198,13 @@ const AttendanceSchoolApp = {
     },
 
     _studentCourseKey(record) {
-        return `${record.course_name}||${record.canonical_full_name}`;
+        return `${record.course_name}||${this._studentKey(record)}`;
+    },
+
+    _studentKey(record) {
+        const name = String(record.canonical_full_name || '').trim().toLocaleLowerCase('it');
+        const email = String(record.email || '').trim().toLocaleLowerCase('it');
+        return `${name}||${email}`;
     },
 
     _formatPercentage(value) {

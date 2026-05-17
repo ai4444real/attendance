@@ -385,8 +385,8 @@ class PostgresAttendanceDraftQueryRepository:
                         FROM attendance_instructors
                     )
                     SELECT
-                        p.canonical_full_name,
-                        p.email,
+                        MIN(p.canonical_full_name) AS canonical_full_name,
+                        NULLIF(lower(COALESCE(p.email, '')), '') AS email,
                         COUNT(*) AS appearances_count,
                         COUNT(DISTINCT p.lesson_id) AS lessons_count,
                         MAX(l.lesson_date) AS last_seen_at
@@ -407,8 +407,8 @@ class PostgresAttendanceDraftQueryRepository:
                               lower(COALESCE(p.raw_full_name, ''))
                           )
                       )
-                    GROUP BY p.canonical_full_name, p.email
-                    ORDER BY p.canonical_full_name ASC, p.email ASC NULLS LAST
+                    GROUP BY lower(p.canonical_full_name), NULLIF(lower(COALESCE(p.email, '')), '')
+                    ORDER BY MIN(p.canonical_full_name) ASC, NULLIF(lower(COALESCE(p.email, '')), '') ASC NULLS LAST
                     LIMIT %s
                     """,
                     (pattern, pattern, pattern, safe_limit),
