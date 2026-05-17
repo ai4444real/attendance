@@ -1000,6 +1000,24 @@ async def attendance_list_identity_aliases():
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
+@app.get("/api/attendance/identity-candidates")
+async def attendance_search_identity_candidates(q: str = "", limit: int = 30):
+    repository = PostgresAttendanceDraftQueryRepository()
+    candidates = repository.search_identity_candidates(q, limit=limit)
+    return JSONResponse({
+        "candidates": [
+            {
+                "canonical_full_name": candidate.canonical_full_name,
+                "email": candidate.email,
+                "appearances_count": candidate.appearances_count,
+                "lessons_count": candidate.lessons_count,
+                "last_seen_at": candidate.last_seen_at,
+            }
+            for candidate in candidates
+        ]
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
 @app.post("/api/attendance/identity-aliases/rebuild-all")
 async def attendance_rebuild_all_identity_aliases():
     _bootstrap_identity_aliases_if_needed()

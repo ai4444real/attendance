@@ -6,6 +6,7 @@ from typing import Protocol
 
 from .models import (
     AttendanceIdentityAlias,
+    AttendanceIdentityCandidateView,
     DraftBatchDetail,
     DraftLessonSourceSegment,
     DraftLessonView,
@@ -71,6 +72,9 @@ class AttendanceDraftQueryRepository(Protocol):
 
     def get_lesson_source_segments(self, lesson_id: int) -> list[DraftLessonSourceSegment]:
         """Return persisted raw/source segments for one lesson."""
+
+    def search_identity_candidates(self, query: str, limit: int = 30) -> list[AttendanceIdentityCandidateView]:
+        """Search persisted participant identities for manual alias creation."""
 
 
 class AttendanceReviewActionRepository(Protocol):

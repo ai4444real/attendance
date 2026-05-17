@@ -227,6 +227,15 @@ class SchoolAttendanceRecordView:
 
 
 @dataclass(frozen=True)
+class AttendanceIdentityCandidateView:
+    canonical_full_name: str
+    email: Optional[str]
+    appearances_count: int
+    lessons_count: int
+    last_seen_at: str
+
+
+@dataclass(frozen=True)
 class SchoolCourseLessonView:
     lesson_id: int
     course_name: str

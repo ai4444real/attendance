@@ -7,13 +7,64 @@ const AttendanceAliasesApp = {
             aliasesBody: document.getElementById('aliasesBody'),
             rebuildAliasesButton: document.getElementById('rebuildAliasesButton'),
             rebuildAliasesResult: document.getElementById('rebuildAliasesResult'),
+            identitySearchInput: document.getElementById('identitySearchInput'),
+            identitySearchButton: document.getElementById('identitySearchButton'),
+            identitySearchResult: document.getElementById('identitySearchResult'),
+            canonicalCandidates: document.getElementById('canonicalCandidates'),
+            aliasCandidates: document.getElementById('aliasCandidates'),
+            canonicalPreview: document.getElementById('canonicalPreview'),
+            aliasPreview: document.getElementById('aliasPreview'),
+            createAliasFromCandidatesButton: document.getElementById('createAliasFromCandidatesButton'),
+            createAliasResult: document.getElementById('createAliasResult'),
         };
+        this._identityCandidates = [];
+        this._selectedCanonical = null;
+        this._selectedAlias = null;
 
         this._els.rebuildAliasesButton.addEventListener('click', () => {
             this._rebuildAllLessons().catch((error) => {
                 console.error(error);
                 this._els.rebuildAliasesResult.textContent = error.message || 'Rebuild identità fallito.';
                 this._els.rebuildAliasesResult.classList.add('is-error');
+            });
+        });
+
+        this._els.identitySearchButton.addEventListener('click', () => {
+            this._searchIdentityCandidates().catch((error) => {
+                console.error(error);
+                this._els.identitySearchResult.textContent = error.message || 'Ricerca identità fallita.';
+                this._els.identitySearchResult.classList.add('is-error');
+            });
+        });
+        this._els.identitySearchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                this._searchIdentityCandidates().catch((error) => {
+                    console.error(error);
+                    this._els.identitySearchResult.textContent = error.message || 'Ricerca identità fallita.';
+                    this._els.identitySearchResult.classList.add('is-error');
+                });
+            }
+        });
+        this._els.canonicalCandidates.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-candidate-index]');
+            if (!button) return;
+            this._selectedCanonical = this._identityCandidates[Number(button.dataset.candidateIndex)];
+            this._renderCandidateLists();
+            this._renderAliasPreview();
+        });
+        this._els.aliasCandidates.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-candidate-index]');
+            if (!button) return;
+            this._selectedAlias = this._identityCandidates[Number(button.dataset.candidateIndex)];
+            this._renderCandidateLists();
+            this._renderAliasPreview();
+        });
+        this._els.createAliasFromCandidatesButton.addEventListener('click', () => {
+            this._createAliasFromCandidates().catch((error) => {
+                console.error(error);
+                this._els.createAliasResult.textContent = error.message || 'Creazione alias fallita.';
+                this._els.createAliasResult.classList.add('is-error');
             });
         });
 
@@ -33,6 +84,130 @@ const AttendanceAliasesApp = {
         });
 
         await this._loadAliases();
+    },
+
+    async _searchIdentityCandidates() {
+        const query = this._els.identitySearchInput.value.trim();
+        this._els.identitySearchResult.classList.remove('is-error');
+        this._els.createAliasResult.textContent = '';
+        this._els.createAliasResult.classList.remove('is-error');
+        if (query.length < 2) {
+            this._identityCandidates = [];
+            this._selectedCanonical = null;
+            this._selectedAlias = null;
+            this._renderCandidateLists();
+            this._renderAliasPreview();
+            this._els.identitySearchResult.textContent = 'Scrivi almeno 2 caratteri.';
+            return;
+        }
+
+        this._els.identitySearchButton.disabled = true;
+        this._els.identitySearchResult.textContent = 'Cerco identità...';
+        try {
+            const response = await fetch(`/api/attendance/identity-candidates?q=${encodeURIComponent(query)}&limit=50`, {
+                cache: 'no-store',
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Ricerca identità fallita.');
+            }
+            this._identityCandidates = payload.candidates || [];
+            this._selectedCanonical = null;
+            this._selectedAlias = null;
+            this._renderCandidateLists();
+            this._renderAliasPreview();
+            this._els.identitySearchResult.textContent = `${this._identityCandidates.length} risultati. Scegli prima il canonico, poi l’alias.`;
+        } finally {
+            this._els.identitySearchButton.disabled = false;
+        }
+    },
+
+    _renderCandidateLists() {
+        this._els.canonicalCandidates.innerHTML = this._renderCandidateButtons('canonical');
+        this._els.aliasCandidates.innerHTML = this._renderCandidateButtons('alias');
+    },
+
+    _renderCandidateButtons(role) {
+        if (!this._identityCandidates.length) {
+            return '<div class="empty">Nessun risultato selezionabile.</div>';
+        }
+        const selected = role === 'canonical' ? this._selectedCanonical : this._selectedAlias;
+        return this._identityCandidates.map((candidate, index) => {
+            const isSelected = selected && this._candidateKey(selected) === this._candidateKey(candidate);
+            return `
+                <button
+                    type="button"
+                    class="candidate-button${isSelected ? ' is-selected' : ''}"
+                    data-candidate-index="${this._escapeAttr(index)}"
+                >
+                    <strong>${this._escapeHtml(candidate.canonical_full_name)}</strong>
+                    <span class="candidate-meta">${this._escapeHtml(candidate.email || 'senza email')}</span>
+                    <span class="candidate-meta">${this._escapeHtml(candidate.lessons_count)} lezioni · ${this._escapeHtml(candidate.appearances_count)} record · ultimo ${this._escapeHtml(candidate.last_seen_at)}</span>
+                </button>
+            `;
+        }).join('');
+    },
+
+    _renderAliasPreview() {
+        this._els.canonicalPreview.innerHTML = this._selectedCanonical
+            ? this._renderPreviewCard(this._selectedCanonical)
+            : 'Canonico non selezionato';
+        this._els.aliasPreview.innerHTML = this._selectedAlias
+            ? this._renderPreviewCard(this._selectedAlias)
+            : 'Alias non selezionato';
+        const canSubmit = this._selectedCanonical
+            && this._selectedAlias
+            && this._candidateKey(this._selectedCanonical) !== this._candidateKey(this._selectedAlias);
+        this._els.createAliasFromCandidatesButton.disabled = !canSubmit;
+    },
+
+    _renderPreviewCard(candidate) {
+        return `
+            <strong>${this._escapeHtml(candidate.canonical_full_name)}</strong><br>
+            <span class="hint">${this._escapeHtml(candidate.email || 'senza email')}</span>
+        `;
+    },
+
+    async _createAliasFromCandidates() {
+        if (!this._selectedCanonical || !this._selectedAlias) {
+            return;
+        }
+        if (this._candidateKey(this._selectedCanonical) === this._candidateKey(this._selectedAlias)) {
+            throw new Error('Scegli due identità diverse.');
+        }
+        const canonical = this._selectedCanonical;
+        const alias = this._selectedAlias;
+        if (!window.confirm(`Unire "${alias.canonical_full_name}" a "${canonical.canonical_full_name}"?`)) {
+            return;
+        }
+
+        this._els.createAliasFromCandidatesButton.disabled = true;
+        this._els.createAliasResult.classList.remove('is-error');
+        this._els.createAliasResult.textContent = 'Salvo alias...';
+        try {
+            const response = await fetch('/api/attendance/identity-aliases', {
+                method: 'POST',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    canonical_full_name: canonical.canonical_full_name,
+                    canonical_email: canonical.email || null,
+                    alias_full_name: alias.canonical_full_name,
+                    alias_email: alias.email || null,
+                    created_by: 'aliases-ui',
+                    notes: 'Creato dalla ricerca identità in /attendance/aliases',
+                }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Creazione alias fallita.');
+            }
+            this._els.createAliasResult.textContent = 'Alias salvato. Ora puoi applicare gli alias alle lezioni.';
+            await this._loadAliases();
+        } finally {
+            this._els.createAliasFromCandidatesButton.disabled = false;
+            this._renderAliasPreview();
+        }
     },
 
     async _rebuildAllLessons() {
@@ -180,6 +355,10 @@ const AttendanceAliasesApp = {
 
     _escapeAttr(value) {
         return this._escapeHtml(value);
+    },
+
+    _candidateKey(candidate) {
+        return `${String(candidate.canonical_full_name || '').trim().toLowerCase()}||${String(candidate.email || '').trim().toLowerCase()}`;
     },
 };
 

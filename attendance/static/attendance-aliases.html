@@ -44,6 +44,27 @@
         .action-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
         .action-result { font-size: 13px; color: var(--brand-muted); }
         .action-result.is-error { color: #b42318; font-weight: 800; }
+        .alias-builder { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--brand-border); }
+        .alias-search-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 12px; align-items: end; margin: 14px 0; }
+        .alias-search-row label { display: block; font-size: 12px; font-weight: 800; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+        .alias-search-row input { width: 100%; border: 1px solid var(--brand-border); border-radius: 14px; padding: 12px 14px; font-size: 16px; color: var(--brand-ink); }
+        .secondary-action { border: 1px solid var(--brand-border); border-radius: 999px; padding: 11px 14px; background: #f8fbfd; color: var(--brand-ink); font-weight: 800; cursor: pointer; }
+        .secondary-action:hover { background: #eef7fb; }
+        .secondary-action:disabled { opacity: 0.55; cursor: wait; }
+        .candidate-layout { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr); gap: 14px; margin-top: 12px; }
+        .candidate-column { border: 1px solid var(--brand-border); border-radius: 16px; overflow: hidden; background: #fbfdfe; }
+        .candidate-column-head { padding: 10px 12px; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); border-bottom: 1px solid var(--brand-border); }
+        .candidate-list { display: grid; gap: 8px; padding: 10px; max-height: 280px; overflow: auto; }
+        .candidate-button { width: 100%; text-align: left; border: 1px solid var(--brand-border); border-radius: 14px; background: white; padding: 10px 12px; cursor: pointer; color: var(--brand-ink); }
+        .candidate-button:hover, .candidate-button.is-selected { border-color: var(--brand-pnl-blue); box-shadow: 0 0 0 2px rgba(0, 96, 160, 0.10); }
+        .candidate-button strong { display: block; font-size: 15px; }
+        .candidate-meta { display: block; color: var(--brand-muted); font-size: 12px; margin-top: 3px; }
+        .alias-preview { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+        .alias-preview-card { border: 1px solid var(--brand-border); border-radius: 14px; padding: 10px 12px; background: #fff; min-width: 220px; }
+        .alias-preview-arrow { font-weight: 900; color: var(--brand-muted); }
+        @media (max-width: 800px) {
+            .alias-search-row, .candidate-layout { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -84,6 +105,40 @@
                 <span id="rebuildAliasesResult" class="action-result">Ricostruisce solo le identità normalizzate, senza toccare origine, marker o stato lezioni.</span>
             </div>
             <div id="aliasesBody" class="empty">Carico alias...</div>
+
+            <div class="alias-builder">
+                <h2 class="panel-title">Crea alias da nomi importati</h2>
+                <div class="hint">Cerca nei partecipanti già salvati, scegli l’identità canonica e poi l’alias da collegare. Se l’alias ha email, viene portata nella regola.</div>
+                <div class="alias-search-row">
+                    <div>
+                        <label for="identitySearchInput">Cerca nome o email</label>
+                        <input id="identitySearchInput" type="search" placeholder="es. tidon, facchi, gmail..." autocomplete="off">
+                    </div>
+                    <button id="identitySearchButton" class="secondary-action" type="button">Cerca</button>
+                </div>
+                <div id="identitySearchResult" class="action-result">Scrivi almeno 2 caratteri.</div>
+                <div class="candidate-layout">
+                    <div class="candidate-column">
+                        <div class="candidate-column-head">1. Identità canonica</div>
+                        <div id="canonicalCandidates" class="candidate-list">
+                            <div class="empty">Nessun risultato selezionabile.</div>
+                        </div>
+                    </div>
+                    <div class="candidate-column">
+                        <div class="candidate-column-head">2. Alias da collegare</div>
+                        <div id="aliasCandidates" class="candidate-list">
+                            <div class="empty">Nessun risultato selezionabile.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="alias-preview">
+                    <div id="canonicalPreview" class="alias-preview-card hint">Canonico non selezionato</div>
+                    <span class="alias-preview-arrow">←</span>
+                    <div id="aliasPreview" class="alias-preview-card hint">Alias non selezionato</div>
+                    <button id="createAliasFromCandidatesButton" class="primary-action" type="button" disabled>Unisci selezionati</button>
+                    <span id="createAliasResult" class="action-result"></span>
+                </div>
+            </div>
         </section>
     </main>
 

@@ -13,6 +13,7 @@ from backend.attendance_app.models import (
     DraftLessonView,
     ImportBatchSummary,
     SchoolAttendanceRecordView,
+    AttendanceIdentityCandidateView,
     SchoolCourseLessonView,
     SchoolCourseOverviewView,
     SchoolStudentFollowupView,
@@ -368,6 +369,62 @@ class PostgresAttendanceDraftQueryRepository:
                 )
                 rows = cursor.fetchall()
         return [int(row[0]) for row in rows]
+
+    def search_identity_candidates(self, query: str, limit: int = 30) -> list[AttendanceIdentityCandidateView]:
+        normalized_query = " ".join((query or "").strip().split())
+        if len(normalized_query) < 2:
+            return []
+        safe_limit = max(1, min(int(limit or 30), 80))
+        pattern = f"%{normalized_query}%"
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH instructor_names AS (
+                        SELECT lower(instructor_name) AS name_key
+                        FROM attendance_instructors
+                    )
+                    SELECT
+                        p.canonical_full_name,
+                        p.email,
+                        COUNT(*) AS appearances_count,
+                        COUNT(DISTINCT p.lesson_id) AS lessons_count,
+                        MAX(l.lesson_date) AS last_seen_at
+                    FROM attendance_lesson_participants AS p
+                    JOIN attendance_lessons AS l
+                        ON l.id = p.lesson_id
+                    WHERE l.is_ignored = FALSE
+                      AND (
+                          p.canonical_full_name ILIKE %s
+                          OR COALESCE(p.email, '') ILIKE %s
+                          OR COALESCE(p.raw_full_name, '') ILIKE %s
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM instructor_names AS i
+                          WHERE i.name_key IN (
+                              lower(p.canonical_full_name),
+                              lower(COALESCE(p.raw_full_name, ''))
+                          )
+                      )
+                    GROUP BY p.canonical_full_name, p.email
+                    ORDER BY p.canonical_full_name ASC, p.email ASC NULLS LAST
+                    LIMIT %s
+                    """,
+                    (pattern, pattern, pattern, safe_limit),
+                )
+                rows = cursor.fetchall()
+
+        return [
+            AttendanceIdentityCandidateView(
+                canonical_full_name=str(row[0]),
+                email=row[1],
+                appearances_count=int(row[2]),
+                lessons_count=int(row[3]),
+                last_seen_at=row[4].isoformat(),
+            )
+            for row in rows
+        ]
 
     def list_school_attendance_records(self) -> list[SchoolAttendanceRecordView]:
         with get_db_connection() as connection:
