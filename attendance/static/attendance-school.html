@@ -34,6 +34,9 @@
         .filter-group { display: flex; flex-direction: column; gap: 8px; }
         .filter-group label { font-size: 13px; font-weight: 700; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; }
         .filter-group select { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+        .filter-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: -4px; }
+        .filter-tool-link { color: #155e75; font-weight: 800; font-size: 13px; text-decoration: none; }
+        .filter-tool-link:hover { text-decoration: underline; }
         .table-wrap { overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px 10px; border-bottom: 1px solid var(--brand-border); text-align: left; vertical-align: top; }
@@ -99,6 +102,9 @@
                     <select id="studentFilter">
                         <option value="">Tutti gli studenti</option>
                     </select>
+                    <div class="filter-tools">
+                        <a id="studentAliasLink" class="filter-tool-link" href="/attendance/aliases">Cerca / crea alias</a>
+                    </div>
                 </div>
             </div>
 

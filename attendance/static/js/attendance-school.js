@@ -6,10 +6,12 @@ const AttendanceSchoolApp = {
             summary: document.getElementById('summary'),
             courseFilter: document.getElementById('courseFilter'),
             studentFilter: document.getElementById('studentFilter'),
+            studentAliasLink: document.getElementById('studentAliasLink'),
             tableContainer: document.getElementById('tableContainer'),
         };
         this._records = [];
         this._filters = { course: '', student: '' };
+        this._studentLabelsByFilterKey = new Map();
 
         this._els.courseFilter.addEventListener('change', () => {
             this._filters.course = this._els.courseFilter.value;
@@ -20,6 +22,7 @@ const AttendanceSchoolApp = {
 
         this._els.studentFilter.addEventListener('change', () => {
             this._filters.student = this._els.studentFilter.value;
+            this._updateStudentAliasLink();
             this._render();
         });
 
@@ -59,7 +62,7 @@ const AttendanceSchoolApp = {
         const filteredByCourse = this._records.filter((record) => !this._filters.course || record.course_name === this._filters.course);
         const studentByKey = new Map();
         for (const record of filteredByCourse) {
-            const key = this._studentKey(record);
+            const key = this._studentFilterKey(record);
             const current = studentByKey.get(key);
             if (!current || record.canonical_full_name.localeCompare(current, 'it', { sensitivity: 'base' }) < 0) {
                 studentByKey.set(key, record.canonical_full_name);
@@ -70,13 +73,24 @@ const AttendanceSchoolApp = {
             '<option value="">Tutti gli studenti</option>',
             ...students.map(([key, label]) => `<option value="${this._escapeAttr(key)}">${this._escapeHtml(label)}</option>`),
         ].join('');
+        this._studentLabelsByFilterKey = new Map(students);
         this._els.studentFilter.value = this._filters.student;
+        this._updateStudentAliasLink();
+    },
+
+    _updateStudentAliasLink() {
+        const label = this._studentLabelsByFilterKey.get(this._filters.student) || '';
+        const query = label ? `?q=${encodeURIComponent(label)}` : '';
+        this._els.studentAliasLink.href = `/attendance/aliases${query}`;
+        this._els.studentAliasLink.textContent = label
+            ? `Cerca / crea alias per ${label}`
+            : 'Cerca / crea alias';
     },
 
     _getFilteredRecords() {
         return this._records.filter((record) => {
             if (this._filters.course && record.course_name !== this._filters.course) return false;
-            if (this._filters.student && this._studentKey(record) !== this._filters.student) return false;
+            if (this._filters.student && this._studentFilterKey(record) !== this._filters.student) return false;
             return true;
         });
     },
@@ -89,7 +103,7 @@ const AttendanceSchoolApp = {
 
     _renderSummary(records) {
         const uniqueCourses = new Set(records.map((record) => record.course_name)).size;
-        const uniqueStudents = new Set(records.map((record) => this._studentKey(record))).size;
+        const uniqueStudents = new Set(records.map((record) => this._studentFilterKey(record))).size;
         const lessons = new Set(records.map((record) => `${record.course_name}|${record.lesson_date}|${record.lesson_id}`)).size;
         const counts = { presente: 0, prima_meta: 0, seconda_meta: 0, assente: 0 };
         records.forEach((record) => {
@@ -199,6 +213,10 @@ const AttendanceSchoolApp = {
 
     _studentCourseKey(record) {
         return `${record.course_name}||${this._studentKey(record)}`;
+    },
+
+    _studentFilterKey(record) {
+        return String(record.canonical_full_name || '').trim().toLocaleLowerCase('it');
     },
 
     _studentKey(record) {

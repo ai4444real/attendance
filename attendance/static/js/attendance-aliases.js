@@ -84,6 +84,11 @@ const AttendanceAliasesApp = {
         });
 
         await this._loadAliases();
+        const initialQuery = new URLSearchParams(window.location.search).get('q') || '';
+        if (initialQuery.trim().length >= 2) {
+            this._els.identitySearchInput.value = initialQuery.trim();
+            await this._searchIdentityCandidates();
+        }
     },
 
     async _searchIdentityCandidates() {
