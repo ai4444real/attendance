@@ -164,10 +164,14 @@ const DraftImportsApp = {
         }
         this._els.lessonList.innerHTML = visibleLessons.map((lesson) => {
             const summary = lesson.summary || {};
+            const isAllPresent = this._isAllPresentSummary(summary);
             return `
-                <div class="batch-item${this._selectedLessonId === lesson.id ? ' active' : ''}">
+                <div class="batch-item${this._selectedLessonId === lesson.id ? ' active' : ''}${isAllPresent ? ' all-present' : ''}">
                     <button class="lesson-select" data-lesson-id="${lesson.id}" type="button">
-                        <div class="batch-title">${this._escapeHtml(lesson.course_name)}</div>
+                        <div class="batch-title">
+                            ${this._escapeHtml(lesson.course_name)}
+                            ${isAllPresent ? '<span class="ready-badge">pronta</span>' : ''}
+                        </div>
                         <div class="batch-meta">
                             ${this._escapeHtml(lesson.lesson_date)} · meeting ${this._escapeHtml(lesson.source_meeting_id)}<br>
                             P ${summary.presente || 0} · 1ª ${summary.prima_meta || 0} · 2ª ${summary.seconda_meta || 0} · A ${summary.assente || 0}<br>
@@ -209,6 +213,14 @@ const DraftImportsApp = {
                 }
             });
         });
+    },
+
+    _isAllPresentSummary(summary) {
+        const presente = Number(summary?.presente || 0);
+        const partialOrAbsent = Number(summary?.prima_meta || 0)
+            + Number(summary?.seconda_meta || 0)
+            + Number(summary?.assente || 0);
+        return presente > 0 && partialOrAbsent === 0;
     },
 
     _renderLessonFilters(lessons) {
