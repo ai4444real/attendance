@@ -961,6 +961,20 @@ class AttendanceLessonSplitService:
             "meeting_start_at": lesson.meeting_start_at,
             "meeting_end_at": lesson.meeting_end_at,
         }
+        diagnostics["meeting_start"] = meeting_start.isoformat()
+        diagnostics["meeting_end"] = meeting_end.isoformat()
+        diagnostics["effective_start"] = effective_start.isoformat()
+        diagnostics["break_point"] = break_point.isoformat()
+        diagnostics["effective_end"] = effective_end.isoformat()
+        diagnostics["break_source"] = "split_midpoint"
+        diagnostics["effective_start_source"] = "split"
+        diagnostics["effective_end_source"] = "split"
+        diagnostics["suggested_effective_start"] = None
+        diagnostics["suggested_effective_end"] = None
+        diagnostics["suggestion_confidence"] = None
+        diagnostics["trim_start_minutes"] = 0.0
+        diagnostics["trim_end_minutes"] = 0.0
+        diagnostics.pop("review_action_baseline", None)
         diagnostics["timeline"] = self._filter_timeline(diagnostics.get("timeline"), meeting_start, meeting_end)
         diagnostics["peak_active_count"] = max(
             [int(point.get("active_count") or 0) for point in diagnostics["timeline"] if isinstance(point, dict)] or [0]

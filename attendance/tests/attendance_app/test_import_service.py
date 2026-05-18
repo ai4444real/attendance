@@ -1684,6 +1684,18 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
             effective_end_source="auto",
             warnings=[],
             diagnostics={
+                "meeting_start": "2026-02-08T07:47:21+00:00",
+                "meeting_end": "2026-02-08T16:57:00+00:00",
+                "effective_start": "2026-02-08T08:02:00+00:00",
+                "break_point": "2026-02-08T12:22:00+00:00",
+                "effective_end": "2026-02-08T16:57:00+00:00",
+                "effective_end_source": "auto",
+                "suggested_effective_end": "2026-02-08T16:57:00+00:00",
+                "suggestion_confidence": "high",
+                "review_action_baseline": {
+                    "effective_end_at": "2026-02-08T16:57:00+00:00",
+                    "effective_end_source": "auto",
+                },
                 "timeline": [
                     {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
                     {"timestamp": "2026-02-08T09:00:00+00:00", "active_count": 10},
@@ -1785,6 +1797,11 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
         first_participant = first_lesson.participants[0]
         self.assertEqual("2026-02-08T12:00:00+00:00", first_lesson.effective_end_at)
         self.assertEqual("2026-02-08T10:01:00+00:00", first_lesson.break_point_at)
+        self.assertEqual("2026-02-08T12:00:00+00:00", first_lesson.diagnostics["meeting_end"])
+        self.assertEqual("2026-02-08T12:00:00+00:00", first_lesson.diagnostics["effective_end"])
+        self.assertEqual("split", first_lesson.diagnostics["effective_end_source"])
+        self.assertIsNone(first_lesson.diagnostics["suggested_effective_end"])
+        self.assertNotIn("review_action_baseline", first_lesson.diagnostics)
         self.assertEqual("presente", first_participant.final_presence_status)
         self.assertGreater(first_participant.minutes_second_half / first_participant.duration_second_half, 0.9)
         self.assertEqual(
@@ -1814,6 +1831,18 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
             effective_end_source="auto",
             warnings=[],
             diagnostics={
+                "meeting_start": "2026-02-08T07:47:21+00:00",
+                "meeting_end": "2026-02-08T17:05:03+00:00",
+                "effective_start": "2026-02-08T08:02:00+00:00",
+                "break_point": "2026-02-08T12:33:31.5+00:00",
+                "effective_end": "2026-02-08T16:55:00+00:00",
+                "effective_start_source": "auto",
+                "suggested_effective_start": "2026-02-08T08:02:00+00:00",
+                "suggestion_confidence": "high",
+                "review_action_baseline": {
+                    "effective_start_at": "2026-02-08T08:02:00+00:00",
+                    "effective_start_source": "auto",
+                },
                 "timeline": [
                     {"timestamp": "2026-02-08T07:47:21+00:00", "active_count": 1},
                     {"timestamp": "2026-02-08T11:00:00+00:00", "active_count": 10},
@@ -1855,6 +1884,11 @@ class AttendanceLessonSplitServiceTest(unittest.TestCase):
         second_participant = second_lesson.participants[0]
         self.assertEqual("2026-02-08T13:00:00+00:00", second_lesson.effective_start_at)
         self.assertEqual("2026-02-08T15:02:31.500000+00:00", second_lesson.break_point_at)
+        self.assertEqual("2026-02-08T13:00:00+00:00", second_lesson.diagnostics["meeting_start"])
+        self.assertEqual("2026-02-08T13:00:00+00:00", second_lesson.diagnostics["effective_start"])
+        self.assertEqual("split", second_lesson.diagnostics["effective_start_source"])
+        self.assertIsNone(second_lesson.diagnostics["suggested_effective_start"])
+        self.assertNotIn("review_action_baseline", second_lesson.diagnostics)
         self.assertEqual("presente", second_participant.final_presence_status)
         self.assertGreater(second_participant.minutes_first_half / second_participant.duration_first_half, 0.9)
         self.assertEqual(
