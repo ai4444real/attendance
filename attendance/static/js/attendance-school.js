@@ -8,6 +8,7 @@ const AttendanceSchoolApp = {
             studentFilter: document.getElementById('studentFilter'),
             studentAliasLink: document.getElementById('studentAliasLink'),
             tableContainer: document.getElementById('tableContainer'),
+            sourceModalHost: document.getElementById('sourceModalHost'),
         };
         this._records = [];
         this._filters = { course: '', student: '' };
@@ -140,6 +141,7 @@ const AttendanceSchoolApp = {
                         <th>Studente</th>
                         <th>Stato di presenza</th>
                         <th>Partecipazione corso</th>
+                        <th>Origine</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -152,12 +154,21 @@ const AttendanceSchoolApp = {
                                 <td>${this._escapeHtml(this._formatPersonName(record.canonical_full_name))}</td>
                                 <td><span class="status-tag ${this._escapeAttr(record.final_presence_status)}">${this._escapeHtml(this._presenceLabel(record.final_presence_status))}</span></td>
                                 <td class="participation-cell">${this._renderParticipation(participation)}</td>
+                                <td>
+                                    <button type="button" class="origin-button" data-origin-record="${this._escapeAttr(this._originRecordPayload(record))}">Origine</button>
+                                </td>
                             </tr>
                         `;
                     }).join('')}
                 </tbody>
             </table>
         `;
+        this._els.tableContainer.querySelectorAll('[data-origin-record]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const record = JSON.parse(button.getAttribute('data-origin-record') || '{}');
+                this._openSourceModal(record);
+            });
+        });
     },
 
     _buildParticipationIndex(records) {
@@ -212,6 +223,111 @@ const AttendanceSchoolApp = {
         return 0;
     },
 
+    _originRecordPayload(record) {
+        return JSON.stringify({
+            lesson_id: record.lesson_id,
+            course_name: record.course_name,
+            lesson_date: record.lesson_date,
+            canonical_full_name: record.canonical_full_name,
+            email: record.email || '',
+        });
+    },
+
+    async _openSourceModal(record) {
+        if (!this._els.sourceModalHost) return;
+        this._renderSourceModalShell(record, '<div class="source-empty">Caricamento origine...</div>');
+        try {
+            const query = new URLSearchParams({
+                lesson_id: String(record.lesson_id),
+                canonical_full_name: record.canonical_full_name || '',
+                email: record.email || '',
+            });
+            const response = await fetch(`/api/attendance/school-record-source?${query.toString()}`, { cache: 'no-store' });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Origine record non disponibile.');
+            }
+            this._renderSourceModal(record, payload);
+        } catch (error) {
+            console.error(error);
+            this._renderSourceModalShell(record, `<div class="source-empty">${this._escapeHtml(error.message)}</div>`);
+        }
+    },
+
+    _renderSourceModal(record, payload) {
+        const sources = Array.isArray(payload.sources) ? payload.sources : [];
+        const body = sources.length > 0
+            ? sources.map((source) => this._renderSourceGroup(source, payload.lesson?.meeting_start_at)).join('')
+            : '<div class="source-empty">Nessun segmento origine salvato per questo record.</div>';
+        this._renderSourceModalShell(record, body);
+    },
+
+    _renderSourceGroup(source, meetingStart) {
+        const segments = Array.isArray(source.segments)
+            ? source.segments.filter((segment) => Array.isArray(segment) && segment.length === 2)
+            : [];
+        return `
+            <section class="source-group">
+                <div class="source-group-head">
+                    <div>
+                        <div class="source-name">${this._escapeHtml(source.raw_full_name || 'Senza nome')}</div>
+                        <div class="source-email">${this._escapeHtml(source.email || 'senza email')}</div>
+                    </div>
+                    <div class="source-count">${segments.length} segment${segments.length === 1 ? 'o' : 'i'}</div>
+                </div>
+                <div class="source-segments">
+                    ${segments.length > 0 ? segments.map((segment) => `
+                        <div class="source-segment">
+                            ${this._escapeHtml(this._formatDateTime(segment[0], meetingStart))} → ${this._escapeHtml(this._formatDateTime(segment[1], meetingStart))}
+                        </div>
+                    `).join('') : '<div class="source-empty">Nessun segmento salvato.</div>'}
+                </div>
+            </section>
+        `;
+    },
+
+    _renderSourceModalShell(record, bodyHtml) {
+        this._closeSourceModal();
+        this._els.sourceModalHost.innerHTML = `
+            <div class="source-modal-backdrop" data-source-modal-close="1">
+                <div class="source-modal" role="dialog" aria-modal="true" aria-labelledby="sourceModalTitle">
+                    <div class="source-modal-head">
+                        <div>
+                            <h4 id="sourceModalTitle" class="source-modal-title">Origine record</h4>
+                            <div class="source-modal-subtitle">
+                                ${this._escapeHtml(this._formatPersonName(record.canonical_full_name))} · ${this._escapeHtml(record.course_name)} · ${this._escapeHtml(this._formatDate(record.lesson_date))}
+                            </div>
+                        </div>
+                        <button type="button" class="source-modal-close" data-source-modal-close="1" aria-label="Chiudi dettaglio origine">×</button>
+                    </div>
+                    <div class="source-modal-body">${bodyHtml}</div>
+                </div>
+            </div>
+        `;
+        this._els.sourceModalHost.querySelectorAll('[data-source-modal-close]').forEach((node) => {
+            node.addEventListener('click', (event) => {
+                if (event.target === node || node.classList.contains('source-modal-close')) {
+                    this._closeSourceModal();
+                }
+            });
+        });
+        document.addEventListener('keydown', this._handleSourceModalEscape);
+        this._sourceModalOpen = true;
+    },
+
+    _handleSourceModalEscape: (event) => {
+        if (event.key === 'Escape' && AttendanceSchoolApp._sourceModalOpen) {
+            AttendanceSchoolApp._closeSourceModal();
+        }
+    },
+
+    _closeSourceModal() {
+        if (!this._els?.sourceModalHost) return;
+        this._els.sourceModalHost.innerHTML = '';
+        this._sourceModalOpen = false;
+        document.removeEventListener('keydown', this._handleSourceModalEscape);
+    },
+
     _studentCourseKey(record) {
         return `${record.course_name}||${this._studentKey(record)}`;
     },
@@ -260,6 +376,29 @@ const AttendanceSchoolApp = {
             month: '2-digit',
             day: '2-digit',
         });
+    },
+
+    _formatDateTime(value, fallbackValue = null) {
+        const fallback = fallbackValue ? new Date(fallbackValue) : null;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value || '';
+        }
+        const hasDateChange = fallback && !Number.isNaN(fallback.getTime())
+            ? date.toDateString() !== fallback.toDateString()
+            : true;
+        const time = date.toLocaleTimeString('it-CH', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+        if (!hasDateChange) {
+            return time;
+        }
+        return `${date.toLocaleDateString('it-CH', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        })}, ${time}`;
     },
 
     _escapeHtml(value) {

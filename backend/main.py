@@ -1120,6 +1120,54 @@ async def attendance_school_records():
     )
 
 
+@app.get("/api/attendance/school-record-source")
+async def attendance_school_record_source(lesson_id: int, canonical_full_name: str, email: str = ""):
+    repository = PostgresAttendanceDraftQueryRepository()
+    lesson = repository.get_lesson_detail(lesson_id)
+    if lesson.status != "official" or lesson.is_ignored:
+        raise HTTPException(status_code=404, detail="Lesson official non trovata.")
+
+    name_alias_map, email_alias_map = _load_identity_alias_maps(PostgresAttendanceIdentityAliasRepository())
+    resolved_name, resolved_email = _apply_identity_alias_maps(canonical_full_name, email, name_alias_map, email_alias_map)
+    participant_key = (resolved_email or "").strip().lower() or resolved_name.lower()
+
+    groups = _build_lesson_source_groups(repository, lesson_id)
+    sources = groups.get(participant_key, [])
+    if not sources:
+        # Fallback conservativo per dati storici: se l'email non basta, prova col nome canonico.
+        requested_name_key = resolved_name.strip().casefold()
+        sources = [
+            source
+            for grouped_sources in groups.values()
+            for source in grouped_sources
+            if str(source.get("raw_full_name") or "").strip().casefold() == requested_name_key
+        ]
+
+    return JSONResponse(
+        {
+            "lesson": {
+                "id": lesson.id,
+                "course_name": lesson.course_name,
+                "lesson_date": lesson.lesson_date,
+                "meeting_start_at": lesson.meeting_start_at,
+            },
+            "participant": {
+                "canonical_full_name": resolved_name,
+                "email": resolved_email or None,
+            },
+            "sources": [
+                {
+                    "raw_full_name": source["raw_full_name"],
+                    "email": source["email"],
+                    "segments": source["segments"],
+                }
+                for source in sources
+            ],
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.get("/api/attendance/school-courses")
 async def attendance_school_courses():
     repository = PostgresAttendanceDraftQueryRepository()
