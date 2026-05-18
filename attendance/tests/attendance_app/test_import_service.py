@@ -1032,6 +1032,157 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertLess(mutation.last_update["effective_start_at"], mutation.last_update["break_point_at"])
         self.assertLess(mutation.last_update["break_point_at"], mutation.last_update["effective_end_at"])
 
+    def test_recalculate_lesson_after_marker_delete_uses_original_baseline_and_remaining_actions(self) -> None:
+        lesson = DraftLessonView(
+            id=60,
+            course_name="PRACTITIONER",
+            lesson_date="2025-05-14",
+            source_meeting_id="891 9285 7355",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2025-05-14T16:49:00+00:00",
+            meeting_end_at="2025-05-14T20:34:00+00:00",
+            effective_start_at="2025-05-14T17:07:35+00:00",
+            break_point_at="2025-05-14T18:01:33.5+00:00",
+            effective_end_at="2025-05-14T16:55:32+00:00",
+            break_source="manual",
+            effective_start_source="review_action",
+            effective_end_source="review_action",
+            warnings=[],
+            diagnostics={
+                "review_action_baseline": {
+                    "threshold_ratio": 0.8,
+                    "effective_start_at": "2025-05-14T17:10:00+00:00",
+                    "break_point_at": "2025-05-14T18:39:00+00:00",
+                    "effective_end_at": "2025-05-14T20:34:00+00:00",
+                    "break_source": "auto",
+                    "effective_start_source": "snap",
+                    "effective_end_source": "meeting_end",
+                }
+            },
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=10,
+                    participant_key="persona@example.com",
+                    canonical_full_name="Persona Test",
+                    raw_full_name="Persona Test",
+                    email="persona@example.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=69.4,
+                    duration_second_half=107.6,
+                    total_minutes=0.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={},
+                )
+            ],
+            review_actions=[
+                DraftReviewActionView(
+                    id=21,
+                    lesson_id=60,
+                    participant_id=None,
+                    action_type="set_effective_start",
+                    payload={"at": "2025-05-14T17:00:00+00:00"},
+                    created_by="test",
+                    created_at="2026-05-18T11:00:00+00:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            ],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Persona Test",
+                observed_email="persona@example.com",
+                join_time="2025-05-14T17:05:00+00:00",
+                leave_time="2025-05-14T20:34:00+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(60)
+
+        self.assertEqual("2025-05-14T17:00:00+00:00", mutation.last_update["effective_start_at"])
+        self.assertEqual("2025-05-14T20:34:00+00:00", mutation.last_update["effective_end_at"])
+        self.assertEqual("meeting_end", mutation.last_update["effective_end_source"])
+        self.assertLess(mutation.last_update["effective_start_at"], mutation.last_update["break_point_at"])
+        self.assertLess(mutation.last_update["break_point_at"], mutation.last_update["effective_end_at"])
+
+    def test_recalculate_lesson_repairs_inverted_persisted_marker_window(self) -> None:
+        lesson = DraftLessonView(
+            id=61,
+            course_name="PRACTITIONER",
+            lesson_date="2025-05-14",
+            source_meeting_id="891 9285 7355",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2025-05-14T16:49:00+00:00",
+            meeting_end_at="2025-05-14T16:55:32+00:00",
+            effective_start_at="2025-05-14T17:07:35+00:00",
+            break_point_at="2025-05-14T17:01:33.5+00:00",
+            effective_end_at="2025-05-14T16:55:32+00:00",
+            break_source="manual",
+            effective_start_source="review_action",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=11,
+                    participant_key="persona@example.com",
+                    canonical_full_name="Persona Test",
+                    raw_full_name="Persona Test",
+                    email="persona@example.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=69.4,
+                    duration_second_half=107.6,
+                    total_minutes=0.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={},
+                )
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Persona Test",
+                observed_email="persona@example.com",
+                join_time="2025-05-14T17:05:00+00:00",
+                leave_time="2025-05-14T20:34:00+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(61, use_current_markers=True)
+
+        self.assertEqual("2025-05-14T17:07:35+00:00", mutation.last_update["effective_start_at"])
+        self.assertEqual("2025-05-14T20:34:00+00:00", mutation.last_update["effective_end_at"])
+        self.assertEqual("source_segments", mutation.last_update["effective_end_source"])
+        self.assertLess(mutation.last_update["effective_start_at"], mutation.last_update["break_point_at"])
+        self.assertLess(mutation.last_update["break_point_at"], mutation.last_update["effective_end_at"])
+
     def test_recalculate_lesson_applies_latest_manual_presence_override(self) -> None:
         lesson = DraftLessonView(
             id=51,

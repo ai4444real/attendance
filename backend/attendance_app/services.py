@@ -410,7 +410,7 @@ class AttendanceDraftRecalculationService:
         meeting_end_at = lesson.meeting_end_at
         bounds_were_expanded = False
         source_bounds = self._source_segment_bounds(source_segments, effective_start.tzinfo)
-        if use_current_markers and source_bounds is not None:
+        if source_bounds is not None:
             source_start, source_end = source_bounds
             meeting_start = datetime.fromisoformat(lesson.meeting_start_at)
             meeting_end = datetime.fromisoformat(lesson.meeting_end_at)
@@ -428,6 +428,19 @@ class AttendanceDraftRecalculationService:
                     effective_end = source_end
                     effective_end_at = effective_end.isoformat()
                     effective_end_source = "source_segments"
+
+        meeting_end_candidate = datetime.fromisoformat(str(meeting_end_at))
+        if effective_end <= effective_start:
+            if source_bounds is not None and source_bounds[1] > effective_start:
+                effective_end = source_bounds[1]
+                effective_end_source = "recalculate_resolved"
+            elif meeting_end_candidate > effective_start:
+                effective_end = meeting_end_candidate
+                effective_end_source = "recalculate_resolved"
+            else:
+                effective_end = effective_start + timedelta(minutes=10)
+                effective_end_source = "recalculate_resolved"
+            effective_end_at = effective_end.isoformat()
 
         requested_break_point = datetime.fromisoformat(str(break_point_at)) if break_point_at else None
         if bounds_were_expanded and break_source in {"midpoint", "recalculate_resolved"}:
