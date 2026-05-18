@@ -7,6 +7,7 @@ const AttendanceSchoolApp = {
             courseFilter: document.getElementById('courseFilter'),
             studentFilter: document.getElementById('studentFilter'),
             studentAliasLink: document.getElementById('studentAliasLink'),
+            orientationContainer: document.getElementById('orientationContainer'),
             tableContainer: document.getElementById('tableContainer'),
             sourceModalHost: document.getElementById('sourceModalHost'),
         };
@@ -100,6 +101,7 @@ const AttendanceSchoolApp = {
     _render() {
         const records = this._getFilteredRecords();
         this._renderSummary(records);
+        this._renderOrientation();
         this._renderTable(records);
     },
 
@@ -121,6 +123,177 @@ const AttendanceSchoolApp = {
             <article class="summary-card"><div class="summary-label">1ª metà</div><div class="summary-value">${counts.prima_meta || 0}</div></article>
             <article class="summary-card"><div class="summary-label">2ª metà</div><div class="summary-value">${counts.seconda_meta || 0}</div></article>
             <article class="summary-card"><div class="summary-label">Assenti</div><div class="summary-value">${counts.assente || 0}</div></article>
+        `;
+    },
+
+    _renderOrientation() {
+        if (!this._els.orientationContainer) return;
+        if (this._filters.student) {
+            this._renderStudentOrientation();
+            return;
+        }
+        this._renderCourseOrientation();
+    },
+
+    _renderCourseOrientation() {
+        const records = this._records.filter((record) => !this._filters.course || record.course_name === this._filters.course);
+        const courses = this._buildCourseOverview(records);
+        if (!courses.length) {
+            this._els.orientationContainer.innerHTML = '<div class="empty">Nessun corso official compatibile con i filtri attivi.</div>';
+            return;
+        }
+
+        this._els.orientationContainer.innerHTML = `
+            <div class="orientation-head">
+                <div>
+                    <h3 class="orientation-title">Mappa corsi</h3>
+                    <p class="orientation-subtitle">Una cella per lezione official: data e numero di presenze utili registrate.</p>
+                </div>
+            </div>
+            <div class="course-map">
+                ${courses.map((course) => `
+                    <article class="course-map-card">
+                        <div class="course-map-head">
+                            <div>
+                                <div class="course-map-title">${this._escapeHtml(course.courseName)}</div>
+                                <div class="course-map-meta">
+                                    <span>${course.lessons.length} lezioni</span>
+                                    <span>${course.totalUsefulPresences} presenze utili</span>
+                                    <span>${course.students.size} studenti</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="lesson-timeline">
+                            ${course.lessons.map((lesson) => `
+                                <div class="lesson-tile" title="${this._escapeAttr(`${course.courseName} · ${this._formatDate(lesson.lesson_date)} · lesson #${lesson.lesson_id}`)}">
+                                    <div class="lesson-tile-date">${this._escapeHtml(this._formatShortDate(lesson.lesson_date))}</div>
+                                    <div class="lesson-tile-detail"><span class="lesson-tile-count">${lesson.usefulPresences}</span> presenze</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </article>
+                `).join('')}
+            </div>
+        `;
+    },
+
+    _renderStudentOrientation() {
+        const studentLabel = this._studentLabelsByFilterKey.get(this._filters.student) || 'Studente selezionato';
+        const recordsByCourse = this._records.filter((record) => {
+            if (this._filters.course && record.course_name !== this._filters.course) return false;
+            return this._studentFilterKey(record) === this._filters.student;
+        });
+        const activeCourses = [...new Set(
+            recordsByCourse
+                .filter((record) => this._presenceScore(record.final_presence_status) > 0)
+                .map((record) => record.course_name)
+        )]
+            .sort((a, b) => a.localeCompare(b, 'it'));
+        if (!activeCourses.length) {
+            this._els.orientationContainer.innerHTML = '<div class="empty">Nessun corso con presenze per lo studente selezionato.</div>';
+            return;
+        }
+
+        const participationByStudentCourse = this._buildParticipationIndex(this._records);
+        const allLessonsByCourse = this._buildCourseOverview(
+            this._records.filter((record) => activeCourses.includes(record.course_name))
+        );
+        const courseByName = new Map(allLessonsByCourse.map((course) => [course.courseName, course]));
+
+        this._els.orientationContainer.innerHTML = `
+            <div class="orientation-head">
+                <div>
+                    <h3 class="orientation-title">${this._escapeHtml(studentLabel)}</h3>
+                    <p class="orientation-subtitle">Timeline dei soli corsi dove lo studente compare. Le celle vuote sono lezioni official senza record per quello studente.</p>
+                </div>
+                <div class="timeline-legend">
+                    <span class="legend-dot green">presente</span>
+                    <span class="legend-dot blue">prima metà</span>
+                    <span class="legend-dot yellow">seconda metà</span>
+                    <span class="legend-dot gray">nessun record</span>
+                </div>
+            </div>
+            <div class="course-map">
+                ${activeCourses.map((courseName) => {
+                    const course = courseByName.get(courseName);
+                    const participantByLesson = new Map(
+                        recordsByCourse
+                            .filter((record) => record.course_name === courseName)
+                            .map((record) => [String(record.lesson_id), record])
+                    );
+                    const firstRecord = recordsByCourse.find((record) => record.course_name === courseName);
+                    const participation = firstRecord ? participationByStudentCourse.get(this._studentCourseKey(firstRecord)) : null;
+                    return `
+                        <article class="course-map-card">
+                            <div class="course-map-head">
+                                <div>
+                                    <div class="course-map-title">${this._escapeHtml(courseName)}</div>
+                                    <div class="course-map-meta">
+                                        <span>${course?.lessons.length || 0} lezioni official</span>
+                                        <span>${participantByLesson.size} lezioni con record</span>
+                                    </div>
+                                </div>
+                                <div class="course-map-score">${this._renderCompactParticipation(participation)}</div>
+                            </div>
+                            <div class="lesson-timeline">
+                                ${(course?.lessons || []).map((lesson) => {
+                                    const record = participantByLesson.get(String(lesson.lesson_id));
+                                    const status = record?.final_presence_status || 'missing';
+                                    return `
+                                        <div class="lesson-tile ${this._escapeAttr(status)}" title="${this._escapeAttr(`${courseName} · ${this._formatDate(lesson.lesson_date)} · ${record ? this._presenceLabel(record.final_presence_status) : 'nessun record'}`)}">
+                                            <div class="lesson-tile-date">${this._escapeHtml(this._formatShortDate(lesson.lesson_date))}</div>
+                                            <div class="lesson-tile-detail">${this._escapeHtml(record ? this._presenceShortLabel(record.final_presence_status) : 'vuoto')}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </article>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    },
+
+    _buildCourseOverview(records) {
+        const byCourse = new Map();
+        for (const record of records) {
+            const course = byCourse.get(record.course_name) || {
+                courseName: record.course_name,
+                lessonsById: new Map(),
+                students: new Set(),
+                totalUsefulPresences: 0,
+            };
+            const lesson = course.lessonsById.get(String(record.lesson_id)) || {
+                lesson_id: record.lesson_id,
+                lesson_date: record.lesson_date,
+                usefulPresences: 0,
+                records: 0,
+            };
+            lesson.records += 1;
+            if (this._presenceScore(record.final_presence_status) > 0) {
+                lesson.usefulPresences += 1;
+                course.totalUsefulPresences += 1;
+            }
+            course.students.add(this._studentFilterKey(record));
+            course.lessonsById.set(String(record.lesson_id), lesson);
+            byCourse.set(record.course_name, course);
+        }
+
+        return [...byCourse.values()]
+            .map((course) => ({
+                ...course,
+                lessons: [...course.lessonsById.values()].sort((a, b) => a.lesson_date.localeCompare(b.lesson_date) || String(a.lesson_id).localeCompare(String(b.lesson_id))),
+            }))
+            .sort((a, b) => a.courseName.localeCompare(b.courseName, 'it'));
+    },
+
+    _renderCompactParticipation(participation) {
+        if (!participation || participation.percentage === null) {
+            return '<div class="course-map-score-detail">n/d</div>';
+        }
+        return `
+            <div class="course-map-score-value">${this._escapeHtml(this._formatPercentage(participation.percentage))}%</div>
+            <div class="course-map-score-detail">${this._escapeHtml(this._formatScore(participation.score))}/${this._escapeHtml(participation.expectedLessons)}</div>
         `;
     },
 
@@ -369,10 +542,27 @@ const AttendanceSchoolApp = {
         }[status] || status;
     },
 
+    _presenceShortLabel(status) {
+        return {
+            presente: 'presente',
+            prima_meta: '1ª metà',
+            seconda_meta: '2ª metà',
+            assente: 'assente',
+        }[status] || status;
+    },
+
     _formatDate(value) {
         const date = new Date(value);
         return date.toLocaleDateString('it-CH', {
             year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+    },
+
+    _formatShortDate(value) {
+        const date = new Date(value);
+        return date.toLocaleDateString('it-CH', {
             month: '2-digit',
             day: '2-digit',
         });

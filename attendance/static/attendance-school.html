@@ -37,6 +37,35 @@
         .filter-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: -4px; }
         .filter-tool-link { color: #155e75; font-weight: 800; font-size: 13px; text-decoration: none; }
         .filter-tool-link:hover { text-decoration: underline; }
+        .orientation { display: flex; flex-direction: column; gap: 14px; margin: 18px 0 22px; }
+        .orientation-head { display: flex; justify-content: space-between; gap: 12px; align-items: end; flex-wrap: wrap; }
+        .orientation-title { margin: 0; color: var(--brand-ink); font-size: 20px; font-weight: 900; }
+        .orientation-subtitle { margin: 4px 0 0; color: var(--brand-muted); font-size: 13px; line-height: 1.5; }
+        .course-map { display: flex; flex-direction: column; gap: 12px; }
+        .course-map-card { border: 1px solid var(--brand-border); border-radius: 16px; background: #fbfdff; padding: 14px; }
+        .course-map-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; flex-wrap: wrap; margin-bottom: 12px; }
+        .course-map-title { font-size: 18px; font-weight: 900; color: var(--brand-ink); }
+        .course-map-meta { display: flex; gap: 8px; flex-wrap: wrap; color: var(--brand-muted); font-size: 12px; font-weight: 700; }
+        .course-map-score { text-align: right; min-width: 120px; }
+        .course-map-score-value { font-size: 22px; font-weight: 900; color: var(--brand-ink); }
+        .course-map-score-detail { color: var(--brand-muted); font-size: 12px; font-weight: 700; }
+        .lesson-timeline { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+        .lesson-tile { flex: 0 0 auto; min-width: 86px; border: 1px solid var(--brand-border); border-radius: 12px; background: #fff; padding: 9px 10px; }
+        .lesson-tile-date { font-size: 14px; font-weight: 900; color: var(--brand-ink); white-space: nowrap; }
+        .lesson-tile-detail { margin-top: 4px; font-size: 12px; color: var(--brand-muted); font-weight: 700; white-space: nowrap; }
+        .lesson-tile.presente { border-color: #b8ead0; background: #f0fbf5; }
+        .lesson-tile.prima_meta { border-color: #c8ddf5; background: #f2f7fd; }
+        .lesson-tile.seconda_meta { border-color: #f6dfaa; background: #fff8e8; }
+        .lesson-tile.assente { border-color: #f5c8d2; background: #fff4f7; }
+        .lesson-tile.missing { border-style: dashed; background: #f8fafc; opacity: 0.78; }
+        .lesson-tile-count { color: #157347; font-weight: 900; }
+        .timeline-legend { display: flex; gap: 8px; flex-wrap: wrap; color: var(--brand-muted); font-size: 12px; font-weight: 700; }
+        .legend-dot { display: inline-flex; align-items: center; gap: 5px; }
+        .legend-dot::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 999px; background: var(--legend-color); }
+        .legend-dot.green { --legend-color: #22a35a; }
+        .legend-dot.blue { --legend-color: #3b82c4; }
+        .legend-dot.yellow { --legend-color: #d97706; }
+        .legend-dot.gray { --legend-color: #94a3b8; }
         .table-wrap { overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px 10px; border-bottom: 1px solid var(--brand-border); text-align: left; vertical-align: top; }
@@ -126,11 +155,12 @@
                 </div>
             </div>
 
+            <div id="orientationContainer" class="orientation"></div>
             <div id="tableContainer" class="table-wrap"></div>
             <div id="sourceModalHost"></div>
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-school.js?v=20260518-origin-source"></script>
+    <script src="/attendance/static/js/attendance-school.js?v=20260518-course-map"></script>
 </body>
 </html>
