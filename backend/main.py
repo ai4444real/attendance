@@ -773,8 +773,7 @@ async def attendance_create_review_action(lesson_id: int, payload: dict):
             PostgresAttendanceIdentityAliasRepository(),
         ).recalculate_lesson(
             lesson_id,
-            use_current_markers=True,
-            apply_marker_action_ids={action.id},
+            prefer_original_baseline=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

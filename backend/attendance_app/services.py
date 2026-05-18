@@ -379,6 +379,8 @@ class AttendanceDraftRecalculationService:
             use_current_markers=use_current_markers,
             prefer_original_baseline=prefer_original_baseline or has_marker_actions,
         )
+        # Marker corrections are event-sourced: baseline + surviving actions.
+        # The use_current_markers path is kept only for legacy incremental callers.
         if (
             use_current_markers
             and apply_marker_action_ids
