@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from math import ceil
 from pathlib import Path
 
-from .aggregator import AttendanceAggregationRecord, aggregate_meeting
+from .aggregator import AttendanceAggregationRecord, ZoomMeeting, aggregate_meeting
 from .identity_rules import load_identity_rules
 from .meeting_overrides import apply_effective_time_overrides, load_meeting_overrides
 from .meeting_selection import filter_meetings_by_courses, preselected_course_names
@@ -98,7 +98,9 @@ def normalize_zoom_csv_file(
     source_path = str(path)
     parsed = parse_zoom_csv_file(source_path)
     identity_rules = load_identity_rules(identity_rules_path)
-    meetings = identity_rules.apply_to_meetings(parsed.meetings)
+    meetings = _merge_fragmented_zoom_meetings(
+        identity_rules.apply_to_meetings(parsed.meetings)
+    )
     meeting_overrides = load_meeting_overrides(meeting_overrides_path)
 
     selected_courses = preselected_course_names(meetings)
@@ -188,6 +190,59 @@ def normalize_zoom_csv_file(
         warnings=warnings,
         meetings=normalized_meetings,
         records=normalized_records,
+    )
+
+
+def _merge_fragmented_zoom_meetings(meetings: list[ZoomMeeting]) -> list[ZoomMeeting]:
+    """Merge Zoom fragments that represent the same real lesson.
+
+    Zoom sometimes emits multiple meeting blocks with the same course, meeting id
+    and date. Those blocks are not duplicate lessons: they are fragments of one
+    lesson and must share one attendance window.
+    """
+
+    grouped: dict[tuple[str, str, date], list[ZoomMeeting]] = {}
+    for meeting in meetings:
+        key = (meeting.course, meeting.meeting_id, meeting.start_time.date())
+        grouped.setdefault(key, []).append(meeting)
+
+    merged: list[ZoomMeeting] = []
+    for fragments in grouped.values():
+        if len(fragments) == 1:
+            merged.append(fragments[0])
+            continue
+
+        ordered_fragments = sorted(fragments, key=lambda meeting: meeting.start_time)
+        start_time = min(meeting.start_time for meeting in ordered_fragments)
+        end_time = max(meeting.end_time for meeting in ordered_fragments)
+        segments = sorted(
+            [
+                segment
+                for meeting in ordered_fragments
+                for segment in meeting.segments
+            ],
+            key=lambda segment: (
+                segment.join_time,
+                segment.leave_time,
+                segment.email,
+                segment.full_name,
+            ),
+        )
+
+        merged.append(
+            ZoomMeeting(
+                course=ordered_fragments[0].course,
+                meeting_id=ordered_fragments[0].meeting_id,
+                start_time=start_time,
+                end_time=end_time,
+                duration_minutes=_minutes_between(start_time, end_time),
+                segments=segments,
+            )
+        )
+
+    return sorted(
+        merged,
+        key=lambda meeting: (meeting.start_time, meeting.course, meeting.meeting_id),
     )
 
 

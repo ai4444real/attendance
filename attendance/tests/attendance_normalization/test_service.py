@@ -46,6 +46,16 @@ COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/202
 COACHING,Riunione,826 5053 1117,Irene Bazzani,bazzani@pnlevolution.com,01/14/2025 06:38:00 PM,01/14/2025 11:00:00 PM,5,262,900,,,Zoom,-,-,05/27/2022 07:17:47 PM,Persona Quattro,,01/14/2025 07:00:00 PM,01/14/2025 10:39:00 PM,219,Sì,,No
 """
 
+CSV_SAMPLE_WITH_FRAGMENTED_ZOOM_BLOCKS = """Argomento,Digita,ID,Nome organizzatore,E-mail organizzatore,Ora di inizio,Ora di fine,Partecipanti,Durata (minuti),Minuti totali dei partecipanti,Reparto,Gruppo,Origine,Visualizzatori unici,Max visualizzazioni simultanee,Ora di creazione,Nome (nome originale),E-mail,Ora di ingresso,Ora di uscita,Durata (minuti),Guest,Risposta di esclusione di responsabilità per la registrazione,In sala d’attesa
+SABATO,Riunione,871 2736 6049,Segreteria,info@pnlevolution.com,06/14/2025 08:32:31 AM,06/14/2025 09:06:26 AM,2,34,60,,,Zoom,-,-,05/12/2022 09:24:10 PM,Cristina Monigatti,,06/14/2025 08:56:34 AM,06/14/2025 09:05:26 AM,9,Sì,,No
+SABATO,Riunione,871 2736 6049,Segreteria,info@pnlevolution.com,06/14/2025 08:32:31 AM,06/14/2025 09:06:26 AM,2,34,60,,,Zoom,-,-,05/12/2022 09:24:10 PM,Persona Mattina,,06/14/2025 08:32:31 AM,06/14/2025 09:06:26 AM,34,Sì,,No
+,,,,,,,,,,,,,,,,,,,,,,,
+SABATO,Riunione,871 2736 6049,Segreteria,info@pnlevolution.com,06/14/2025 09:44:31 AM,06/14/2025 10:11:25 AM,1,27,27,,,Zoom,-,-,05/12/2022 09:24:10 PM,Persona Intervallo,,06/14/2025 09:44:31 AM,06/14/2025 10:11:25 AM,27,Sì,,No
+,,,,,,,,,,,,,,,,,,,,,,,
+SABATO,Riunione,871 2736 6049,Segreteria,info@pnlevolution.com,06/14/2025 10:16:19 AM,06/14/2025 12:23:46 PM,2,127,220,,,Zoom,-,-,05/12/2022 09:24:10 PM,Cristina Monigatti,,06/14/2025 10:25:58 AM,06/14/2025 12:13:02 PM,108,Sì,,No
+SABATO,Riunione,871 2736 6049,Segreteria,info@pnlevolution.com,06/14/2025 10:16:19 AM,06/14/2025 12:23:46 PM,2,127,220,,,Zoom,-,-,05/12/2022 09:24:10 PM,Persona Pomeriggio,,06/14/2025 10:16:19 AM,06/14/2025 12:23:45 PM,127,Sì,,No
+"""
+
 
 class NormalizationServiceTests(unittest.TestCase):
     def test_degrades_detected_break_to_midpoint_when_too_close_to_effective_end(self):
@@ -122,6 +132,34 @@ class NormalizationServiceTests(unittest.TestCase):
         self.assertGreater(len(result.meetings[0].timeline), 0)
         self.assertEqual(result.meetings[0].peak_active_count, 1)
         self.assertEqual(result.meetings[0].sampled_every_minutes, 10.0)
+
+    def test_merges_zoom_blocks_with_same_course_date_and_meeting_id(self):
+        with TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "sample.csv"
+            csv_path.write_text(CSV_SAMPLE_WITH_FRAGMENTED_ZOOM_BLOCKS, encoding="utf-8")
+
+            result = normalize_zoom_csv_file(csv_path, threshold=0.8)
+
+        self.assertEqual(result.total_meetings_found, 3)
+        self.assertEqual(result.selected_meetings_count, 1)
+        self.assertEqual(len(result.meetings), 1)
+        diagnostic = result.meetings[0]
+        self.assertEqual(diagnostic.meeting_start, "2025-06-14T08:32:31+02:00")
+        self.assertEqual(diagnostic.meeting_end, "2025-06-14T12:23:46+02:00")
+        self.assertGreaterEqual(diagnostic.peak_active_count, 2)
+
+        cristina = next(
+            record for record in result.records
+            if f"{record.first_name} {record.last_name}" == "Cristina Monigatti"
+        )
+        self.assertEqual(cristina.segment_count, 2)
+        self.assertEqual(
+            cristina.segments,
+            [
+                ("2025-06-14T08:56:34+02:00", "2025-06-14T09:05:26+02:00"),
+                ("2025-06-14T10:25:58+02:00", "2025-06-14T12:13:02+02:00"),
+            ],
+        )
 
     def test_ignores_meetings_shorter_than_twenty_minutes(self):
         with TemporaryDirectory() as temp_dir:
