@@ -64,8 +64,9 @@ const AttendanceSchoolApp = {
         for (const record of filteredByCourse) {
             const key = this._studentFilterKey(record);
             const current = studentByKey.get(key);
-            if (!current || record.canonical_full_name.localeCompare(current, 'it', { sensitivity: 'base' }) < 0) {
-                studentByKey.set(key, record.canonical_full_name);
+            const displayName = this._formatPersonName(record.canonical_full_name);
+            if (!current || displayName.localeCompare(current, 'it', { sensitivity: 'base' }) < 0) {
+                studentByKey.set(key, displayName);
             }
         }
         const students = [...studentByKey.entries()].sort((left, right) => left[1].localeCompare(right[1], 'it', { sensitivity: 'base' }));
@@ -148,7 +149,7 @@ const AttendanceSchoolApp = {
                             <tr>
                                 <td>${this._escapeHtml(record.course_name)}</td>
                                 <td>${this._escapeHtml(this._formatDate(record.lesson_date))}</td>
-                                <td>${this._escapeHtml(record.canonical_full_name)}</td>
+                                <td>${this._escapeHtml(this._formatPersonName(record.canonical_full_name))}</td>
                                 <td><span class="status-tag ${this._escapeAttr(record.final_presence_status)}">${this._escapeHtml(this._presenceLabel(record.final_presence_status))}</span></td>
                                 <td class="participation-cell">${this._renderParticipation(participation)}</td>
                             </tr>
@@ -232,6 +233,15 @@ const AttendanceSchoolApp = {
 
     _formatScore(value) {
         return Number.isInteger(value) ? String(value) : value.toFixed(1);
+    },
+
+    _formatPersonName(value) {
+        return String(value || '').trim().replace(/\S+/g, (word) => {
+            if (word.length <= 1 || word !== word.toLocaleUpperCase('it')) {
+                return word;
+            }
+            return word.charAt(0).toLocaleUpperCase('it') + word.slice(1).toLocaleLowerCase('it');
+        });
     },
 
     _presenceLabel(status) {
