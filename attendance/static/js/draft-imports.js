@@ -1125,9 +1125,8 @@ const DraftImportsApp = {
         const pct = duration > 0 ? minutes / duration : 0;
         const pctPercent = pct * 100;
         const thresholdPercent = threshold * 100;
-        const missingMinutes = Math.max(0, (duration * threshold) - minutes);
         const isPositive = pct >= (threshold - 0.000001);
-        const isBorderline = !isPositive && ((threshold - pct) <= 0.02 || missingMinutes <= 5);
+        const isBorderline = !isPositive && (threshold - pct) <= 0.05;
         const tone = isPositive ? 'positive' : isBorderline ? 'borderline' : 'negative';
         const shouldShowDecimal = Math.abs(pctPercent - thresholdPercent) < 1.05;
         const pctDisplay = shouldShowDecimal ? `${pctPercent.toFixed(1)}%` : `${Math.round(pctPercent)}%`;
