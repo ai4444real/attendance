@@ -1,6 +1,7 @@
 # Data files (sensitive student data)
 *.csv
 *_normalized_*.json
+backups/
 
 # OS files
 .DS_Store

@@ -71,6 +71,23 @@ Poi da browser:
 https://rebekko.pnlevolution.com/
 ```
 
+## Backup CSV Attendance
+
+Export leggibile delle tabelle operative principali:
+
+```bash
+cd /opt/rebekko/webapps
+./scripts/export_attendance_backup.sh
+```
+
+Output predefinito:
+
+```text
+/opt/rebekko/webapps/backups/attendance/YYYYMMDDTHHMMSSZ/
+```
+
+Dentro trovi un CSV per tabella, `manifest.txt` con conteggio righe e, se disponibile, `SHA256SUMS`.
+
 ## Se qualcosa va storto
 
 Log servizio:
