@@ -359,13 +359,33 @@ class AttendanceDraftRecalculationService:
         *,
         use_current_markers: bool = False,
         apply_marker_action_ids: set[int] | None = None,
+        prefer_original_baseline: bool = False,
     ) -> DraftLessonView:
         lesson = self._query_repository.get_lesson_detail(lesson_id)
         action_sequence = sorted(lesson.review_actions, key=lambda item: (item.created_at, item.id))
         apply_marker_action_ids = apply_marker_action_ids or set()
 
         diagnostics = dict(lesson.diagnostics or {})
-        baseline = self._build_recalculation_baseline(lesson, diagnostics, use_current_markers=use_current_markers)
+        marker_action_types = {
+            "set_threshold_ratio",
+            "set_effective_start",
+            "set_break_point",
+            "set_effective_end",
+        }
+        has_marker_actions = any(action.action_type in marker_action_types for action in action_sequence)
+        baseline = self._build_recalculation_baseline(
+            lesson,
+            diagnostics,
+            use_current_markers=use_current_markers,
+            prefer_original_baseline=prefer_original_baseline or has_marker_actions,
+        )
+        if (
+            use_current_markers
+            and apply_marker_action_ids
+            and not isinstance(diagnostics.get("review_action_baseline"), dict)
+            and any(action.id in apply_marker_action_ids and action.action_type in marker_action_types for action in action_sequence)
+        ):
+            diagnostics["review_action_baseline"] = dict(baseline)
         threshold_ratio = baseline["threshold_ratio"]
         effective_start_at = baseline["effective_start_at"]
         break_point_at = baseline["break_point_at"]
@@ -380,12 +400,7 @@ class AttendanceDraftRecalculationService:
 
         for action in action_sequence:
             payload = action.payload or {}
-            if use_current_markers and action.action_type in {
-                "set_threshold_ratio",
-                "set_effective_start",
-                "set_break_point",
-                "set_effective_end",
-            } and action.id not in apply_marker_action_ids:
+            if use_current_markers and action.action_type in marker_action_types and action.id not in apply_marker_action_ids:
                 continue
             if action.action_type == "set_threshold_ratio":
                 threshold_ratio = float(payload["threshold_ratio"])
@@ -574,7 +589,14 @@ class AttendanceDraftRecalculationService:
                 active.add(segment.observed_email or segment.observed_full_name)
         return len(active)
 
-    def _build_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict, *, use_current_markers: bool = False) -> dict:
+    def _build_recalculation_baseline(
+        self,
+        lesson: DraftLessonView,
+        diagnostics: dict,
+        *,
+        use_current_markers: bool = False,
+        prefer_original_baseline: bool = False,
+    ) -> dict:
         if use_current_markers:
             return self._current_lesson_baseline(lesson)
         existing = diagnostics.get("review_action_baseline")
@@ -588,6 +610,8 @@ class AttendanceDraftRecalculationService:
                 "effective_start_source": str(existing.get("effective_start_source") or lesson.effective_start_source),
                 "effective_end_source": str(existing.get("effective_end_source") or lesson.effective_end_source),
             }
+        if prefer_original_baseline:
+            return self._infer_recalculation_baseline(lesson, diagnostics)
         return self._current_lesson_baseline(lesson)
 
     def _current_lesson_baseline(self, lesson: DraftLessonView) -> dict:
@@ -599,6 +623,48 @@ class AttendanceDraftRecalculationService:
             "break_source": lesson.break_source,
             "effective_start_source": lesson.effective_start_source,
             "effective_end_source": lesson.effective_end_source,
+        }
+
+    def _infer_recalculation_baseline(self, lesson: DraftLessonView, diagnostics: dict) -> dict:
+        suggested_start = diagnostics.get("suggested_effective_start")
+        suggested_end = diagnostics.get("suggested_effective_end")
+        confidence = diagnostics.get("suggestion_confidence")
+        effective_start_at = (
+            str(suggested_start)
+            if confidence == "high" and suggested_start
+            else str(lesson.effective_start_at)
+        )
+        effective_start_source = (
+            "auto_suggest"
+            if confidence == "high" and suggested_start
+            else str(lesson.effective_start_source or "recalculate_resolved")
+        )
+
+        effective_end_at = (
+            str(suggested_end)
+            if confidence == "high" and suggested_end
+            else str(diagnostics.get("meeting_end") or lesson.meeting_end_at)
+        )
+        effective_end_source = (
+            "auto_suggest"
+            if confidence == "high" and suggested_end
+            else "meeting_end"
+        )
+
+        break_point_at = lesson.break_point_at
+        break_source = str(lesson.break_source or "recalculate_resolved")
+        if break_source == "manual":
+            break_point_at = None
+            break_source = "recalculate_resolved"
+
+        return {
+            "threshold_ratio": lesson.threshold_ratio,
+            "effective_start_at": effective_start_at,
+            "break_point_at": break_point_at,
+            "effective_end_at": effective_end_at,
+            "break_source": break_source,
+            "effective_start_source": effective_start_source,
+            "effective_end_source": effective_end_source,
         }
 
     def _recalculate_from_segments(

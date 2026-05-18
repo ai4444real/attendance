@@ -859,6 +859,81 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertEqual("2026-04-20T18:17:00+00:00", mutation.last_update["break_point_at"])
         self.assertEqual("recalculate_resolved", mutation.last_update["break_source"])
 
+    def test_recalculate_lesson_stores_original_baseline_when_first_marker_action_is_applied(self) -> None:
+        lesson = DraftLessonView(
+            id=62,
+            course_name="PRACTITIONER",
+            lesson_date="2025-05-14",
+            source_meeting_id="891 9285 7355",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2025-05-14T16:49:06+00:00",
+            meeting_end_at="2025-05-14T20:34:57+00:00",
+            effective_start_at="2025-05-14T17:10:00+00:00",
+            break_point_at="2025-05-14T18:39:06+00:00",
+            effective_end_at="2025-05-14T20:34:57+00:00",
+            break_source="auto",
+            effective_start_source="auto_suggest",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=12,
+                    participant_key="persona@example.com",
+                    canonical_full_name="Persona Test",
+                    raw_full_name="Persona Test",
+                    email="persona@example.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=89.1,
+                    duration_second_half=115.8,
+                    total_minutes=0.0,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={},
+                )
+            ],
+            review_actions=[
+                DraftReviewActionView(
+                    id=22,
+                    lesson_id=62,
+                    participant_id=None,
+                    action_type="set_effective_end",
+                    payload={"at": "2025-05-14T20:04:06+00:00"},
+                    created_by="test",
+                    created_at="2026-05-18T09:25:04+00:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            ],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Persona Test",
+                observed_email="persona@example.com",
+                join_time="2025-05-14T17:05:00+00:00",
+                leave_time="2025-05-14T20:34:00+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(62, use_current_markers=True, apply_marker_action_ids={22})
+
+        baseline = mutation.last_update["diagnostics"]["review_action_baseline"]
+        self.assertEqual("2025-05-14T20:34:57+00:00", baseline["effective_end_at"])
+        self.assertEqual("2025-05-14T20:04:06+00:00", mutation.last_update["effective_end_at"])
+
     def test_recalculate_lesson_applies_manual_override_on_current_markers(self) -> None:
         lesson = DraftLessonView(
             id=59,
