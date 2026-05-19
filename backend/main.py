@@ -5,14 +5,21 @@ Single backend entry point for the Rebekko webapps workspace.
 At the moment it serves the Attendance module and its related APIs.
 """
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import base64
+import hashlib
+import hmac
+import json
 import os
+import secrets
 import tempfile
+import time
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 
 from backend.attendance_normalization.service import normalize_zoom_csv_file
@@ -44,6 +51,37 @@ WORKSPACE_DIR = os.path.dirname(BACKEND_DIR)
 # Load environment variables from the workspace .env file (for local development)
 load_dotenv(os.path.join(WORKSPACE_DIR, ".env"))
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+AUTH_ENABLED = _env_bool("AUTH_ENABLED", False)
+AUTH_GOOGLE_CLIENT_ID = os.getenv("AUTH_GOOGLE_CLIENT_ID", "").strip()
+AUTH_ALLOWED_EMAILS = {
+    email.strip().lower()
+    for email in os.getenv("AUTH_ALLOWED_EMAILS", "").split(",")
+    if email.strip()
+}
+AUTH_SESSION_SECRET = os.getenv("AUTH_SESSION_SECRET", "").strip()
+AUTH_SESSION_COOKIE = os.getenv("AUTH_SESSION_COOKIE", "rebekko_session").strip() or "rebekko_session"
+AUTH_SESSION_MAX_AGE_SECONDS = int(os.getenv("AUTH_SESSION_MAX_AGE_SECONDS", "28800"))
+AUTH_COOKIE_SECURE = _env_bool("AUTH_COOKIE_SECURE", True)
+
+PUBLIC_AUTH_PREFIXES = (
+    "/login",
+    "/logout",
+    "/auth/",
+    "/health",
+    "/assets/",
+    "/attendance/static/",
+    "/utilities/static/",
+    "/favicon.ico",
+)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Rebekko Webapps",
@@ -59,6 +97,94 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _auth_is_configured() -> bool:
+    return bool(AUTH_GOOGLE_CLIENT_ID and AUTH_ALLOWED_EMAILS and AUTH_SESSION_SECRET)
+
+
+def _auth_missing_config() -> list[str]:
+    missing = []
+    if not AUTH_GOOGLE_CLIENT_ID:
+        missing.append("AUTH_GOOGLE_CLIENT_ID")
+    if not AUTH_ALLOWED_EMAILS:
+        missing.append("AUTH_ALLOWED_EMAILS")
+    if not AUTH_SESSION_SECRET:
+        missing.append("AUTH_SESSION_SECRET")
+    return missing
+
+
+def _base64url_encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _base64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _sign_session_payload(payload: dict) -> str:
+    body = _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    signature = hmac.new(AUTH_SESSION_SECRET.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
+    return f"{body}.{_base64url_encode(signature)}"
+
+
+def _read_session_cookie(request: Request) -> dict | None:
+    token = request.cookies.get(AUTH_SESSION_COOKIE)
+    if not token or "." not in token or not AUTH_SESSION_SECRET:
+        return None
+    body, signature = token.rsplit(".", 1)
+    expected_signature = _base64url_encode(
+        hmac.new(AUTH_SESSION_SECRET.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
+    )
+    if not hmac.compare_digest(signature, expected_signature):
+        return None
+    try:
+        payload = json.loads(_base64url_decode(body).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    expires_at = int(payload.get("exp") or 0)
+    email = str(payload.get("email") or "").strip().lower()
+    if expires_at <= int(time.time()) or not email:
+        return None
+    if email not in AUTH_ALLOWED_EMAILS:
+        return None
+    return payload
+
+
+def _request_wants_json(request: Request) -> bool:
+    accept = request.headers.get("accept", "")
+    return request.url.path.startswith("/api/") or "application/json" in accept
+
+
+def _is_public_path(path: str) -> bool:
+    return any(path == prefix.rstrip("/") or path.startswith(prefix) for prefix in PUBLIC_AUTH_PREFIXES)
+
+
+@app.middleware("http")
+async def require_authentication(request: Request, call_next):
+    if not AUTH_ENABLED or _is_public_path(request.url.path):
+        return await call_next(request)
+
+    if not _auth_is_configured():
+        return JSONResponse(
+            {"detail": f"Auth enabled but missing config: {', '.join(_auth_missing_config())}"},
+            status_code=503,
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        )
+
+    session = _read_session_cookie(request)
+    if session is None:
+        if _request_wants_json(request):
+            return JSONResponse(
+                {"detail": "Authentication required."},
+                status_code=401,
+                headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+            )
+        return RedirectResponse(url=f"/login?next={request.url.path}", status_code=303)
+
+    request.state.user = session
+    return await call_next(request)
 
 # Attendance module paths
 ATTENDANCE_STATIC_DIR = os.path.join(WORKSPACE_DIR, "attendance", "static")
@@ -276,6 +402,212 @@ def render_module_shell(title: str, subtitle: str, body_html: str) -> str:
 </body>
 </html>
     """
+
+
+def render_login_page(error: str = "", next_url: str = "/") -> str:
+    config_missing = _auth_missing_config()
+    config_note = ""
+    google_button = ""
+    if config_missing:
+        config_note = f"""
+            <div class="login-error">
+                Configurazione auth incompleta: {", ".join(config_missing)}.
+                Con AUTH_ENABLED=false questa pagina puo' esistere, ma il login non e' operativo.
+            </div>
+        """
+    else:
+        google_button = f"""
+            <div id="g_id_onload"
+                data-client_id="{AUTH_GOOGLE_CLIENT_ID}"
+                data-callback="handleGoogleCredential"
+                data-auto_prompt="false"></div>
+            <div class="g_id_signin"
+                data-type="standard"
+                data-size="large"
+                data-theme="outline"
+                data-text="signin_with"
+                data-shape="pill"
+                data-logo_alignment="left"></div>
+        """
+    error_html = f'<div class="login-error">{error}</div>' if error else ""
+    return f"""
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Rebekko Webapps</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        * {{ box-sizing: border-box; }}
+        body {{
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: var(--brand-surface);
+            color: var(--brand-ink);
+        }}
+        .login-card {{
+            width: min(520px, 100%);
+            background: #fff;
+            border: 1px solid var(--brand-border);
+            border-radius: 22px;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+            overflow: hidden;
+        }}
+        .login-hero {{
+            padding: 28px;
+            background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, var(--brand-pnl-green) 100%);
+            color: #fff;
+        }}
+        .login-brand {{ display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }}
+        .login-brand img {{ height: 46px; width: auto; background: rgba(255,255,255,0.95); border-radius: 10px; padding: 4px; }}
+        .login-brand-title {{ font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }}
+        h1 {{ margin: 0 0 8px; font-size: 34px; }}
+        p {{ margin: 0; line-height: 1.55; opacity: 0.95; }}
+        .login-body {{ padding: 26px 28px 30px; display: flex; flex-direction: column; gap: 18px; }}
+        .login-error {{
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #fde7ec;
+            color: #b42318;
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 1.45;
+        }}
+        .login-note {{ color: var(--brand-muted); font-size: 14px; line-height: 1.5; }}
+    </style>
+</head>
+<body>
+    <main class="login-card">
+        <section class="login-hero">
+            <div class="login-brand">
+                <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                <div class="login-brand-title">Rebekko Webapps</div>
+            </div>
+            <h1>Accesso</h1>
+            <p>Accedi con Google usando un account autorizzato dalla scuola.</p>
+        </section>
+        <section class="login-body">
+            {error_html}
+            {config_note}
+            {google_button}
+            <div id="loginResult" class="login-note">L'accesso e' limitato agli account esplicitamente autorizzati.</div>
+        </section>
+    </main>
+    <script>
+        const NEXT_URL = {json.dumps(next_url if next_url.startswith("/") else "/")};
+        async function handleGoogleCredential(response) {{
+            const result = document.getElementById('loginResult');
+            result.textContent = 'Verifica accesso in corso...';
+            try {{
+                const apiResponse = await fetch('/auth/google', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ credential: response.credential }})
+                }});
+                const payload = await apiResponse.json();
+                if (!apiResponse.ok) {{
+                    throw new Error(payload.detail || 'Accesso non riuscito.');
+                }}
+                window.location.href = NEXT_URL || '/';
+            }} catch (error) {{
+                result.innerHTML = '<span style="color:#b42318;font-weight:800;">' + error.message + '</span>';
+            }}
+        }}
+    </script>
+</body>
+</html>
+    """
+
+
+@app.get("/login")
+async def login_page(request: Request):
+    session = _read_session_cookie(request) if _auth_is_configured() else None
+    next_url = request.query_params.get("next") or "/"
+    if session and AUTH_ENABLED:
+        return RedirectResponse(url=next_url if next_url.startswith("/") else "/", status_code=303)
+    return HTMLResponse(
+        render_login_page(next_url=next_url),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.post("/auth/google")
+async def auth_google(payload: dict):
+    if not _auth_is_configured():
+        raise HTTPException(status_code=503, detail=f"Auth non configurata: {', '.join(_auth_missing_config())}")
+    credential = str(payload.get("credential") or "").strip()
+    if not credential:
+        raise HTTPException(status_code=400, detail="Credential Google mancante.")
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"id_token": credential},
+        )
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Token Google non valido.")
+
+    token_info = response.json()
+    audience = str(token_info.get("aud") or "")
+    email = str(token_info.get("email") or "").strip().lower()
+    email_verified = str(token_info.get("email_verified") or "").lower() == "true"
+    if audience != AUTH_GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=401, detail="Token Google emesso per un client diverso.")
+    if not email or not email_verified:
+        raise HTTPException(status_code=401, detail="Email Google non verificata.")
+    if email not in AUTH_ALLOWED_EMAILS:
+        raise HTTPException(status_code=403, detail="Email non autorizzata per Rebekko.")
+
+    now = int(time.time())
+    session_payload = {
+        "email": email,
+        "name": token_info.get("name") or email,
+        "iat": now,
+        "exp": now + AUTH_SESSION_MAX_AGE_SECONDS,
+        "nonce": secrets.token_urlsafe(12),
+    }
+    token = _sign_session_payload(session_payload)
+    response_payload = JSONResponse(
+        {"ok": True, "email": email, "name": session_payload["name"]},
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+    response_payload.set_cookie(
+        AUTH_SESSION_COOKIE,
+        token,
+        max_age=AUTH_SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=AUTH_COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    return response_payload
+
+
+@app.get("/auth/whoami")
+async def auth_whoami(request: Request):
+    session = _read_session_cookie(request) if _auth_is_configured() else None
+    return JSONResponse(
+        {
+            "auth_enabled": AUTH_ENABLED,
+            "configured": _auth_is_configured(),
+            "email": session.get("email") if session else None,
+            "name": session.get("name") if session else None,
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(AUTH_SESSION_COOKIE, path="/")
+    return response
 
 
 @app.get("/")
