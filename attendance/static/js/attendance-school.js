@@ -4,19 +4,47 @@ const AttendanceSchoolApp = {
     async init() {
         this._els = {
             summary: document.getElementById('summary'),
-            courseFilter: document.getElementById('courseFilter'),
             studentFilter: document.getElementById('studentFilter'),
             studentAliasLink: document.getElementById('studentAliasLink'),
+            courseCheckboxes: document.getElementById('courseCheckboxes'),
+            dateStartFilter: document.getElementById('dateStartFilter'),
+            dateEndFilter: document.getElementById('dateEndFilter'),
+            selectAllCourses: document.getElementById('selectAllCourses'),
+            clearCourses: document.getElementById('clearCourses'),
             orientationContainer: document.getElementById('orientationContainer'),
             tableContainer: document.getElementById('tableContainer'),
             sourceModalHost: document.getElementById('sourceModalHost'),
         };
         this._records = [];
-        this._filters = { course: '', student: '' };
+        this._filters = { courses: new Set(), dateStart: '', dateEnd: '', student: '' };
+        this._allCourses = [];
         this._studentLabelsByFilterKey = new Map();
 
-        this._els.courseFilter.addEventListener('change', () => {
-            this._filters.course = this._els.courseFilter.value;
+        this._els.selectAllCourses.addEventListener('click', () => {
+            this._filters.courses = new Set(this._allCourses);
+            this._filters.student = '';
+            this._populateCourseCheckboxes();
+            this._populateStudentFilter();
+            this._render();
+        });
+
+        this._els.clearCourses.addEventListener('click', () => {
+            this._filters.courses = new Set();
+            this._filters.student = '';
+            this._populateCourseCheckboxes();
+            this._populateStudentFilter();
+            this._render();
+        });
+
+        this._els.dateStartFilter.addEventListener('change', () => {
+            this._filters.dateStart = this._els.dateStartFilter.value;
+            this._filters.student = '';
+            this._populateStudentFilter();
+            this._render();
+        });
+
+        this._els.dateEndFilter.addEventListener('change', () => {
+            this._filters.dateEnd = this._els.dateEndFilter.value;
             this._filters.student = '';
             this._populateStudentFilter();
             this._render();
@@ -45,7 +73,10 @@ const AttendanceSchoolApp = {
                 if (dateCompare !== 0) return dateCompare;
                 return a.canonical_full_name.localeCompare(b.canonical_full_name, 'it');
             });
-            this._populateCourseFilter();
+            this._allCourses = [...new Set(this._records.map((record) => record.course_name))]
+                .sort((a, b) => a.localeCompare(b, 'it'));
+            this._filters.courses = new Set(this._allCourses);
+            this._populateCourseCheckboxes();
             this._populateStudentFilter();
             this._render();
         } catch (error) {
@@ -54,14 +85,32 @@ const AttendanceSchoolApp = {
         }
     },
 
-    _populateCourseFilter() {
-        const courses = [...new Set(this._records.map((record) => record.course_name))].sort((a, b) => a.localeCompare(b, 'it'));
-        this._els.courseFilter.innerHTML = ['<option value="">Tutti i corsi</option>', ...courses.map((course) => `<option value="${this._escapeAttr(course)}">${this._escapeHtml(course)}</option>`)].join('');
-        this._els.courseFilter.value = this._filters.course;
+    _populateCourseCheckboxes() {
+        this._els.courseCheckboxes.innerHTML = this._allCourses.map((course) => {
+            const checked = this._filters.courses.has(course) ? 'checked' : '';
+            return `
+                <label class="course-check">
+                    <input type="checkbox" value="${this._escapeAttr(course)}" ${checked}>
+                    <span>${this._escapeHtml(course)}</span>
+                </label>
+            `;
+        }).join('');
+        this._els.courseCheckboxes.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    this._filters.courses.add(checkbox.value);
+                } else {
+                    this._filters.courses.delete(checkbox.value);
+                }
+                this._filters.student = '';
+                this._populateStudentFilter();
+                this._render();
+            });
+        });
     },
 
     _populateStudentFilter() {
-        const filteredByCourse = this._records.filter((record) => !this._filters.course || record.course_name === this._filters.course);
+        const filteredByCourse = this._records.filter((record) => this._recordMatchesScope(record));
         const studentByKey = new Map();
         for (const record of filteredByCourse) {
             const key = this._studentFilterKey(record);
@@ -92,10 +141,17 @@ const AttendanceSchoolApp = {
 
     _getFilteredRecords() {
         return this._records.filter((record) => {
-            if (this._filters.course && record.course_name !== this._filters.course) return false;
+            if (!this._recordMatchesScope(record)) return false;
             if (this._filters.student && this._studentFilterKey(record) !== this._filters.student) return false;
             return true;
         });
+    },
+
+    _recordMatchesScope(record) {
+        if (!this._filters.courses.has(record.course_name)) return false;
+        if (this._filters.dateStart && record.lesson_date < this._filters.dateStart) return false;
+        if (this._filters.dateEnd && record.lesson_date > this._filters.dateEnd) return false;
+        return true;
     },
 
     _render() {
@@ -136,7 +192,7 @@ const AttendanceSchoolApp = {
     },
 
     _renderCourseOrientation() {
-        const records = this._records.filter((record) => !this._filters.course || record.course_name === this._filters.course);
+        const records = this._records.filter((record) => this._recordMatchesScope(record));
         const courses = this._buildCourseOverview(records);
         if (!courses.length) {
             this._els.orientationContainer.innerHTML = '<div class="empty">Nessun corso official compatibile con i filtri attivi.</div>';
@@ -180,7 +236,7 @@ const AttendanceSchoolApp = {
     _renderStudentOrientation() {
         const studentLabel = this._studentLabelsByFilterKey.get(this._filters.student) || 'Studente selezionato';
         const recordsByCourse = this._records.filter((record) => {
-            if (this._filters.course && record.course_name !== this._filters.course) return false;
+            if (!this._recordMatchesScope(record)) return false;
             return this._studentFilterKey(record) === this._filters.student;
         });
         const activeCourses = [...new Set(
@@ -194,9 +250,11 @@ const AttendanceSchoolApp = {
             return;
         }
 
-        const participationByStudentCourse = this._buildParticipationIndex(this._records);
+        const participationByStudentCourse = this._buildParticipationIndex(
+            this._records.filter((record) => this._recordMatchesScope(record))
+        );
         const allLessonsByCourse = this._buildCourseOverview(
-            this._records.filter((record) => activeCourses.includes(record.course_name))
+            this._records.filter((record) => activeCourses.includes(record.course_name) && this._recordMatchesScope(record))
         );
         const courseByName = new Map(allLessonsByCourse.map((course) => [course.courseName, course]));
 
@@ -303,7 +361,7 @@ const AttendanceSchoolApp = {
             return;
         }
 
-        const participationByStudentCourse = this._buildParticipationIndex(this._records);
+        const participationByStudentCourse = this._buildParticipationIndex(this._records.filter((record) => this._recordMatchesScope(record)));
 
         this._els.tableContainer.innerHTML = `
             <table>

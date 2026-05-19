@@ -33,10 +33,22 @@
         .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 14px 0 18px; }
         .filter-group { display: flex; flex-direction: column; gap: 8px; }
         .filter-group label { font-size: 13px; font-weight: 700; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .filter-group select { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+        .filter-group select,
+        .filter-group input { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
         .filter-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: -4px; }
         .filter-tool-link { color: #155e75; font-weight: 800; font-size: 13px; text-decoration: none; }
         .filter-tool-link:hover { text-decoration: underline; }
+        .scope-filters { margin: 18px 0 20px; padding: 16px; border: 1px solid var(--brand-border); border-radius: 16px; background: #fbfdff; }
+        .scope-filters-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+        .scope-filters-title { margin: 0; font-size: 16px; font-weight: 900; color: var(--brand-ink); }
+        .scope-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .scope-button { border: 1px solid var(--brand-border); background: #fff; color: #155e75; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .scope-button:hover { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
+        .date-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+        .course-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; max-height: 156px; overflow: auto; padding: 2px; }
+        .course-check { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 10px; background: #fff; color: var(--brand-ink); font-size: 13px; font-weight: 800; cursor: pointer; user-select: none; }
+        .course-check input { width: 15px; height: 15px; accent-color: var(--brand-pnl-blue); }
+        .course-check:has(input:checked) { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
         .orientation { display: flex; flex-direction: column; gap: 14px; margin: 18px 0 22px; }
         .orientation-head { display: flex; justify-content: space-between; gap: 12px; align-items: end; flex-wrap: wrap; }
         .orientation-title { margin: 0; color: var(--brand-ink); font-size: 20px; font-weight: 900; }
@@ -139,12 +151,6 @@
 
             <div class="filters">
                 <div class="filter-group">
-                    <label for="courseFilter">Corso</label>
-                    <select id="courseFilter">
-                        <option value="">Tutti i corsi</option>
-                    </select>
-                </div>
-                <div class="filter-group">
                     <label for="studentFilter">Studente</label>
                     <select id="studentFilter">
                         <option value="">Tutti gli studenti</option>
@@ -155,12 +161,33 @@
                 </div>
             </div>
 
+            <section class="scope-filters" aria-label="Filtri mappa corsi">
+                <div class="scope-filters-head">
+                    <h3 class="scope-filters-title">Selezione corsi e periodo</h3>
+                    <div class="scope-actions">
+                        <button type="button" id="selectAllCourses" class="scope-button">Tutti i corsi</button>
+                        <button type="button" id="clearCourses" class="scope-button">Nessun corso</button>
+                    </div>
+                </div>
+                <div class="date-filter-grid">
+                    <div class="filter-group">
+                        <label for="dateStartFilter">Data inizio</label>
+                        <input id="dateStartFilter" type="date">
+                    </div>
+                    <div class="filter-group">
+                        <label for="dateEndFilter">Data fine</label>
+                        <input id="dateEndFilter" type="date">
+                    </div>
+                </div>
+                <div id="courseCheckboxes" class="course-checkboxes"></div>
+            </section>
+
             <div id="orientationContainer" class="orientation"></div>
             <div id="tableContainer" class="table-wrap"></div>
             <div id="sourceModalHost"></div>
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-school.js?v=20260518-course-map"></script>
+    <script src="/attendance/static/js/attendance-school.js?v=20260519-scope-filters"></script>
 </body>
 </html>
