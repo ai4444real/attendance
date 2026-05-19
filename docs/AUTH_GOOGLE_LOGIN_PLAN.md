@@ -20,12 +20,18 @@ Quando tutto e' pronto:
 AUTH_ENABLED=true
 ```
 
+Oppure:
+
+```bash
+cd /opt/rebekko/webapps
+./scripts/enablelogin.sh
+```
+
 Rollback rapido sul server:
 
 ```bash
 cd /opt/rebekko/webapps
-sed -i 's/^AUTH_ENABLED=.*/AUTH_ENABLED=false/' .env
-sudo systemctl restart rebekko-webapps
+./scripts/disablelogin.sh
 ```
 
 ## Configurazione prevista
