@@ -621,6 +621,7 @@ const AttendanceSchoolApp = {
     _formatShortDate(value) {
         const date = new Date(value);
         return date.toLocaleDateString('it-CH', {
+            year: 'numeric',
             month: '2-digit',
             day: '2-digit',
         });
