@@ -75,7 +75,7 @@ const AttendanceSchoolApp = {
             });
             this._allCourses = [...new Set(this._records.map((record) => record.course_name))]
                 .sort((a, b) => a.localeCompare(b, 'it'));
-            this._filters.courses = new Set(this._allCourses);
+            this._applyDefaultScopeFilters();
             this._populateCourseCheckboxes();
             this._populateStudentFilter();
             this._render();
@@ -83,6 +83,28 @@ const AttendanceSchoolApp = {
             console.error(error);
             this._els.tableContainer.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
         }
+    },
+
+    _applyDefaultScopeFilters() {
+        const preferredCourses = new Set(['MASTER', 'PRACTITIONER']);
+        const matchingPreferredCourses = this._allCourses.filter((course) => preferredCourses.has(String(course).toLocaleUpperCase('it')));
+        this._filters.courses = new Set(matchingPreferredCourses.length ? matchingPreferredCourses : this._allCourses);
+
+        const lessonDates = this._records
+            .map((record) => record.lesson_date)
+            .filter(Boolean)
+            .sort();
+        if (!lessonDates.length) {
+            return;
+        }
+        const latestDate = lessonDates[lessonDates.length - 1];
+        const startDate = new Date(`${latestDate}T00:00:00`);
+        startDate.setFullYear(startDate.getFullYear() - 1);
+
+        this._filters.dateStart = this._formatDateInput(startDate);
+        this._filters.dateEnd = latestDate;
+        this._els.dateStartFilter.value = this._filters.dateStart;
+        this._els.dateEndFilter.value = this._filters.dateEnd;
     },
 
     _populateCourseCheckboxes() {
@@ -625,6 +647,13 @@ const AttendanceSchoolApp = {
             month: '2-digit',
             day: '2-digit',
         });
+    },
+
+    _formatDateInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     },
 
     _formatDateTime(value, fallbackValue = null) {
