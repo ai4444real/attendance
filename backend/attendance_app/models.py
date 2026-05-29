@@ -194,6 +194,7 @@ class DraftLessonView:
     summary: dict[str, int]
     participants: list[DraftLessonParticipantView]
     review_actions: list[DraftReviewActionView]
+    import_batch_id: int = 0
 
 
 @dataclass(frozen=True)

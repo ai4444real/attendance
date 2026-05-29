@@ -12,8 +12,31 @@ const DraftImportsApp = {
         };
         this._batchScope = 'open';
         this._lessonFilter = 'draft';
+        this._initialLessonId = Number(new URLSearchParams(window.location.search).get('lesson_id') || 0) || null;
+
+        if (this._initialLessonId) {
+            this._batchScope = 'all';
+            this._lessonFilter = 'all';
+            await this._loadBatchesForLesson(this._initialLessonId);
+            return;
+        }
 
         await this._loadBatches();
+    },
+
+    async _loadBatchesForLesson(lessonId) {
+        try {
+            const response = await fetch(`/api/attendance/lessons/${lessonId}`, { cache: 'no-store' });
+            const payload = await this._readApiPayload(response);
+            if (!response.ok) {
+                throw new Error(payload.detail || 'Impossibile trovare la lezione richiesta.');
+            }
+            await this._loadBatches(Number(payload.lesson.import_batch_id), lessonId);
+        } catch (error) {
+            console.error(error);
+            this._els.lessonsContainer.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
+            await this._loadBatches();
+        }
     },
 
     async _loadBatches(preferredBatchId = null, preferredLessonId = null) {
@@ -34,9 +57,18 @@ const DraftImportsApp = {
             this._renderBatchList();
 
             if (this._batches.length > 0) {
-                const nextBatch = this._batches.find((batch) => batch.id === preferredBatchId) || this._batches[0];
-                await this._loadBatchDetail(nextBatch.id, preferredLessonId);
+                const nextBatch = this._batches.find((batch) => batch.id === preferredBatchId);
+                if (preferredBatchId && !nextBatch) {
+                    await this._loadBatchDetail(preferredBatchId, preferredLessonId);
+                    return;
+                }
+                const batchToLoad = nextBatch || this._batches[0];
+                await this._loadBatchDetail(batchToLoad.id, preferredLessonId);
             } else {
+                if (preferredBatchId) {
+                    await this._loadBatchDetail(preferredBatchId, preferredLessonId);
+                    return;
+                }
                 this._els.batchList.innerHTML = '<div class="empty">Nessun import batch nel filtro corrente.</div>';
                 this._els.batchSummary.innerHTML = '';
             }

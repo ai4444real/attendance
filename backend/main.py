@@ -973,6 +973,7 @@ async def attendance_lesson_detail(lesson_id: int):
     return JSONResponse({
         "lesson": {
             "id": lesson.id,
+            "import_batch_id": lesson.import_batch_id,
             "course_name": lesson.course_name,
             "lesson_date": lesson.lesson_date,
             "source_meeting_id": lesson.source_meeting_id,
@@ -1479,6 +1480,7 @@ async def attendance_school_record_source(lesson_id: int, canonical_full_name: s
         {
             "lesson": {
                 "id": lesson.id,
+                "import_batch_id": lesson.import_batch_id,
                 "course_name": lesson.course_name,
                 "lesson_date": lesson.lesson_date,
                 "meeting_start_at": lesson.meeting_start_at,

@@ -62,7 +62,8 @@
         .course-map-score-value { font-size: 22px; font-weight: 900; color: var(--brand-ink); }
         .course-map-score-detail { color: var(--brand-muted); font-size: 12px; font-weight: 700; }
         .lesson-timeline { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
-        .lesson-tile { flex: 0 0 auto; min-width: 86px; border: 1px solid var(--brand-border); border-radius: 12px; background: #fff; padding: 9px 10px; }
+        .lesson-tile { flex: 0 0 auto; min-width: 86px; border: 1px solid var(--brand-border); border-radius: 12px; background: #fff; padding: 9px 10px; text-decoration: none; display: block; }
+        .lesson-tile:hover { border-color: var(--brand-pnl-blue); box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08); }
         .lesson-tile-date { font-size: 14px; font-weight: 900; color: var(--brand-ink); white-space: nowrap; }
         .lesson-tile-detail { margin-top: 4px; font-size: 12px; color: var(--brand-muted); font-weight: 700; white-space: nowrap; }
         .lesson-tile.presente { border-color: #b8ead0; background: #f0fbf5; }
@@ -96,6 +97,8 @@
         .exam-tag.partial { background: #f3f7fb; color: var(--brand-muted); border: 1px solid var(--brand-border); }
         .origin-button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--brand-border); background: #fff; color: #155e75; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
         .origin-button:hover { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
+        .lesson-link { color: #155e75; font-weight: 800; text-decoration: none; }
+        .lesson-link:hover { text-decoration: underline; }
         .source-modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.48); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 60; }
         .source-modal { width: min(760px, 100%); max-height: calc(100vh - 48px); overflow: auto; background: #fff; border: 1px solid var(--brand-border); border-radius: 18px; box-shadow: 0 28px 50px rgba(15, 23, 42, 0.28); }
         .source-modal-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; padding: 18px 20px; border-bottom: 1px solid var(--brand-border); }
@@ -188,6 +191,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-school.js?v=20260519-scope-filters"></script>
+    <script src="/attendance/static/js/attendance-school.js?v=20260529-draft-links"></script>
 </body>
 </html>
