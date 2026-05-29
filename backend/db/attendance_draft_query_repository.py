@@ -133,7 +133,6 @@ class PostgresAttendanceDraftQueryRepository:
                     )
                     SELECT
                         l.id,
-                        l.import_batch_id,
                         l.course_name,
                         l.lesson_date,
                         l.source_meeting_id,
@@ -179,6 +178,7 @@ class PostgresAttendanceDraftQueryRepository:
                     )
                     SELECT
                         l.id,
+                        l.import_batch_id,
                         l.course_name,
                         l.lesson_date,
                         l.source_meeting_id,
