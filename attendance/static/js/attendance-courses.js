@@ -88,7 +88,7 @@ const AttendanceCoursesApp = {
                                 value="${course.expected_lessons_source === 'configured' ? this._escapeAttr(course.expected_lessons_count) : ''}"
                                 placeholder="${this._escapeAttr(course.expected_lessons_count || lessons.length)}"
                             >
-                            <button class="course-target-button" type="submit">Update</button>
+                            <button class="course-target-button" type="submit">Salva</button>
                             <div class="course-target-status" aria-live="polite"></div>
                         </form>
                     </div>
