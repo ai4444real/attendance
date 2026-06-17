@@ -512,7 +512,7 @@ class PostgresAttendanceDraftQueryRepository:
                             course_name,
                             lesson_date,
                             MIN(canonical_full_name) AS canonical_full_name,
-                            email,
+                            MIN(email) AS email,
                             MAX(status_rank) AS status_rank,
                             MIN(participant_id) AS first_participant_id
                         FROM resolved_participants
