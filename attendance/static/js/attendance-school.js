@@ -127,6 +127,8 @@ const AttendanceSchoolApp = {
     },
 
     _populateStudentFilter() {
+        const previousStudentKey = this._filters.student;
+        const previousStudentLabel = this._studentLabelsByFilterKey.get(previousStudentKey) || '';
         const filteredByCourse = this._records.filter((record) => this._recordMatchesScope(record));
         const studentByKey = new Map();
         for (const record of filteredByCourse) {
@@ -144,7 +146,11 @@ const AttendanceSchoolApp = {
         ].join('');
         this._studentLabelsByFilterKey = new Map(students);
         if (this._filters.student && !this._studentLabelsByFilterKey.has(this._filters.student)) {
-            this._filters.student = '';
+            const sameLabel = students.find(([, label]) => (
+                previousStudentLabel
+                && label.localeCompare(previousStudentLabel, 'it', { sensitivity: 'base' }) === 0
+            ));
+            this._filters.student = sameLabel ? sameLabel[0] : '';
         }
         this._els.studentFilter.value = this._filters.student;
         this._updateStudentAliasLink();
