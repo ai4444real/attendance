@@ -452,37 +452,100 @@ class PostgresAttendanceDraftQueryRepository:
                             COUNT(*) AS official_lessons_count
                         FROM official_lessons
                         GROUP BY course_name
+                    ),
+                    participant_base AS (
+                        SELECT
+                            l.id AS lesson_id,
+                            l.course_name,
+                            l.lesson_date,
+                            p.id AS participant_id,
+                            p.canonical_full_name,
+                            NULLIF(lower(COALESCE(p.email, '')), '') AS email,
+                            p.final_presence_status
+                        FROM official_lessons AS l
+                        JOIN attendance_lesson_participants AS p
+                            ON p.lesson_id = l.id
+                        WHERE NOT EXISTS (
+                            SELECT 1
+                            FROM instructor_names AS i
+                            WHERE i.name_key IN (
+                                lower(p.canonical_full_name),
+                                lower(COALESCE(p.raw_full_name, ''))
+                            )
+                        )
+                    ),
+                    identity_emails_by_name AS (
+                        SELECT
+                            lower(canonical_full_name) AS name_key,
+                            CASE
+                                WHEN COUNT(DISTINCT email) = 1 THEN MIN(email)
+                                ELSE NULL
+                            END AS unique_email
+                        FROM participant_base
+                        WHERE email IS NOT NULL
+                        GROUP BY lower(canonical_full_name)
+                    ),
+                    resolved_participants AS (
+                        SELECT
+                            b.lesson_id,
+                            b.course_name,
+                            b.lesson_date,
+                            MIN(b.canonical_full_name) OVER (
+                                PARTITION BY lower(b.canonical_full_name)
+                            ) AS canonical_full_name,
+                            COALESCE(b.email, e.unique_email) AS email,
+                            b.final_presence_status,
+                            CASE b.final_presence_status
+                                WHEN 'presente' THEN 3
+                                WHEN 'seconda_meta' THEN 2
+                                WHEN 'prima_meta' THEN 1
+                                ELSE 0
+                            END AS status_rank,
+                            b.participant_id
+                        FROM participant_base AS b
+                        LEFT JOIN identity_emails_by_name AS e
+                            ON e.name_key = lower(b.canonical_full_name)
+                    ),
+                    collapsed_participants AS (
+                        SELECT
+                            lesson_id,
+                            course_name,
+                            lesson_date,
+                            MIN(canonical_full_name) AS canonical_full_name,
+                            email,
+                            MAX(status_rank) AS status_rank,
+                            MIN(participant_id) AS first_participant_id
+                        FROM resolved_participants
+                        GROUP BY
+                            lesson_id,
+                            course_name,
+                            lesson_date,
+                            lower(canonical_full_name),
+                            COALESCE(email, '')
                     )
                     SELECT
-                        l.id,
-                        l.course_name,
-                        l.lesson_date,
-                        MIN(p.canonical_full_name) OVER (
-                            PARTITION BY lower(p.canonical_full_name), lower(COALESCE(p.email, ''))
-                        ) AS canonical_full_name,
+                        p.lesson_id,
+                        p.course_name,
+                        p.lesson_date,
+                        p.canonical_full_name,
                         p.email,
-                        p.final_presence_status,
+                        CASE p.status_rank
+                            WHEN 3 THEN 'presente'
+                            WHEN 2 THEN 'seconda_meta'
+                            WHEN 1 THEN 'prima_meta'
+                            ELSE 'assente'
+                        END AS final_presence_status,
                         COALESCE(c.expected_lessons_count, lc.official_lessons_count) AS expected_lessons_count,
                         CASE
                             WHEN c.expected_lessons_count IS NULL THEN 'official_lessons'
                             ELSE 'configured'
                         END AS expected_lessons_source
-                    FROM official_lessons AS l
-                    JOIN attendance_lesson_participants AS p
-                        ON p.lesson_id = l.id
+                    FROM collapsed_participants AS p
                     JOIN lesson_counts AS lc
-                        ON lc.course_name = l.course_name
+                        ON lc.course_name = p.course_name
                     LEFT JOIN attendance_courses AS c
-                        ON c.course_name = l.course_name
-                    WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM instructor_names AS i
-                        WHERE i.name_key IN (
-                            lower(p.canonical_full_name),
-                            lower(COALESCE(p.raw_full_name, ''))
-                        )
-                    )
-                    ORDER BY l.course_name ASC, l.lesson_date ASC, p.canonical_full_name ASC, p.id ASC
+                        ON c.course_name = p.course_name
+                    ORDER BY p.course_name ASC, p.lesson_date ASC, p.canonical_full_name ASC, p.first_participant_id ASC
                     """
                 )
                 rows = cursor.fetchall()

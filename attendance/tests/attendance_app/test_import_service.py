@@ -1468,6 +1468,91 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
 
 
 class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
+    def test_rebuild_lesson_merges_same_name_with_missing_email(self) -> None:
+        lesson = DraftLessonView(
+            id=777,
+            course_name="PRACTITIONER",
+            lesson_date="2026-02-01",
+            source_meeting_id="891 9285 7355",
+            status="official",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-02-01T18:30:00+00:00",
+            meeting_end_at="2026-02-01T21:30:00+00:00",
+            effective_start_at="2026-02-01T19:00:00+00:00",
+            break_point_at="2026-02-01T20:00:00+00:00",
+            effective_end_at="2026-02-01T21:00:00+00:00",
+            break_source="midpoint",
+            effective_start_source="snap",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 1, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=21,
+                    participant_key="giusy faranda",
+                    canonical_full_name="Giusy Faranda",
+                    raw_full_name="Giusy Faranda",
+                    email=None,
+                    segment_count=1,
+                    minutes_first_half=55.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=60.0,
+                    duration_second_half=60.0,
+                    total_minutes=55.0,
+                    calculated_presence_status="prima_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="prima_meta",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "segments": [["2026-02-01T19:00:00+00:00", "2026-02-01T19:55:00+00:00"]],
+                    },
+                ),
+                DraftLessonParticipantView(
+                    id=22,
+                    participant_key="giusyfaranda@gmail.com",
+                    canonical_full_name="Giusy Faranda",
+                    raw_full_name="Giusy Faranda",
+                    email="giusyfaranda@gmail.com",
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=55.0,
+                    duration_first_half=60.0,
+                    duration_second_half=60.0,
+                    total_minutes=55.0,
+                    calculated_presence_status="seconda_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="seconda_meta",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "segments": [["2026-02-01T20:05:00+00:00", "2026-02-01T21:00:00+00:00"]],
+                    },
+                ),
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonIdentityRebuildService(
+            query,
+            mutation,
+            FakeAttendanceIdentityAliasRepository(),
+        )
+
+        service.rebuild_lesson_with_current_aliases(777)
+
+        self.assertIsNotNone(mutation.last_identity_rebuild)
+        participants = mutation.last_identity_rebuild["participants"]
+        self.assertEqual(1, len(participants))
+        self.assertEqual(21, participants[0]["survivor_id"])
+        self.assertEqual([22], participants[0]["obsolete_ids"])
+        self.assertEqual("giusyfaranda@gmail.com", participants[0]["participant_key"])
+        self.assertEqual("giusyfaranda@gmail.com", participants[0]["email"])
+        self.assertEqual("presente", participants[0]["final_presence_status"])
+
     def test_rebuild_lesson_with_current_aliases_merges_duplicate_identity_rows(self) -> None:
         lesson = DraftLessonView(
             id=128,
