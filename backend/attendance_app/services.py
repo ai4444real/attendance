@@ -127,6 +127,13 @@ class AttendanceImportService:
                         effective_end_at=meeting.effective_end,
                     )
 
+            participants_by_key = self._merge_compatible_same_name_participants(
+                participants_by_key,
+                threshold=meeting.threshold,
+                effective_start_at=meeting.effective_start,
+                break_point_at=meeting.break_point,
+                effective_end_at=meeting.effective_end,
+            )
             participants = sorted(
                 participants_by_key.values(),
                 key=lambda participant: participant.canonical_full_name.lower(),
@@ -254,7 +261,7 @@ class AttendanceImportService:
             merged_metadata["segments"] = left_segments + right_segments
 
         return LessonParticipantDraft(
-            participant_key=left.participant_key,
+            participant_key=(email or canonical_full_name).strip().lower(),
             canonical_full_name=canonical_full_name,
             raw_full_name=raw_full_name,
             email=email,
@@ -269,6 +276,38 @@ class AttendanceImportService:
             flags=merged_flags,
             metadata=merged_metadata,
         )
+
+    def _merge_compatible_same_name_participants(
+        self,
+        participants_by_key: dict[str, LessonParticipantDraft],
+        *,
+        threshold: float,
+        effective_start_at: str,
+        break_point_at: str,
+        effective_end_at: str,
+    ) -> dict[str, LessonParticipantDraft]:
+        merged: dict[str, LessonParticipantDraft] = {}
+        for target_key, participants in _group_by_compatible_identity(
+            participants_by_key.values(),
+            full_name_getter=lambda participant: participant.canonical_full_name,
+            email_getter=lambda participant: participant.email,
+        ).items():
+            if len(participants) > 1:
+                survivor = participants[0]
+                for participant in participants[1:]:
+                    survivor = self._merge_participant_drafts(
+                        survivor,
+                        participant,
+                        threshold=threshold,
+                        effective_start_at=effective_start_at,
+                        break_point_at=break_point_at,
+                        effective_end_at=effective_end_at,
+                    )
+                merged[target_key] = survivor
+                continue
+            for participant in participants:
+                merged[participant.participant_key] = participant
+        return merged
 
 
 class AttendanceReviewActionService:
@@ -1423,6 +1462,10 @@ class AttendanceLessonIdentityRebuildService:
             old_to_target_key[participant.id] = rebuilt_key
             grouped_participants[rebuilt_key].append(participant)
 
+        grouped_participants, old_to_target_key = self._merge_compatible_rebuild_groups(
+            grouped_participants,
+            old_to_target_key,
+        )
         remapped_overrides = self._build_manual_override_map(action_sequence, lesson.participants, old_to_target_key)
 
         rebuilt_participants: list[dict] = []
@@ -1510,6 +1553,40 @@ class AttendanceLessonIdentityRebuildService:
             email_alias_map,
         )
         return (canonical_email or "").strip().lower() or canonical_full_name.lower()
+
+    def _merge_compatible_rebuild_groups(
+        self,
+        grouped_participants: dict[str, list],
+        old_to_target_key: dict[int, str],
+    ) -> tuple[dict[str, list], dict[int, str]]:
+        group_descriptors = [
+            {
+                "target_key": target_key,
+                "canonical_full_name": participants[0].canonical_full_name,
+                "canonical_email": target_key if "@" in target_key else None,
+                "participants": participants,
+            }
+            for target_key, participants in grouped_participants.items()
+            if participants
+        ]
+        descriptor_groups = _group_by_compatible_identity(
+            group_descriptors,
+            full_name_getter=lambda descriptor: descriptor["canonical_full_name"],
+            email_getter=lambda descriptor: descriptor["canonical_email"],
+        )
+
+        compatible_groups: dict[str, list] = {}
+        for target_key, descriptors in descriptor_groups.items():
+            compatible_groups[target_key] = [
+                participant
+                for descriptor in descriptors
+                for participant in descriptor["participants"]
+            ]
+        rebuilt_old_to_target: dict[int, str] = {}
+        for target_key, participants in compatible_groups.items():
+            for participant in participants:
+                rebuilt_old_to_target[participant.id] = target_key
+        return compatible_groups, rebuilt_old_to_target
 
     def _build_forced_identity_pairs(self, lesson: DraftLessonView, forced_merge: dict | None) -> set[tuple[str, str]]:
         if not forced_merge:
@@ -1648,6 +1725,39 @@ def _normalize_identity_key(value: str) -> str:
     return " ".join((value or "").strip().casefold().split())
 
 
+def _group_by_compatible_identity(items, *, full_name_getter, email_getter) -> dict[str, list]:
+    item_list = list(items)
+    emails_by_name: dict[str, set[str]] = defaultdict(set)
+    for item in item_list:
+        name_key = _normalize_identity_key(full_name_getter(item))
+        email_key = (email_getter(item) or "").strip().casefold()
+        if name_key and email_key:
+            emails_by_name[name_key].add(email_key)
+
+    grouped: dict[str, list] = defaultdict(list)
+    for item in item_list:
+        key = _compatible_identity_key(
+            full_name_getter(item),
+            email_getter(item),
+            emails_by_name,
+        )
+        grouped[key].append(item)
+    return dict(grouped)
+
+
+def _compatible_identity_key(
+    full_name: str,
+    email: str | None,
+    emails_by_name: dict[str, set[str]],
+) -> str:
+    name_key = _normalize_identity_key(full_name)
+    email_key = (email or "").strip().casefold()
+    known_emails = emails_by_name.get(name_key, set())
+    if name_key and len(known_emails) <= 1:
+        return next(iter(known_emails), "") or name_key
+    return email_key or name_key
+
+
 def _split_full_name(full_name: str) -> tuple[str, str]:
     parts = [part for part in (full_name or "").split(" ") if part]
     if not parts:
@@ -1777,8 +1887,8 @@ def _aggregate_source_segments_by_final_identity(
     forced_canonical_full_name: str | None,
     forced_canonical_email: str | None,
 ) -> dict[str, dict]:
-    grouped: dict[str, dict] = {}
     target_tz = effective_start.tzinfo
+    canonical_segments: list[dict] = []
     for source_segment in source_segments:
         source_name = (source_segment.observed_full_name or "").strip()
         source_email = (source_segment.observed_email or "").strip()
@@ -1792,7 +1902,34 @@ def _aggregate_source_segments_by_final_identity(
                 name_alias_map,
                 email_alias_map,
             )
-        target_key = (canonical_email or "").strip().lower() or canonical_full_name.lower()
+        canonical_segments.append(
+            {
+                "canonical_full_name": canonical_full_name,
+                "canonical_email": canonical_email,
+                "join_time": source_segment.join_time,
+                "leave_time": source_segment.leave_time,
+            }
+        )
+
+    grouped: dict[str, dict] = {}
+    for target_key, group_segments in _group_by_compatible_identity(
+        canonical_segments,
+        full_name_getter=lambda item: item["canonical_full_name"],
+        email_getter=lambda item: item["canonical_email"],
+    ).items():
+        canonical_full_name = max(
+            (str(item["canonical_full_name"] or "").strip() for item in group_segments),
+            key=len,
+            default="",
+        )
+        canonical_email = next(
+            (
+                str(item["canonical_email"] or "").strip()
+                for item in group_segments
+                if str(item["canonical_email"] or "").strip()
+            ),
+            None,
+        )
         bucket = grouped.setdefault(
             target_key,
             {
@@ -1801,12 +1938,13 @@ def _aggregate_source_segments_by_final_identity(
                 "intervals": [],
             },
         )
-        bucket["intervals"].append(
-            (
-                _coerce_segment_datetime(source_segment.join_time, target_tz),
-                _coerce_segment_datetime(source_segment.leave_time, target_tz),
+        for item in group_segments:
+            bucket["intervals"].append(
+                (
+                    _coerce_segment_datetime(item["join_time"], target_tz),
+                    _coerce_segment_datetime(item["leave_time"], target_tz),
+                )
             )
-        )
 
     results: dict[str, dict] = {}
     for target_key, bucket in grouped.items():

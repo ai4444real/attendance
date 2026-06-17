@@ -339,6 +339,34 @@ class AttendanceImportServiceTest(unittest.TestCase):
         self.assertEqual("presente", participant.final_presence_status)
         self.assertTrue(participant.metadata["merged_duplicate_participant_key"])
 
+    def test_persist_normalization_result_merges_same_name_with_missing_email(self) -> None:
+        duplicated = replace(
+            self.result,
+            records=[
+                self.result.records[0],
+                replace(
+                    self.result.records[0],
+                    email="",
+                    minutes_first_half=1.0,
+                    minutes_second_half=0.5,
+                    total_minutes=1.5,
+                    segment_count=1,
+                ),
+            ],
+        )
+
+        persisted = self.service.persist_normalization_result(self.batch, duplicated)
+
+        self.assertEqual(1, persisted.lessons_created)
+        self.assertEqual(1, persisted.participants_created)
+        lesson = self.repository.last_lessons[0]
+        self.assertEqual(1, len(lesson.participants))
+        participant = lesson.participants[0]
+        self.assertEqual("mario@example.com", participant.participant_key)
+        self.assertEqual("Mario Rossi", participant.canonical_full_name)
+        self.assertEqual("mario@example.com", participant.email)
+        self.assertTrue(participant.metadata["merged_duplicate_participant_key"])
+
     def test_import_result_can_represent_no_batch_when_everything_is_skipped(self) -> None:
         persisted = PersistedDraftImport(
             batch=None,

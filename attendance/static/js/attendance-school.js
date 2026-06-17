@@ -22,7 +22,6 @@ const AttendanceSchoolApp = {
 
         this._els.selectAllCourses.addEventListener('click', () => {
             this._filters.courses = new Set(this._allCourses);
-            this._filters.student = '';
             this._populateCourseCheckboxes();
             this._populateStudentFilter();
             this._render();
@@ -30,7 +29,6 @@ const AttendanceSchoolApp = {
 
         this._els.clearCourses.addEventListener('click', () => {
             this._filters.courses = new Set();
-            this._filters.student = '';
             this._populateCourseCheckboxes();
             this._populateStudentFilter();
             this._render();
@@ -38,14 +36,12 @@ const AttendanceSchoolApp = {
 
         this._els.dateStartFilter.addEventListener('change', () => {
             this._filters.dateStart = this._els.dateStartFilter.value;
-            this._filters.student = '';
             this._populateStudentFilter();
             this._render();
         });
 
         this._els.dateEndFilter.addEventListener('change', () => {
             this._filters.dateEnd = this._els.dateEndFilter.value;
-            this._filters.student = '';
             this._populateStudentFilter();
             this._render();
         });
@@ -124,7 +120,6 @@ const AttendanceSchoolApp = {
                 } else {
                     this._filters.courses.delete(checkbox.value);
                 }
-                this._filters.student = '';
                 this._populateStudentFilter();
                 this._render();
             });
@@ -148,6 +143,9 @@ const AttendanceSchoolApp = {
             ...students.map(([key, label]) => `<option value="${this._escapeAttr(key)}">${this._escapeHtml(label)}</option>`),
         ].join('');
         this._studentLabelsByFilterKey = new Map(students);
+        if (this._filters.student && !this._studentLabelsByFilterKey.has(this._filters.student)) {
+            this._filters.student = '';
+        }
         this._els.studentFilter.value = this._filters.student;
         this._updateStudentAliasLink();
     },
