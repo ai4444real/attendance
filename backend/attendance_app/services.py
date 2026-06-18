@@ -320,6 +320,8 @@ class AttendanceReviewActionService:
         "set_effective_end",
         "set_manual_presence_status",
         "clear_manual_presence_status",
+        "assign_participant_identity",
+        "ignore_participant",
     }
 
     def __init__(self, repository: AttendanceReviewActionRepository) -> None:
@@ -343,6 +345,13 @@ class AttendanceReviewActionService:
             raise ValueError("payload is required")
         if action_type != "clear_manual_presence_status" and not payload:
             raise ValueError("payload is required")
+        if action_type in {
+            "set_manual_presence_status",
+            "clear_manual_presence_status",
+            "assign_participant_identity",
+            "ignore_participant",
+        } and participant_id is None:
+            raise ValueError(f"{action_type} requires participant_id")
         self._validate_payload(action_type, payload)
         return self._repository.create_lesson_review_action(
             lesson_id,
@@ -366,6 +375,18 @@ class AttendanceReviewActionService:
             return
 
         if action_type == "clear_manual_presence_status":
+            return
+
+        if action_type == "assign_participant_identity":
+            canonical_full_name = " ".join(str(payload.get("canonical_full_name") or "").strip().split())
+            email = str(payload.get("email") or "").strip()
+            if not canonical_full_name:
+                raise ValueError("canonical_full_name is required")
+            if email and "@" not in email:
+                raise ValueError("email must be empty or a valid email-like value")
+            return
+
+        if action_type == "ignore_participant":
             return
 
         if action_type == "set_threshold_ratio":
@@ -438,6 +459,8 @@ class AttendanceDraftRecalculationService:
             participant.id: None
             for participant in lesson.participants
         }
+        identity_overrides: dict[int, dict[str, str | None]] = {}
+        ignored_participant_ids: set[int] = set()
 
         for action in action_sequence:
             payload = action.payload or {}
@@ -458,6 +481,16 @@ class AttendanceDraftRecalculationService:
                 manual_overrides[action.participant_id] = str(payload["presence_status"])
             elif action.action_type == "clear_manual_presence_status" and action.participant_id is not None:
                 manual_overrides[action.participant_id] = None
+            elif action.action_type == "assign_participant_identity" and action.participant_id is not None:
+                canonical_full_name = " ".join(str(payload.get("canonical_full_name") or "").strip().split())
+                email = str(payload.get("email") or "").strip().lower() or None
+                if canonical_full_name:
+                    identity_overrides[action.participant_id] = {
+                        "canonical_full_name": canonical_full_name,
+                        "email": email,
+                    }
+            elif action.action_type == "ignore_participant" and action.participant_id is not None:
+                ignored_participant_ids.add(action.participant_id)
 
         source_segments = self._query_repository.get_lesson_source_segments(lesson.id)
         effective_start = datetime.fromisoformat(str(effective_start_at))
@@ -523,6 +556,8 @@ class AttendanceDraftRecalculationService:
                 break_point_at=break_point_at,
                 effective_end_at=effective_end_at,
                 manual_overrides=manual_overrides,
+                identity_overrides=identity_overrides,
+                ignored_participant_ids=ignored_participant_ids,
                 source_segments=source_segments,
             )
         else:
@@ -530,6 +565,8 @@ class AttendanceDraftRecalculationService:
                 lesson,
                 threshold_ratio=threshold_ratio,
                 manual_overrides=manual_overrides,
+                identity_overrides=identity_overrides,
+                ignored_participant_ids=ignored_participant_ids,
             )
 
         if not use_current_markers:
@@ -717,6 +754,8 @@ class AttendanceDraftRecalculationService:
         break_point_at: str | None,
         effective_end_at: str,
         manual_overrides: dict[int, str | None],
+        identity_overrides: dict[int, dict[str, str | None]],
+        ignored_participant_ids: set[int],
         source_segments: list[DraftLessonSourceSegment] | None = None,
     ) -> list[dict]:
         effective_start = datetime.fromisoformat(effective_start_at)
@@ -748,9 +787,12 @@ class AttendanceDraftRecalculationService:
                 continue
             manual_override_presence_status = manual_overrides.get(participant.id)
             final = manual_override_presence_status or record["calculated_presence_status"]
+            identity = self._participant_identity_update(participant, identity_overrides)
+            flags = self._participant_flags_update(participant, ignored_participant_ids)
             updates.append(
                 {
                     "id": participant.id,
+                    **identity,
                     "minutes_first_half": record["minutes_first_half"],
                     "minutes_second_half": record["minutes_second_half"],
                     "duration_first_half": record["duration_first_half"],
@@ -759,6 +801,7 @@ class AttendanceDraftRecalculationService:
                     "calculated_presence_status": record["calculated_presence_status"],
                     "manual_override_presence_status": manual_override_presence_status,
                     "final_presence_status": final,
+                    "flags": flags,
                 }
             )
         return updates
@@ -769,6 +812,8 @@ class AttendanceDraftRecalculationService:
         *,
         threshold_ratio: float,
         manual_overrides: dict[int, str | None],
+        identity_overrides: dict[int, dict[str, str | None]],
+        ignored_participant_ids: set[int],
     ) -> list[dict]:
         updates: list[dict] = []
         for participant in lesson.participants:
@@ -781,9 +826,12 @@ class AttendanceDraftRecalculationService:
             )
             manual_override_presence_status = manual_overrides.get(participant.id)
             final = manual_override_presence_status or calculated
+            identity = self._participant_identity_update(participant, identity_overrides)
+            flags = self._participant_flags_update(participant, ignored_participant_ids)
             updates.append(
                 {
                     "id": participant.id,
+                    **identity,
                     "minutes_first_half": participant.minutes_first_half,
                     "minutes_second_half": participant.minutes_second_half,
                     "duration_first_half": participant.duration_first_half,
@@ -792,9 +840,41 @@ class AttendanceDraftRecalculationService:
                     "calculated_presence_status": calculated,
                     "manual_override_presence_status": manual_override_presence_status,
                     "final_presence_status": final,
+                    "flags": flags,
                 }
             )
         return updates
+
+    def _participant_identity_update(
+        self,
+        participant: DraftLessonParticipantView,
+        identity_overrides: dict[int, dict[str, str | None]],
+    ) -> dict[str, str | None]:
+        override = identity_overrides.get(participant.id)
+        canonical_full_name = participant.canonical_full_name
+        email = participant.email
+        if override is not None:
+            canonical_full_name = str(override["canonical_full_name"] or participant.canonical_full_name).strip()
+            email = str(override.get("email") or "").strip().lower() or None
+            base_key = (email or canonical_full_name).strip().lower()
+            participant_key = f"local-assignment:{participant.id}:{base_key}"
+        else:
+            participant_key = participant.participant_key
+        return {
+            "participant_key": participant_key,
+            "canonical_full_name": canonical_full_name,
+            "email": email,
+        }
+
+    def _participant_flags_update(
+        self,
+        participant: DraftLessonParticipantView,
+        ignored_participant_ids: set[int],
+    ) -> list[str]:
+        flags = {str(flag) for flag in (participant.flags or []) if str(flag) != "ignored_participant"}
+        if participant.id in ignored_participant_ids:
+            flags.add("ignored_participant")
+        return sorted(flags)
 
     def _resolve_break_point(
         self,

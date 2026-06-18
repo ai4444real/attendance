@@ -77,6 +77,9 @@ class PostgresAttendanceDraftMutationRepository:
                         """
                         UPDATE attendance_lesson_participants
                         SET
+                            participant_key = %s,
+                            canonical_full_name = %s,
+                            email = %s,
                             minutes_first_half = %s,
                             minutes_second_half = %s,
                             duration_first_half = %s,
@@ -85,10 +88,14 @@ class PostgresAttendanceDraftMutationRepository:
                             calculated_presence_status = %s,
                             manual_override_presence_status = %s,
                             final_presence_status = %s,
+                            flags_json = %s::jsonb,
                             updated_at = NOW()
                         WHERE id = %s
                         """,
                         (
+                            participant["participant_key"],
+                            participant["canonical_full_name"],
+                            participant["email"],
                             participant["minutes_first_half"],
                             participant["minutes_second_half"],
                             participant["duration_first_half"],
@@ -97,6 +104,7 @@ class PostgresAttendanceDraftMutationRepository:
                             participant["calculated_presence_status"],
                             participant["manual_override_presence_status"],
                             participant["final_presence_status"],
+                            json.dumps(participant["flags"]),
                             participant["id"],
                         ),
                     )

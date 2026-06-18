@@ -465,7 +465,8 @@ class PostgresAttendanceDraftQueryRepository:
                         FROM official_lessons AS l
                         JOIN attendance_lesson_participants AS p
                             ON p.lesson_id = l.id
-                        WHERE NOT EXISTS (
+                        WHERE NOT COALESCE(p.flags_json ? 'ignored_participant', FALSE)
+                          AND NOT EXISTS (
                             SELECT 1
                             FROM instructor_names AS i
                             WHERE i.name_key IN (
@@ -589,6 +590,7 @@ class PostgresAttendanceDraftQueryRepository:
                         ON c.course_name = l.course_name
                     LEFT JOIN attendance_lesson_participants AS p
                         ON p.lesson_id = l.id
+                       AND NOT COALESCE(p.flags_json ? 'ignored_participant', FALSE)
                        AND NOT EXISTS (
                            SELECT 1
                            FROM instructor_names AS i
@@ -685,6 +687,7 @@ class PostgresAttendanceDraftQueryRepository:
                             ON p.lesson_id = l.id
                         WHERE l.status = 'official'
                           AND l.is_ignored = FALSE
+                          AND NOT COALESCE(p.flags_json ? 'ignored_participant', FALSE)
                           AND NOT EXISTS (
                               SELECT 1
                               FROM instructor_names AS i
@@ -709,6 +712,7 @@ class PostgresAttendanceDraftQueryRepository:
                         LEFT JOIN attendance_lesson_participants AS p
                             ON p.lesson_id = rl.id
                            AND p.canonical_full_name = cs.canonical_full_name
+                           AND NOT COALESCE(p.flags_json ? 'ignored_participant', FALSE)
                     ),
                     aggregated AS (
                         SELECT
@@ -780,6 +784,7 @@ class PostgresAttendanceDraftQueryRepository:
                 COUNT(*) FILTER (WHERE p.final_presence_status = 'assente') AS assente
             FROM attendance_lesson_participants AS p
             WHERE p.lesson_id = %s
+              AND NOT COALESCE(p.flags_json ? 'ignored_participant', FALSE)
               AND NOT EXISTS (
                   SELECT 1
                   FROM instructor_names AS i

@@ -332,7 +332,8 @@ const DraftImportsApp = {
         const bars = timeline.length > 0
             ? timeline.map((point) => this._buildTimelineBar(point, peak, lesson.meeting_start_at)).join('')
             : '<div class="empty">Timeline non disponibile per questa lezione.</div>';
-        const participants = lesson.participants || [];
+        const allParticipants = lesson.participants || [];
+        const participants = allParticipants.filter((participant) => !this._isIgnoredParticipant(participant));
         const visibleParticipants = participants.filter((participant) => participant.final_presence_status !== 'presente');
         const presentParticipants = participants.filter((participant) => participant.final_presence_status === 'presente');
         const diagnosisText = lesson.break_source === 'auto'
@@ -467,6 +468,8 @@ const DraftImportsApp = {
                                         <span class="presence-tag ${this._escapeHtml(participant.final_presence_status)}${participant.manual_override_presence_status ? ' manual' : ''}">${this._escapeHtml(participant.final_presence_status)}</span>
                                         <div class="row-actions">
                                             <button type="button" class="source-button" data-source-detail="${participant.id}">Origine</button>
+                                            <button type="button" class="source-button" data-assign-participant="${participant.id}">Assegna</button>
+                                            <button type="button" class="source-button danger" data-ignore-participant="${participant.id}">Ignora</button>
                                             ${this._renderPresenceOverrideControl(lesson.id, participant)}
                                         </div>
                                     </td>
@@ -551,6 +554,63 @@ const DraftImportsApp = {
                 }
             });
         });
+        this._els.lessonsContainer.querySelectorAll('[data-assign-participant]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const participantId = Number(button.getAttribute('data-assign-participant'));
+                const participant = lesson.participants.find((item) => item.id === participantId);
+                if (participant) {
+                    await this._assignParticipantIdentity(lesson, participant);
+                }
+            });
+        });
+        this._els.lessonsContainer.querySelectorAll('[data-ignore-participant]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const participantId = Number(button.getAttribute('data-ignore-participant'));
+                const participant = lesson.participants.find((item) => item.id === participantId);
+                if (participant) {
+                    await this._ignoreParticipant(lesson, participant);
+                }
+            });
+        });
+    },
+
+    async _assignParticipantIdentity(lesson, participant) {
+        const canonicalFullName = window.prompt(
+            'Nome corretto per questa sola lezione',
+            participant.canonical_full_name || '',
+        );
+        if (canonicalFullName === null) return;
+        const normalizedName = canonicalFullName.trim().replace(/\s+/g, ' ');
+        if (!normalizedName) {
+            window.alert('Il nome non può essere vuoto.');
+            return;
+        }
+        const email = window.prompt(
+            'Email corretta, se nota. Lascia vuoto se non serve.',
+            participant.email || '',
+        );
+        if (email === null) return;
+        await this._createLessonReviewAction(
+            lesson.id,
+            'assign_participant_identity',
+            {
+                canonical_full_name: normalizedName,
+                email: email.trim(),
+            },
+            participant.id,
+        );
+    },
+
+    async _ignoreParticipant(lesson, participant) {
+        if (!window.confirm(`Ignorare "${participant.canonical_full_name}" solo in questa lezione?`)) {
+            return;
+        }
+        await this._createLessonReviewAction(
+            lesson.id,
+            'ignore_participant',
+            { ignored: true },
+            participant.id,
+        );
     },
 
     _wireMarkerSetter(lesson) {
@@ -660,6 +720,10 @@ const DraftImportsApp = {
         return participant.email
             ? `${participant.canonical_full_name} (${participant.email})`
             : participant.canonical_full_name;
+    },
+
+    _isIgnoredParticipant(participant) {
+        return Array.isArray(participant?.flags) && participant.flags.includes('ignored_participant');
     },
 
     _renderLessonSplitBox(lesson) {
