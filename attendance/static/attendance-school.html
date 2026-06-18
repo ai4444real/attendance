@@ -155,9 +155,8 @@
             <div class="filters">
                 <div class="filter-group">
                     <label for="studentFilter">Studente</label>
-                    <select id="studentFilter">
-                        <option value="">Tutti gli studenti</option>
-                    </select>
+                    <input id="studentFilter" type="search" list="studentFilterOptions" placeholder="Tutti gli studenti">
+                    <datalist id="studentFilterOptions"></datalist>
                     <div class="filter-tools">
                         <a id="studentAliasLink" class="filter-tool-link" href="/attendance/aliases">Cerca / crea alias</a>
                     </div>
@@ -191,6 +190,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-school.js?v=20260617-keep-student-filter"></script>
+    <script src="/attendance/static/js/attendance-school.js?v=20260618-student-search-filter"></script>
 </body>
 </html>

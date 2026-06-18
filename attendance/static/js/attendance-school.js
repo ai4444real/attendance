@@ -5,6 +5,7 @@ const AttendanceSchoolApp = {
         this._els = {
             summary: document.getElementById('summary'),
             studentFilter: document.getElementById('studentFilter'),
+            studentFilterOptions: document.getElementById('studentFilterOptions'),
             studentAliasLink: document.getElementById('studentAliasLink'),
             courseCheckboxes: document.getElementById('courseCheckboxes'),
             dateStartFilter: document.getElementById('dateStartFilter'),
@@ -16,7 +17,7 @@ const AttendanceSchoolApp = {
             sourceModalHost: document.getElementById('sourceModalHost'),
         };
         this._records = [];
-        this._filters = { courses: new Set(), dateStart: '', dateEnd: '', student: '' };
+        this._filters = { courses: new Set(), dateStart: '', dateEnd: '', student: '', studentText: '' };
         this._allCourses = [];
         this._studentLabelsByFilterKey = new Map();
 
@@ -46,8 +47,9 @@ const AttendanceSchoolApp = {
             this._render();
         });
 
-        this._els.studentFilter.addEventListener('change', () => {
-            this._filters.student = this._els.studentFilter.value;
+        this._els.studentFilter.addEventListener('input', () => {
+            this._filters.studentText = this._els.studentFilter.value.trim();
+            this._filters.student = this._studentKeyFromInput(this._filters.studentText);
             this._updateStudentAliasLink();
             this._render();
         });
@@ -127,8 +129,7 @@ const AttendanceSchoolApp = {
     },
 
     _populateStudentFilter() {
-        const previousStudentKey = this._filters.student;
-        const previousStudentLabel = this._studentLabelsByFilterKey.get(previousStudentKey) || '';
+        const previousStudentLabel = this._studentLabelsByFilterKey.get(this._filters.student) || this._filters.studentText;
         const filteredByCourse = this._records.filter((record) => this._recordMatchesScope(record));
         const studentByKey = new Map();
         for (const record of filteredByCourse) {
@@ -140,10 +141,9 @@ const AttendanceSchoolApp = {
             }
         }
         const students = [...studentByKey.entries()].sort((left, right) => left[1].localeCompare(right[1], 'it', { sensitivity: 'base' }));
-        this._els.studentFilter.innerHTML = [
-            '<option value="">Tutti gli studenti</option>',
-            ...students.map(([key, label]) => `<option value="${this._escapeAttr(key)}">${this._escapeHtml(label)}</option>`),
-        ].join('');
+        this._els.studentFilterOptions.innerHTML = students
+            .map(([, label]) => `<option value="${this._escapeAttr(label)}"></option>`)
+            .join('');
         this._studentLabelsByFilterKey = new Map(students);
         if (this._filters.student && !this._studentLabelsByFilterKey.has(this._filters.student)) {
             const sameLabel = students.find(([, label]) => (
@@ -151,13 +151,28 @@ const AttendanceSchoolApp = {
                 && label.localeCompare(previousStudentLabel, 'it', { sensitivity: 'base' }) === 0
             ));
             this._filters.student = sameLabel ? sameLabel[0] : '';
+            this._filters.studentText = sameLabel ? sameLabel[1] : '';
         }
-        this._els.studentFilter.value = this._filters.student;
+        if (this._filters.student && !this._filters.studentText) {
+            this._filters.studentText = this._studentLabelsByFilterKey.get(this._filters.student) || '';
+        }
+        this._els.studentFilter.value = this._filters.studentText;
         this._updateStudentAliasLink();
     },
 
+    _studentKeyFromInput(value) {
+        const normalizedValue = String(value || '').trim();
+        if (!normalizedValue) return '';
+        for (const [key, label] of this._studentLabelsByFilterKey.entries()) {
+            if (label.localeCompare(normalizedValue, 'it', { sensitivity: 'base' }) === 0) {
+                return key;
+            }
+        }
+        return '';
+    },
+
     _updateStudentAliasLink() {
-        const label = this._studentLabelsByFilterKey.get(this._filters.student) || '';
+        const label = this._studentLabelsByFilterKey.get(this._filters.student) || this._filters.studentText || '';
         const query = label ? `?q=${encodeURIComponent(label)}` : '';
         this._els.studentAliasLink.href = `/attendance/aliases${query}`;
         this._els.studentAliasLink.textContent = label
@@ -169,6 +184,11 @@ const AttendanceSchoolApp = {
         return this._records.filter((record) => {
             if (!this._recordMatchesScope(record)) return false;
             if (this._filters.student && this._studentFilterKey(record) !== this._filters.student) return false;
+            if (!this._filters.student && this._filters.studentText) {
+                const needle = this._filters.studentText.toLocaleLowerCase('it');
+                const label = this._formatPersonName(record.canonical_full_name).toLocaleLowerCase('it');
+                if (!label.includes(needle)) return false;
+            }
             return true;
         });
     },
