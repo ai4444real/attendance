@@ -781,13 +781,23 @@ class AttendanceDraftRecalculationService:
 
         updates: list[dict] = []
         for participant in lesson.participants:
-            participant_key = participant.email.strip().lower() if participant.email else participant.canonical_full_name.lower()
+            participant_key = self._participant_source_identity_key(
+                participant,
+                effective_start=effective_start,
+                break_point=break_point,
+                effective_end=effective_end,
+                threshold_ratio=threshold_ratio,
+                name_alias_map=name_alias_map,
+                email_alias_map=email_alias_map,
+            )
+            if participant_key is None:
+                participant_key = participant.email.strip().lower() if participant.email else participant.canonical_full_name.lower()
             record = aggregated.get(participant_key)
             if record is None:
                 continue
             manual_override_presence_status = manual_overrides.get(participant.id)
             final = manual_override_presence_status or record["calculated_presence_status"]
-            identity = self._participant_identity_update(participant, identity_overrides)
+            identity = self._participant_identity_update(participant, identity_overrides, record)
             flags = self._participant_flags_update(participant, ignored_participant_ids)
             updates.append(
                 {
@@ -849,6 +859,7 @@ class AttendanceDraftRecalculationService:
         self,
         participant: DraftLessonParticipantView,
         identity_overrides: dict[int, dict[str, str | None]],
+        base_record: dict | None = None,
     ) -> dict[str, str | None]:
         override = identity_overrides.get(participant.id)
         canonical_full_name = participant.canonical_full_name
@@ -858,6 +869,10 @@ class AttendanceDraftRecalculationService:
             email = str(override.get("email") or "").strip().lower() or None
             base_key = (email or canonical_full_name).strip().lower()
             participant_key = f"local-assignment:{participant.id}:{base_key}"
+        elif base_record is not None:
+            canonical_full_name = str(base_record.get("canonical_full_name") or participant.canonical_full_name).strip()
+            email = str(base_record.get("canonical_email") or "").strip().lower() or None
+            participant_key = (email or canonical_full_name).strip().lower()
         else:
             participant_key = participant.participant_key
         return {
@@ -875,6 +890,53 @@ class AttendanceDraftRecalculationService:
         if participant.id in ignored_participant_ids:
             flags.add("ignored_participant")
         return sorted(flags)
+
+    def _participant_source_identity_key(
+        self,
+        participant: DraftLessonParticipantView,
+        *,
+        effective_start: datetime,
+        break_point: datetime,
+        effective_end: datetime,
+        threshold_ratio: float,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> str | None:
+        source_segments: list[DraftLessonSourceSegment] = []
+        for source in _get_identity_sources(participant):
+            source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+            source_email_value = source.get("email") if "email" in source else participant.email
+            source_email = str(source_email_value or "").strip() or None
+            for segment in list(source.get("segments") or []):
+                if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                    continue
+                source_segments.append(
+                    DraftLessonSourceSegment(
+                        observed_full_name=source_name,
+                        observed_email=source_email,
+                        join_time=str(segment[0]),
+                        leave_time=str(segment[1]),
+                        metadata={},
+                    )
+                )
+        if not source_segments:
+            return None
+
+        aggregated = _aggregate_source_segments_by_final_identity(
+            source_segments,
+            effective_start=effective_start,
+            break_point=break_point,
+            effective_end=effective_end,
+            threshold=threshold_ratio,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+            forced_identity_pairs=set(),
+            forced_canonical_full_name=None,
+            forced_canonical_email=None,
+        )
+        if len(aggregated) != 1:
+            return None
+        return next(iter(aggregated.keys()))
 
     def _resolve_break_point(
         self,
@@ -2060,7 +2122,8 @@ def _extract_source_segments_from_lesson(lesson: DraftLessonView) -> list[DraftL
     for participant in lesson.participants:
         for source in _get_identity_sources(participant):
             source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
-            source_email = str(source.get("email") or participant.email or "").strip() or None
+            source_email_value = source.get("email") if "email" in source else participant.email
+            source_email = str(source_email_value or "").strip() or None
             for segment in list(source.get("segments") or []):
                 if not isinstance(segment, (list, tuple)) or len(segment) != 2:
                     continue

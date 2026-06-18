@@ -1448,6 +1448,77 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertEqual("mario@example.com", participant_update["email"])
         self.assertEqual("local-assignment:3:mario@example.com", participant_update["participant_key"])
 
+    def test_recalculate_lesson_restores_original_identity_after_assignment_delete(self) -> None:
+        lesson = DraftLessonView(
+            id=530,
+            course_name="MASTER",
+            lesson_date="2026-02-09",
+            source_meeting_id="886 5440 3922",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-02-09T19:54:00+00:00",
+            meeting_end_at="2026-02-09T23:06:00+00:00",
+            effective_start_at="2026-02-09T20:00:00+00:00",
+            break_point_at="2026-02-09T21:33:00+00:00",
+            effective_end_at="2026-02-09T23:06:00+00:00",
+            break_source="midpoint",
+            effective_start_source="snap",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=3,
+                    participant_key="local-assignment:3:mario@example.com",
+                    canonical_full_name="Mario Rossi",
+                    raw_full_name="Utente Zoom",
+                    email="mario@example.com",
+                    segment_count=1,
+                    minutes_first_half=40.0,
+                    minutes_second_half=20.0,
+                    duration_first_half=50.0,
+                    duration_second_half=50.0,
+                    total_minutes=60.0,
+                    calculated_presence_status="prima_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="prima_meta",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "identity_sources": [
+                            {
+                                "raw_full_name": "Utente Zoom",
+                                "email": "",
+                                "segments": [["2026-02-09T20:05:00+00:00", "2026-02-09T21:10:00+00:00"]],
+                            }
+                        ],
+                    },
+                )
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Utente Zoom",
+                observed_email=None,
+                join_time="2026-02-09T20:05:00+00:00",
+                leave_time="2026-02-09T21:10:00+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(530)
+
+        participant_update = mutation.last_update["participants"][0]
+        self.assertEqual("Utente Zoom", participant_update["canonical_full_name"])
+        self.assertIsNone(participant_update["email"])
+        self.assertEqual("utente zoom", participant_update["participant_key"])
+
     def test_recalculate_lesson_applies_local_ignore_flag(self) -> None:
         lesson = DraftLessonView(
             id=54,
