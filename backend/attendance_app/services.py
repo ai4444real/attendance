@@ -544,7 +544,7 @@ class AttendanceDraftRecalculationService:
         break_point_at = resolved_break_point.isoformat()
 
         participants_have_segments = bool(source_segments) or all(
-            isinstance(participant.metadata.get("segments"), list) and participant.metadata.get("segments")
+            self._participant_has_source_segments(participant)
             for participant in lesson.participants
         )
 
@@ -779,8 +779,86 @@ class AttendanceDraftRecalculationService:
             forced_canonical_email=None,
         )
 
+        local_merge_groups = self._build_local_assignment_merge_groups(
+            lesson.participants,
+            identity_overrides,
+            effective_start=effective_start,
+            break_point=break_point,
+            effective_end=effective_end,
+            threshold_ratio=threshold_ratio,
+            name_alias_map=name_alias_map,
+            email_alias_map=email_alias_map,
+        )
+        absorbed_participant_ids = {
+            participant.id
+            for group in local_merge_groups.values()
+            for participant in group["participants"]
+            if participant.id != group["survivor"].id
+        }
+
         updates: list[dict] = []
+        updated_participant_ids: set[int] = set()
+        for group in local_merge_groups.values():
+            survivor = group["survivor"]
+            record = group["record"]
+            for participant in group["participants"]:
+                if participant.id == survivor.id:
+                    continue
+                flags = self._participant_flags_update(
+                    participant,
+                    ignored_participant_ids,
+                    absorbed_participant_ids=absorbed_participant_ids,
+                )
+                updates.append(
+                    {
+                        "id": participant.id,
+                        "participant_key": f"local-merged:{participant.id}:{group['target_key']}",
+                        "canonical_full_name": participant.canonical_full_name,
+                        "email": participant.email,
+                        "minutes_first_half": 0.0,
+                        "minutes_second_half": 0.0,
+                        "duration_first_half": record["duration_first_half"],
+                        "duration_second_half": record["duration_second_half"],
+                        "total_minutes": 0.0,
+                        "calculated_presence_status": "assente",
+                        "manual_override_presence_status": None,
+                        "final_presence_status": "assente",
+                        "flags": flags,
+                    }
+                )
+                updated_participant_ids.add(participant.id)
+            manual_override_presence_status = self._resolve_group_manual_override(
+                group["participants"],
+                survivor,
+                manual_overrides,
+            )
+            final = manual_override_presence_status or record["calculated_presence_status"]
+            identity = self._participant_identity_update(survivor, {}, record)
+            flags = self._participant_flags_update(
+                survivor,
+                ignored_participant_ids,
+                absorbed_participant_ids=absorbed_participant_ids,
+            )
+            updates.append(
+                {
+                    "id": survivor.id,
+                    **identity,
+                    "minutes_first_half": record["minutes_first_half"],
+                    "minutes_second_half": record["minutes_second_half"],
+                    "duration_first_half": record["duration_first_half"],
+                    "duration_second_half": record["duration_second_half"],
+                    "total_minutes": record["total_minutes"],
+                    "calculated_presence_status": record["calculated_presence_status"],
+                    "manual_override_presence_status": manual_override_presence_status,
+                    "final_presence_status": final,
+                    "flags": flags,
+                }
+            )
+            updated_participant_ids.add(survivor.id)
+
         for participant in lesson.participants:
+            if participant.id in updated_participant_ids:
+                continue
             participant_key = self._participant_source_identity_key(
                 participant,
                 effective_start=effective_start,
@@ -798,7 +876,11 @@ class AttendanceDraftRecalculationService:
             manual_override_presence_status = manual_overrides.get(participant.id)
             final = manual_override_presence_status or record["calculated_presence_status"]
             identity = self._participant_identity_update(participant, identity_overrides, record)
-            flags = self._participant_flags_update(participant, ignored_participant_ids)
+            flags = self._participant_flags_update(
+                participant,
+                ignored_participant_ids,
+                absorbed_participant_ids=absorbed_participant_ids,
+            )
             updates.append(
                 {
                     "id": participant.id,
@@ -885,11 +967,191 @@ class AttendanceDraftRecalculationService:
         self,
         participant: DraftLessonParticipantView,
         ignored_participant_ids: set[int],
+        *,
+        absorbed_participant_ids: set[int] | None = None,
     ) -> list[str]:
-        flags = {str(flag) for flag in (participant.flags or []) if str(flag) != "ignored_participant"}
+        flags = {
+            str(flag)
+            for flag in (participant.flags or [])
+            if str(flag) not in {"ignored_participant", "local_merged_participant"}
+        }
         if participant.id in ignored_participant_ids:
             flags.add("ignored_participant")
+        if absorbed_participant_ids and participant.id in absorbed_participant_ids:
+            flags.add("local_merged_participant")
         return sorted(flags)
+
+    def _build_local_assignment_merge_groups(
+        self,
+        participants: list[DraftLessonParticipantView],
+        identity_overrides: dict[int, dict[str, str | None]],
+        *,
+        effective_start: datetime,
+        break_point: datetime,
+        effective_end: datetime,
+        threshold_ratio: float,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+    ) -> dict[str, dict]:
+        if not identity_overrides:
+            return {}
+
+        participant_records: dict[int, dict] = {}
+        target_groups: dict[str, dict] = {}
+        for participant in participants:
+            source_segments = self._participant_source_segments(participant)
+            if not source_segments:
+                continue
+            override = identity_overrides.get(participant.id)
+            if override:
+                canonical_full_name = str(override["canonical_full_name"] or participant.canonical_full_name).strip()
+                canonical_email = str(override.get("email") or "").strip().lower() or None
+                forced_pairs = {
+                    (
+                        (segment.observed_full_name or "").strip().casefold(),
+                        (segment.observed_email or "").strip().casefold(),
+                    )
+                    for segment in source_segments
+                }
+                aggregated = _aggregate_source_segments_by_final_identity(
+                    source_segments,
+                    effective_start=effective_start,
+                    break_point=break_point,
+                    effective_end=effective_end,
+                    threshold=threshold_ratio,
+                    name_alias_map=name_alias_map,
+                    email_alias_map=email_alias_map,
+                    forced_identity_pairs=forced_pairs,
+                    forced_canonical_full_name=canonical_full_name,
+                    forced_canonical_email=canonical_email,
+                )
+            else:
+                aggregated = _aggregate_source_segments_by_final_identity(
+                    source_segments,
+                    effective_start=effective_start,
+                    break_point=break_point,
+                    effective_end=effective_end,
+                    threshold=threshold_ratio,
+                    name_alias_map=name_alias_map,
+                    email_alias_map=email_alias_map,
+                    forced_identity_pairs=set(),
+                    forced_canonical_full_name=None,
+                    forced_canonical_email=None,
+                )
+            if len(aggregated) != 1:
+                continue
+            target_key, record = next(iter(aggregated.items()))
+            merge_key = str(record.get("canonical_full_name") or target_key).strip().casefold()
+            participant_records[participant.id] = {
+                "participant": participant,
+                "target_key": target_key,
+                "merge_key": merge_key,
+                "record": record,
+                "source_segments": source_segments,
+                "has_override": participant.id in identity_overrides,
+            }
+            target_groups.setdefault(merge_key, {"target_key": target_key, "items": []})["items"].append(participant_records[participant.id])
+
+        merge_groups: dict[str, dict] = {}
+        for merge_key, group in target_groups.items():
+            items = group["items"]
+            if len(items) < 2 or not any(item["has_override"] for item in items):
+                continue
+            group_segments = [
+                segment
+                for item in items
+                for segment in item["source_segments"]
+            ]
+            canonical_name = self._best_group_canonical_name(items)
+            canonical_email = self._best_group_canonical_email(items)
+            forced_pairs = {
+                (
+                    (segment.observed_full_name or "").strip().casefold(),
+                    (segment.observed_email or "").strip().casefold(),
+                )
+                for segment in group_segments
+            }
+            aggregated = _aggregate_source_segments_by_final_identity(
+                group_segments,
+                effective_start=effective_start,
+                break_point=break_point,
+                effective_end=effective_end,
+                threshold=threshold_ratio,
+                name_alias_map=name_alias_map,
+                email_alias_map=email_alias_map,
+                forced_identity_pairs=forced_pairs,
+                forced_canonical_full_name=canonical_name,
+                forced_canonical_email=canonical_email,
+            )
+            if len(aggregated) != 1:
+                continue
+            survivor = self._choose_local_assignment_survivor(items)
+            record = next(iter(aggregated.values()))
+            target_key = (str(record.get("canonical_email") or "").strip().lower() or merge_key)
+            merge_groups[merge_key] = {
+                "target_key": target_key,
+                "participants": [item["participant"] for item in items],
+                "survivor": survivor,
+                "record": record,
+            }
+        return merge_groups
+
+    def _participant_source_segments(self, participant: DraftLessonParticipantView) -> list[DraftLessonSourceSegment]:
+        source_segments: list[DraftLessonSourceSegment] = []
+        for source in _get_identity_sources(participant):
+            source_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
+            source_email_value = source.get("email") if "email" in source else participant.email
+            source_email = str(source_email_value or "").strip() or None
+            for segment in list(source.get("segments") or []):
+                if not isinstance(segment, (list, tuple)) or len(segment) != 2:
+                    continue
+                source_segments.append(
+                    DraftLessonSourceSegment(
+                        observed_full_name=source_name,
+                        observed_email=source_email,
+                        join_time=str(segment[0]),
+                        leave_time=str(segment[1]),
+                        metadata={},
+                    )
+                )
+        return source_segments
+
+    def _participant_has_source_segments(self, participant: DraftLessonParticipantView) -> bool:
+        return bool(self._participant_source_segments(participant))
+
+    def _best_group_canonical_name(self, items: list[dict]) -> str:
+        names = [
+            str(item["record"].get("canonical_full_name") or item["participant"].canonical_full_name).strip()
+            for item in items
+        ]
+        return max(names, key=len, default="")
+
+    def _best_group_canonical_email(self, items: list[dict]) -> str | None:
+        for item in items:
+            email = str(item["record"].get("canonical_email") or "").strip().lower()
+            if email:
+                return email
+        return None
+
+    def _choose_local_assignment_survivor(self, items: list[dict]) -> DraftLessonParticipantView:
+        without_override = [item for item in items if not item["has_override"]]
+        candidates = without_override or items
+        with_email = [item for item in candidates if str(item["record"].get("canonical_email") or "").strip()]
+        candidates = with_email or candidates
+        return min((item["participant"] for item in candidates), key=lambda participant: participant.id)
+
+    def _resolve_group_manual_override(
+        self,
+        participants: list[DraftLessonParticipantView],
+        survivor: DraftLessonParticipantView,
+        manual_overrides: dict[int, str | None],
+    ) -> str | None:
+        if survivor.id in manual_overrides:
+            return manual_overrides[survivor.id]
+        for participant in participants:
+            if participant.id != survivor.id and participant.id in manual_overrides:
+                return manual_overrides[participant.id]
+        return None
 
     def _participant_source_identity_key(
         self,

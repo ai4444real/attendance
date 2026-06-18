@@ -723,7 +723,8 @@ const DraftImportsApp = {
     },
 
     _isIgnoredParticipant(participant) {
-        return Array.isArray(participant?.flags) && participant.flags.includes('ignored_participant');
+        return Array.isArray(participant?.flags)
+            && (participant.flags.includes('ignored_participant') || participant.flags.includes('local_merged_participant'));
     },
 
     _renderLessonSplitBox(lesson) {

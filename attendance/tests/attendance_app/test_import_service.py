@@ -1519,6 +1519,199 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
         self.assertIsNone(participant_update["email"])
         self.assertEqual("utente zoom", participant_update["participant_key"])
 
+    def test_recalculate_lesson_merges_local_assignment_without_emails(self) -> None:
+        lesson = self._local_assignment_merge_lesson(
+            target_email=None,
+            assigned_email=None,
+            review_email="",
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(531)
+
+        updates = {participant["id"]: participant for participant in mutation.last_update["participants"]}
+        self.assertEqual("Mario Rossi", updates[1]["canonical_full_name"])
+        self.assertIsNone(updates[1]["email"])
+        self.assertEqual("mario rossi", updates[1]["participant_key"])
+        self.assertEqual("presente", updates[1]["final_presence_status"])
+        self.assertIn("local_merged_participant", updates[2]["flags"])
+
+    def test_recalculate_lesson_merges_local_assignment_into_existing_email(self) -> None:
+        lesson = self._local_assignment_merge_lesson(
+            target_email="mario@rossi.com",
+            assigned_email=None,
+            review_email="",
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(531)
+
+        updates = {participant["id"]: participant for participant in mutation.last_update["participants"]}
+        self.assertEqual("Mario Rossi", updates[1]["canonical_full_name"])
+        self.assertEqual("mario@rossi.com", updates[1]["email"])
+        self.assertEqual("mario@rossi.com", updates[1]["participant_key"])
+        self.assertIn("local_merged_participant", updates[2]["flags"])
+
+    def test_recalculate_lesson_merges_local_assignment_and_keeps_new_email(self) -> None:
+        lesson = self._local_assignment_merge_lesson(
+            target_email=None,
+            assigned_email=None,
+            review_email="mario@rossi.com",
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(531)
+
+        updates = {participant["id"]: participant for participant in mutation.last_update["participants"]}
+        self.assertEqual("Mario Rossi", updates[1]["canonical_full_name"])
+        self.assertEqual("mario@rossi.com", updates[1]["email"])
+        self.assertEqual("mario@rossi.com", updates[1]["participant_key"])
+        self.assertIn("local_merged_participant", updates[2]["flags"])
+
+    def test_recalculate_lesson_restores_split_rows_after_assignment_merge_delete(self) -> None:
+        lesson = self._local_assignment_merge_lesson(
+            target_email=None,
+            assigned_email=None,
+            review_email="mario@rossi.com",
+            include_review_action=False,
+            mutated_after_merge=True,
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceDraftRecalculationService(query, mutation)
+
+        service.recalculate_lesson(531)
+
+        updates = {participant["id"]: participant for participant in mutation.last_update["participants"]}
+        self.assertEqual("Mario Rossi", updates[1]["canonical_full_name"])
+        self.assertIsNone(updates[1]["email"])
+        self.assertEqual("mario rossi", updates[1]["participant_key"])
+        self.assertEqual("Utente Zoom", updates[2]["canonical_full_name"])
+        self.assertIsNone(updates[2]["email"])
+        self.assertEqual("utente zoom", updates[2]["participant_key"])
+        self.assertNotIn("local_merged_participant", updates[2]["flags"])
+
+    def _local_assignment_merge_lesson(
+        self,
+        *,
+        target_email: str | None,
+        assigned_email: str | None,
+        review_email: str,
+        include_review_action: bool = True,
+        mutated_after_merge: bool = False,
+    ) -> DraftLessonView:
+        target_name = "Mario Rossi"
+        assigned_name = "Utente Zoom"
+        if mutated_after_merge:
+            second_name = "Mario Rossi"
+            second_email = review_email or assigned_email
+            second_key = f"local-merged:2:{review_email or target_email or 'mario rossi'}"
+            second_flags = ["local_merged_participant"]
+        else:
+            second_name = assigned_name
+            second_email = assigned_email
+            second_key = assigned_email or "utente zoom"
+            second_flags = []
+        review_actions = []
+        if include_review_action:
+            review_actions.append(
+                DraftReviewActionView(
+                    id=1,
+                    lesson_id=531,
+                    participant_id=2,
+                    action_type="assign_participant_identity",
+                    payload={"canonical_full_name": target_name, "email": review_email},
+                    created_by="test",
+                    created_at="2026-05-05T10:00:00+00:00",
+                    applied_at=None,
+                    is_applied=False,
+                    notes=None,
+                )
+            )
+        return DraftLessonView(
+            id=531,
+            course_name="MASTER",
+            lesson_date="2026-02-09",
+            source_meeting_id="886 5440 3922",
+            status="draft",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-02-09T19:54:00+00:00",
+            meeting_end_at="2026-02-09T23:06:00+00:00",
+            effective_start_at="2026-02-09T20:00:00+00:00",
+            break_point_at="2026-02-09T21:00:00+00:00",
+            effective_end_at="2026-02-09T22:00:00+00:00",
+            break_source="midpoint",
+            effective_start_source="snap",
+            effective_end_source="meeting_end",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 1, "seconda_meta": 1, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=1,
+                    participant_key=target_email or "mario rossi",
+                    canonical_full_name=target_name,
+                    raw_full_name=target_name,
+                    email=target_email,
+                    segment_count=1,
+                    minutes_first_half=60.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=60.0,
+                    duration_second_half=60.0,
+                    total_minutes=60.0,
+                    calculated_presence_status="prima_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="prima_meta",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "identity_sources": [
+                            {
+                                "raw_full_name": target_name,
+                                "email": target_email or "",
+                                "segments": [["2026-02-09T20:00:00+00:00", "2026-02-09T21:00:00+00:00"]],
+                            }
+                        ],
+                    },
+                ),
+                DraftLessonParticipantView(
+                    id=2,
+                    participant_key=second_key,
+                    canonical_full_name=second_name,
+                    raw_full_name=assigned_name,
+                    email=second_email,
+                    segment_count=1,
+                    minutes_first_half=0.0,
+                    minutes_second_half=60.0,
+                    duration_first_half=60.0,
+                    duration_second_half=60.0,
+                    total_minutes=60.0,
+                    calculated_presence_status="seconda_meta",
+                    manual_override_presence_status=None,
+                    final_presence_status="seconda_meta",
+                    presence_source="zoom",
+                    flags=second_flags,
+                    metadata={
+                        "identity_sources": [
+                            {
+                                "raw_full_name": assigned_name,
+                                "email": assigned_email or "",
+                                "segments": [["2026-02-09T21:00:00+00:00", "2026-02-09T22:00:00+00:00"]],
+                            }
+                        ],
+                    },
+                ),
+            ],
+            review_actions=review_actions,
+        )
+
     def test_recalculate_lesson_applies_local_ignore_flag(self) -> None:
         lesson = DraftLessonView(
             id=54,
