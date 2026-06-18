@@ -1,5 +1,7 @@
 'use strict';
 
+const SCHOOL_TIME_ZONE = 'Europe/Zurich';
+
 const DraftImportsApp = {
     async init() {
         this._els = {
@@ -1173,10 +1175,9 @@ const DraftImportsApp = {
         const hours = Number(match[1]);
         const minutes = Number(match[2]);
         if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-        const base = new Date(lesson.meeting_start_at);
-        if (Number.isNaN(base.getTime())) return null;
-        base.setHours(hours, minutes, 0, 0);
-        return base.toISOString();
+        const dateParts = this._schoolDateParts(lesson.meeting_start_at);
+        if (!dateParts) return null;
+        return this._buildIsoForSchoolWallTime(dateParts.year, dateParts.month, dateParts.day, hours, minutes);
     },
 
     _buildIsoFromChartClick(lesson, chart, clientX) {
@@ -1236,6 +1237,7 @@ const DraftImportsApp = {
     _formatDateTime(value, referenceValue = null) {
         const date = this._coerceDateWithReference(value, referenceValue);
         return date.toLocaleString('it-CH', {
+            timeZone: SCHOOL_TIME_ZONE,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -1247,9 +1249,58 @@ const DraftImportsApp = {
     _formatTime(value, referenceValue = null) {
         const date = this._coerceDateWithReference(value, referenceValue);
         return date.toLocaleTimeString('it-CH', {
+            timeZone: SCHOOL_TIME_ZONE,
             hour: '2-digit',
             minute: '2-digit',
         });
+    },
+
+    _schoolDateParts(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: SCHOOL_TIME_ZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).formatToParts(date);
+        const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+        return {
+            year: Number(byType.year),
+            month: Number(byType.month),
+            day: Number(byType.day),
+        };
+    },
+
+    _buildIsoForSchoolWallTime(year, month, day, hours, minutes) {
+        const desiredWallTime = Date.UTC(year, month - 1, day, hours, minutes, 0, 0);
+        let candidateMs = desiredWallTime;
+        for (let index = 0; index < 2; index += 1) {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: SCHOOL_TIME_ZONE,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23',
+                hour12: false,
+            }).formatToParts(new Date(candidateMs));
+            const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+            const actualWallTime = Date.UTC(
+                Number(byType.year),
+                Number(byType.month) - 1,
+                Number(byType.day),
+                Number(byType.hour),
+                Number(byType.minute),
+                0,
+                0,
+            );
+            const deltaMs = desiredWallTime - actualWallTime;
+            if (deltaMs === 0) break;
+            candidateMs += deltaMs;
+        }
+        return new Date(candidateMs).toISOString();
     },
 
     _coerceDateWithReference(value, referenceValue = null) {

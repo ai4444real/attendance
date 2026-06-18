@@ -1,5 +1,7 @@
 'use strict';
 
+const SCHOOL_TIME_ZONE = 'Europe/Zurich';
+
 const AttendanceSchoolApp = {
     async init() {
         this._els = {
@@ -662,6 +664,7 @@ const AttendanceSchoolApp = {
     _formatDate(value) {
         const date = new Date(value);
         return date.toLocaleDateString('it-CH', {
+            timeZone: SCHOOL_TIME_ZONE,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -671,6 +674,7 @@ const AttendanceSchoolApp = {
     _formatShortDate(value) {
         const date = new Date(value);
         return date.toLocaleDateString('it-CH', {
+            timeZone: SCHOOL_TIME_ZONE,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -691,9 +695,10 @@ const AttendanceSchoolApp = {
             return value || '';
         }
         const hasDateChange = fallback && !Number.isNaN(fallback.getTime())
-            ? date.toDateString() !== fallback.toDateString()
+            ? this._schoolDateKey(date) !== this._schoolDateKey(fallback)
             : true;
         const time = date.toLocaleTimeString('it-CH', {
+            timeZone: SCHOOL_TIME_ZONE,
             hour: '2-digit',
             minute: '2-digit',
         });
@@ -701,10 +706,20 @@ const AttendanceSchoolApp = {
             return time;
         }
         return `${date.toLocaleDateString('it-CH', {
+            timeZone: SCHOOL_TIME_ZONE,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
         })}, ${time}`;
+    },
+
+    _schoolDateKey(date) {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: SCHOOL_TIME_ZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(date);
     },
 
     _escapeHtml(value) {
