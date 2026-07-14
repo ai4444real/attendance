@@ -230,6 +230,35 @@
             background: #fff2d7;
             color: #9a6100;
         }
+        .pill.deleted,
+        .pill.draft {
+            background: #eceff3;
+            color: #5b6775;
+        }
+        tr.informative-invoice {
+            color: #6b7280;
+            background: #f3f5f7;
+        }
+        tr.informative-invoice td {
+            opacity: 0.76;
+        }
+        .invoice-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 0 0 10px;
+        }
+        .invoice-toolbar .status {
+            margin: 0;
+        }
+        .download-button {
+            background: #eef4fb;
+            color: #0b5870;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 14px;
+        }
         .raw-toggle {
             margin-top: 10px;
             display: inline-block;
@@ -350,6 +379,12 @@
 
         function invoiceStatusClass(invoice) {
             const status = String(invoice.status || '').toLowerCase();
+            if (status === 'd' || status === 'deleted') {
+                return 'deleted';
+            }
+            if (status === 'dr' || status === 'draft') {
+                return 'draft';
+            }
             if (status.includes('paid') || Number(invoice.total_paid || 0) >= Number(invoice.total || 1)) {
                 return 'paid';
             }
@@ -357,11 +392,68 @@
         }
 
         function invoiceStatus(invoice) {
-            return invoice.status || (invoice.paid_date ? 'paid' : 'open');
+            const status = String(invoice.status || '').trim();
+            if (status.toLowerCase() === 'd') return 'Deleted';
+            if (status.toLowerCase() === 'dr') return 'Draft';
+            return status || (invoice.paid_date ? 'paid' : 'open');
         }
 
         function invoiceDateValue(invoice) {
             return invoice.date || invoice.created_at || invoice.due || invoice.paid_date || '';
+        }
+
+        function isInformativeInvoice(invoice) {
+            const statusClass = invoiceStatusClass(invoice);
+            return statusClass === 'deleted' || statusClass === 'draft';
+        }
+
+        function csvEscape(value) {
+            const text = String(value ?? '');
+            if (/[",;\n\r]/.test(text)) {
+                return `"${text.replace(/"/g, '""')}"`;
+            }
+            return text;
+        }
+
+        function downloadCsv(filename, invoices) {
+            const headers = [
+                'number',
+                'date',
+                'due',
+                'paid_date',
+                'status',
+                'total',
+                'total_paid',
+                'currency',
+                'isr_reference_number',
+                'id',
+                'contact_id',
+            ];
+            const rows = invoices.map((invoice) => [
+                invoice.number || '',
+                formatDate(invoiceDateValue(invoice)),
+                formatDate(invoice.due),
+                formatDate(invoice.paid_date),
+                invoiceStatus(invoice),
+                invoice.total ?? '',
+                invoice.total_paid ?? '',
+                invoice.currency || '',
+                invoice.isr_reference_number || invoice.reference || '',
+                invoice.id || '',
+                invoice.contact_id || '',
+            ]);
+            const csv = [headers, ...rows]
+                .map((row) => row.map(csvEscape).join(';'))
+                .join('\n');
+            const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
         }
 
         function renderInvoices(target, invoices) {
@@ -370,7 +462,7 @@
                 return;
             }
             const rows = invoices.map((invoice, index) => `
-                <tr>
+                <tr class="${isInformativeInvoice(invoice) ? 'informative-invoice' : ''}">
                     <td>${escapeHtml(invoice.number || invoice.id || '-')}</td>
                     <td>${escapeHtml(formatDate(invoiceDateValue(invoice)))}</td>
                     <td>${escapeHtml(formatDate(invoice.due))}</td>
@@ -422,10 +514,20 @@
                 if (!response.ok) {
                     throw new Error(payload.detail || 'Recupero fatture fallito.');
                 }
-                area.innerHTML = `<div class="status">${payload.count} fatture trovate.</div>`;
+                const invoices = payload.invoices || [];
+                const safeContactId = String(payload.contact_id || contactId).replace(/[^a-zA-Z0-9_-]/g, '_');
+                area.innerHTML = `
+                    <div class="invoice-toolbar">
+                        <div class="status">${payload.count} fatture trovate.</div>
+                        <button class="download-button" type="button">Scarica CSV</button>
+                    </div>
+                `;
+                area.querySelector('.download-button').addEventListener('click', () => {
+                    downloadCsv(`smallinvoice-fatture-${safeContactId}.csv`, invoices);
+                });
                 const tableHost = document.createElement('div');
                 area.appendChild(tableHost);
-                renderInvoices(tableHost, payload.invoices || []);
+                renderInvoices(tableHost, invoices);
             } catch (error) {
                 area.innerHTML = `<div class="status error">${escapeHtml(error.message || 'Recupero fatture fallito.')}</div>`;
             } finally {
