@@ -733,6 +733,14 @@ def _smallinvoice_contact_text(contact: dict) -> str:
     return " ".join(values).casefold()
 
 
+def _smallinvoice_invoice_sort_key(invoice: dict) -> str:
+    for key in ("date", "paid_date", "due", "created_at", "updated_at"):
+        value = invoice.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
 async def _smallinvoice_access_token(client: httpx.AsyncClient) -> str:
     if not _smallinvoice_is_configured():
         raise HTTPException(
@@ -794,6 +802,50 @@ async def smallinvoice_search_contacts(request: Request):
                 break
 
     return {"query": query, "count": len(matched_contacts), "contacts": matched_contacts[:200]}
+
+
+@app.get("/api/utilities/smallinvoice/contacts/{contact_id}/invoices")
+async def smallinvoice_contact_invoices(contact_id: str):
+    contact_id = contact_id.strip()
+    if not contact_id:
+        raise HTTPException(status_code=400, detail="Contact ID mancante.")
+
+    contact_filter_id: int | str
+    contact_filter_id = int(contact_id) if contact_id.isdigit() else contact_id
+    invoices: list[dict] = []
+    limit = 200
+    max_pages = 50
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        token = await _smallinvoice_access_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        for page in range(max_pages):
+            response = await client.get(
+                f"{SMALLINVOICE_API_BASE_URL}/receivables/invoices",
+                headers=headers,
+                params={
+                    "filter": json.dumps({"contact_id": contact_filter_id}, separators=(",", ":")),
+                    "with": "positions",
+                    "sort": "-date",
+                    "limit": limit,
+                    "offset": page * limit,
+                },
+            )
+            if response.status_code >= 400:
+                raise HTTPException(status_code=502, detail="Recupero fatture Smallinvoice fallito.")
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise HTTPException(status_code=502, detail="Risposta fatture Smallinvoice non valida.") from exc
+            page_invoices = _smallinvoice_extract_items(payload)
+            invoices.extend(page_invoices)
+            pagination = payload.get("pagination") if isinstance(payload, dict) else None
+            has_next = bool(pagination and pagination.get("next"))
+            if len(page_invoices) < limit or not has_next:
+                break
+
+    invoices.sort(key=_smallinvoice_invoice_sort_key, reverse=True)
+    return {"contact_id": contact_id, "count": len(invoices), "invoices": invoices}
 
 
 @app.get("/attendance")

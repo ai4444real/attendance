@@ -170,6 +170,66 @@
             margin-top: 8px;
             color: var(--brand-muted);
         }
+        .contact-actions {
+            margin-top: 14px;
+        }
+        .secondary-button {
+            background: #e8f7ed;
+            color: var(--brand-pnl-green-dark);
+            padding: 10px 16px;
+            border-radius: 999px;
+            font-size: 15px;
+        }
+        .invoice-area {
+            margin-top: 16px;
+        }
+        .invoice-table-wrap {
+            overflow: auto;
+            border: 1px solid var(--brand-border);
+            border-radius: 14px;
+        }
+        table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: collapse;
+            background: #fff;
+        }
+        th, td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--brand-border);
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            color: var(--brand-muted);
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: #f6fafc;
+        }
+        .money {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 12px;
+            font-weight: 900;
+            background: #eef4fb;
+            color: #0b5870;
+            white-space: nowrap;
+        }
+        .pill.paid {
+            background: #dff5e8;
+            color: #087a3d;
+        }
+        .pill.open {
+            background: #fff2d7;
+            color: #9a6100;
+        }
         .raw-toggle {
             margin-top: 10px;
             display: inline-block;
@@ -276,6 +336,103 @@
             return parts.length ? parts.join(' · ') : 'Nessun dettaglio sintetico disponibile.';
         }
 
+        function formatDate(value) {
+            if (!value) return '-';
+            return String(value).slice(0, 10);
+        }
+
+        function formatMoney(value, currency) {
+            if (value === null || value === undefined || value === '') return '-';
+            const amount = Number(value);
+            const rendered = Number.isFinite(amount) ? amount.toFixed(2) : String(value);
+            return currency ? `${rendered} ${currency}` : rendered;
+        }
+
+        function invoiceStatusClass(invoice) {
+            const status = String(invoice.status || '').toLowerCase();
+            if (status.includes('paid') || Number(invoice.total_paid || 0) >= Number(invoice.total || 1)) {
+                return 'paid';
+            }
+            return 'open';
+        }
+
+        function invoiceStatus(invoice) {
+            return invoice.status || (invoice.paid_date ? 'paid' : 'open');
+        }
+
+        function invoiceDateValue(invoice) {
+            return invoice.date || invoice.created_at || invoice.due || invoice.paid_date || '';
+        }
+
+        function renderInvoices(target, invoices) {
+            if (!invoices.length) {
+                target.innerHTML = '<div class="status">Nessuna fattura trovata per questo cliente.</div>';
+                return;
+            }
+            const rows = invoices.map((invoice, index) => `
+                <tr>
+                    <td>${escapeHtml(invoice.number || invoice.id || '-')}</td>
+                    <td>${escapeHtml(formatDate(invoiceDateValue(invoice)))}</td>
+                    <td>${escapeHtml(formatDate(invoice.due))}</td>
+                    <td>${escapeHtml(formatDate(invoice.paid_date))}</td>
+                    <td><span class="pill ${invoiceStatusClass(invoice)}">${escapeHtml(invoiceStatus(invoice))}</span></td>
+                    <td class="money">${escapeHtml(formatMoney(invoice.total, invoice.currency))}</td>
+                    <td class="money">${escapeHtml(formatMoney(invoice.total_paid, invoice.currency))}</td>
+                    <td>${escapeHtml(invoice.isr_reference_number || invoice.reference || '-')}</td>
+                    <td>
+                        <details>
+                            <summary class="raw-toggle">JSON</summary>
+                            <pre>${escapeHtml(JSON.stringify(invoice, null, 2))}</pre>
+                        </details>
+                    </td>
+                </tr>
+            `).join('');
+            target.innerHTML = `
+                <div class="invoice-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Numero</th>
+                                <th>Data</th>
+                                <th>Due date</th>
+                                <th>Pagamento</th>
+                                <th>Stato</th>
+                                <th class="money">Totale</th>
+                                <th class="money">Pagato</th>
+                                <th>Riferimento</th>
+                                <th>Dettaglio</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function loadInvoices(contactId, index) {
+            const area = document.getElementById(`invoices-${index}`);
+            const actionButton = document.getElementById(`invoice-button-${index}`);
+            if (!contactId || !area || !actionButton) return;
+
+            actionButton.disabled = true;
+            area.innerHTML = '<div class="status">Carico fatture...</div>';
+            try {
+                const response = await fetch(`/api/utilities/smallinvoice/contacts/${encodeURIComponent(contactId)}/invoices`);
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.detail || 'Recupero fatture fallito.');
+                }
+                area.innerHTML = `<div class="status">${payload.count} fatture trovate.</div>`;
+                const tableHost = document.createElement('div');
+                area.appendChild(tableHost);
+                renderInvoices(tableHost, payload.invoices || []);
+            } catch (error) {
+                area.innerHTML = `<div class="status error">${escapeHtml(error.message || 'Recupero fatture fallito.')}</div>`;
+            } finally {
+                actionButton.disabled = false;
+            }
+        }
+
         function renderResults(contacts) {
             if (!contacts.length) {
                 resultsEl.innerHTML = '<div class="contact-card">Nessun cliente trovato.</div>';
@@ -290,6 +447,15 @@
                             <span class="contact-id">ID ${escapeHtml(contact.id || '-')}</span>
                         </div>
                         <div class="contact-meta">${escapeHtml(contactMeta(contact))}</div>
+                        <div class="contact-actions">
+                            <button
+                                id="invoice-button-${index}"
+                                class="secondary-button"
+                                type="button"
+                                onclick="loadInvoices('${escapeHtml(contact.id || '')}', ${index})"
+                            >Fatture</button>
+                        </div>
+                        <div id="invoices-${index}" class="invoice-area"></div>
                         <details>
                             <summary class="raw-toggle">Dettaglio tecnico</summary>
                             <pre id="${rawId}">${escapeHtml(JSON.stringify(contact, null, 2))}</pre>
