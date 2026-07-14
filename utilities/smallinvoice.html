@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PNL Evolution - Smallinvoice</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--brand-surface);
+            color: var(--brand-ink);
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            line-height: 1.55;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 10px 28px;
+            background: #fff;
+            border-bottom: 1px solid var(--brand-border);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: var(--brand-ink);
+            text-decoration: none;
+        }
+        .brand img { width: 126px; height: auto; }
+        .brand-title {
+            display: block;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .brand-subtitle {
+            color: var(--brand-muted);
+            font-size: 13px;
+        }
+        .nav {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .nav a {
+            color: #0b5870;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .nav a.active {
+            color: var(--brand-pnl-green-dark);
+            background: var(--brand-pnl-green-soft);
+            border-radius: 999px;
+            padding: 8px 14px;
+        }
+        .container {
+            width: min(1320px, calc(100% - 48px));
+            margin: 0 auto;
+            padding: 24px 0 42px;
+        }
+        .hero {
+            background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, #006d75 55%, var(--brand-pnl-green) 100%);
+            color: #fff;
+            border-radius: 20px;
+            padding: 36px 34px;
+            margin-bottom: 24px;
+            box-shadow: 0 18px 38px rgba(16, 42, 67, 0.12);
+        }
+        .hero h1 {
+            margin: 0 0 8px;
+            font-size: clamp(34px, 4vw, 56px);
+            letter-spacing: -0.04em;
+        }
+        .hero p {
+            margin: 0;
+            max-width: 820px;
+            font-size: 18px;
+        }
+        .panel {
+            background: #fff;
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 14px 34px rgba(16, 42, 67, 0.08);
+            margin-bottom: 18px;
+        }
+        .search-row {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+        }
+        label {
+            display: block;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--brand-muted);
+            margin-bottom: 8px;
+        }
+        input {
+            width: 100%;
+            border: 1px solid var(--brand-border);
+            border-radius: 16px;
+            padding: 14px 16px;
+            color: var(--brand-ink);
+            font: inherit;
+            font-size: 18px;
+        }
+        button {
+            border: 0;
+            border-radius: 16px;
+            background: var(--brand-pnl-blue);
+            color: #fff;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 900;
+            padding: 15px 24px;
+        }
+        button:disabled {
+            opacity: 0.55;
+            cursor: wait;
+        }
+        .status {
+            margin-top: 14px;
+            color: var(--brand-muted);
+            font-weight: 700;
+        }
+        .status.error {
+            color: #b21b18;
+        }
+        .results {
+            display: grid;
+            gap: 12px;
+        }
+        .contact-card {
+            border: 1px solid var(--brand-border);
+            border-radius: 16px;
+            padding: 16px 18px;
+            background: #fbfdff;
+        }
+        .contact-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: baseline;
+        }
+        .contact-name {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 900;
+        }
+        .contact-id {
+            color: var(--brand-muted);
+            font-size: 13px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .contact-meta {
+            margin-top: 8px;
+            color: var(--brand-muted);
+        }
+        .raw-toggle {
+            margin-top: 10px;
+            display: inline-block;
+            color: #0b5870;
+            font-weight: 900;
+            cursor: pointer;
+            user-select: none;
+        }
+        pre {
+            max-height: 260px;
+            overflow: auto;
+            background: #f4f8fb;
+            border: 1px solid var(--brand-border);
+            border-radius: 12px;
+            padding: 12px;
+            white-space: pre-wrap;
+        }
+        @media (max-width: 760px) {
+            .topbar, .search-row, .contact-header {
+                grid-template-columns: 1fr;
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .search-row {
+                display: block;
+            }
+            button {
+                width: 100%;
+                margin-top: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/utilities">
+            <img src="/assets/pnl-evolution-logo.png" alt="PNL Evolution">
+            <span>
+                <span class="brand-title">Rebekko Webapps</span>
+                <span class="brand-subtitle">Utilities</span>
+            </span>
+        </a>
+        <nav class="nav" aria-label="Navigazione principale">
+            <a href="/">Home</a>
+            <a href="/utilities">Utilities</a>
+            <a href="/utilities/classroom-manager">Classroom Manager</a>
+            <a class="active" href="/utilities/smallinvoice">Smallinvoice</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>Smallinvoice</h1>
+            <p>Ricerca clienti per nome. Le credenziali API restano sul server: il browser chiama solo Rebekko.</p>
+        </section>
+
+        <section class="panel">
+            <form id="search-form" class="search-row">
+                <div>
+                    <label for="query">Nome cliente</label>
+                    <input id="query" name="query" autocomplete="off" placeholder="Es. Rossi, PNL, Mario" minlength="2" required>
+                </div>
+                <button id="search-button" type="submit">Cerca</button>
+            </form>
+            <div id="status" class="status">Inserisci almeno 2 caratteri e avvia la ricerca.</div>
+        </section>
+
+        <section class="panel">
+            <div id="results" class="results"></div>
+        </section>
+    </main>
+
+    <script>
+        const form = document.getElementById('search-form');
+        const queryInput = document.getElementById('query');
+        const button = document.getElementById('search-button');
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function contactName(contact) {
+            return contact.display_name
+                || contact.company_name
+                || contact.company
+                || [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+                || contact.name
+                || `Cliente ${contact.id || ''}`.trim();
+        }
+
+        function contactMeta(contact) {
+            const parts = [
+                contact.email || contact.email_address,
+                [contact.zip, contact.city].filter(Boolean).join(' '),
+                contact.phone || contact.phone_number,
+            ].filter(Boolean);
+            return parts.length ? parts.join(' · ') : 'Nessun dettaglio sintetico disponibile.';
+        }
+
+        function renderResults(contacts) {
+            if (!contacts.length) {
+                resultsEl.innerHTML = '<div class="contact-card">Nessun cliente trovato.</div>';
+                return;
+            }
+            resultsEl.innerHTML = contacts.map((contact, index) => {
+                const rawId = `raw-${index}`;
+                return `
+                    <article class="contact-card">
+                        <div class="contact-header">
+                            <h2 class="contact-name">${escapeHtml(contactName(contact))}</h2>
+                            <span class="contact-id">ID ${escapeHtml(contact.id || '-')}</span>
+                        </div>
+                        <div class="contact-meta">${escapeHtml(contactMeta(contact))}</div>
+                        <details>
+                            <summary class="raw-toggle">Dettaglio tecnico</summary>
+                            <pre id="${rawId}">${escapeHtml(JSON.stringify(contact, null, 2))}</pre>
+                        </details>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const query = queryInput.value.trim();
+            if (query.length < 2) {
+                statusEl.textContent = 'Inserisci almeno 2 caratteri.';
+                statusEl.classList.add('error');
+                return;
+            }
+
+            button.disabled = true;
+            statusEl.classList.remove('error');
+            statusEl.textContent = 'Ricerca in corso...';
+            resultsEl.innerHTML = '';
+
+            try {
+                const response = await fetch(`/api/utilities/smallinvoice/contacts?query=${encodeURIComponent(query)}`);
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.detail || 'Ricerca fallita.');
+                }
+                statusEl.textContent = `${payload.count} clienti trovati per "${payload.query}".`;
+                renderResults(payload.contacts || []);
+            } catch (error) {
+                statusEl.textContent = error.message || 'Ricerca fallita.';
+                statusEl.classList.add('error');
+            } finally {
+                button.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

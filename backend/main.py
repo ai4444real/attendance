@@ -201,7 +201,12 @@ ATTENDANCE_INSTRUCTORS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-in
 ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 UTILITIES_STATIC_DIR = os.path.join(WORKSPACE_DIR, "utilities")
 UTILITIES_CLASSROOM_MANAGER_FILE = os.path.join(UTILITIES_STATIC_DIR, "classroom-manager.html")
+UTILITIES_SMALLINVOICE_FILE = os.path.join(UTILITIES_STATIC_DIR, "smallinvoice.html")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
+
+SMALLINVOICE_API_BASE_URL = os.getenv("SMALLINVOICE_API_BASE_URL", "https://api.smallinvoice.com/v2").rstrip("/")
+SMALLINVOICE_CLIENT_ID = os.getenv("SMALLINVOICE_CLIENT_ID", "").strip()
+SMALLINVOICE_CLIENT_SECRET = os.getenv("SMALLINVOICE_CLIENT_SECRET", "").strip()
 
 # Mount current module static files
 app.mount("/attendance/static", StaticFiles(directory=ATTENDANCE_STATIC_DIR), name="attendance-static")
@@ -649,6 +654,11 @@ async def utilities_home():
                     <h2>Classroom Manager</h2>
                     <p>Gestione corsi Google Classroom, calendari, eventi condivisi ed export operativi.</p>
                 </a>
+                <a class="card" href="/utilities/smallinvoice">
+                    <span class="card-label">Finance</span>
+                    <h2>Smallinvoice</h2>
+                    <p>Ricerca rapida clienti Smallinvoice per nome, senza esporre credenziali API nel browser.</p>
+                </a>
             </div>
         </section>
     """
@@ -669,6 +679,121 @@ async def utilities_classroom_manager():
         UTILITIES_CLASSROOM_MANAGER_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
+
+
+@app.get("/utilities/smallinvoice")
+@app.get("/utilities/smallinvoice/")
+async def utilities_smallinvoice():
+    return FileResponse(
+        UTILITIES_SMALLINVOICE_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+def _smallinvoice_is_configured() -> bool:
+    return bool(SMALLINVOICE_CLIENT_ID and SMALLINVOICE_CLIENT_SECRET)
+
+
+def _smallinvoice_extract_items(payload) -> list[dict]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("items", "data", "contacts", "results"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        for key in ("items", "contacts", "results"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _smallinvoice_contact_text(contact: dict) -> str:
+    values = []
+    for key in (
+        "id",
+        "name",
+        "display_name",
+        "company",
+        "company_name",
+        "first_name",
+        "last_name",
+        "email",
+        "email_address",
+        "city",
+        "zip",
+    ):
+        value = contact.get(key)
+        if value:
+            values.append(str(value))
+    return " ".join(values).casefold()
+
+
+async def _smallinvoice_access_token(client: httpx.AsyncClient) -> str:
+    if not _smallinvoice_is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Smallinvoice non configurato: imposta SMALLINVOICE_CLIENT_ID e SMALLINVOICE_CLIENT_SECRET.",
+        )
+    response = await client.post(
+        f"{SMALLINVOICE_API_BASE_URL}/auth/access-tokens",
+        json={
+            "grant_type": "client_credentials",
+            "client_id": SMALLINVOICE_CLIENT_ID,
+            "client_secret": SMALLINVOICE_CLIENT_SECRET,
+            "scope": "invoice contact",
+        },
+    )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Autenticazione Smallinvoice fallita.")
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Risposta auth Smallinvoice non valida.") from exc
+    token = payload.get("access_token")
+    if not token:
+        raise HTTPException(status_code=502, detail="Token Smallinvoice mancante nella risposta auth.")
+    return token
+
+
+@app.get("/api/utilities/smallinvoice/contacts")
+async def smallinvoice_search_contacts(request: Request):
+    query = (request.query_params.get("query") or "").strip()
+    if len(query) < 2:
+        raise HTTPException(status_code=400, detail="Inserisci almeno 2 caratteri.")
+
+    query_key = query.casefold()
+    matched_contacts: list[dict] = []
+    limit = 200
+    max_pages = 20
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        token = await _smallinvoice_access_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        for page in range(max_pages):
+            response = await client.get(
+                f"{SMALLINVOICE_API_BASE_URL}/contacts",
+                headers=headers,
+                params={"limit": limit, "offset": page * limit},
+            )
+            if response.status_code >= 400:
+                raise HTTPException(status_code=502, detail="Ricerca contatti Smallinvoice fallita.")
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise HTTPException(status_code=502, detail="Risposta contatti Smallinvoice non valida.") from exc
+            contacts = _smallinvoice_extract_items(payload)
+            for contact in contacts:
+                if query_key in _smallinvoice_contact_text(contact):
+                    matched_contacts.append(contact)
+            if len(contacts) < limit:
+                break
+
+    return {"query": query, "count": len(matched_contacts), "contacts": matched_contacts[:200]}
 
 
 @app.get("/attendance")
