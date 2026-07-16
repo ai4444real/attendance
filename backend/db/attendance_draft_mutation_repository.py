@@ -544,7 +544,7 @@ class PostgresAttendanceDraftMutationRepository:
                 if existing_lesson is not None:
                     lesson_id, result_course_name, result_lesson_date = existing_lesson
                 else:
-                    batch_id = self._ensure_manual_batch(cursor, import_data.created_by)
+                    batch_id = self._ensure_manual_batch(cursor, import_data.created_by, lesson_date)
                     lesson_id = self._create_manual_lesson(
                         cursor,
                         batch_id=batch_id,
@@ -615,7 +615,10 @@ class PostgresAttendanceDraftMutationRepository:
             participants_upserted=upserted,
         )
 
-    def _ensure_manual_batch(self, cursor, created_by: str | None) -> int:
+    def _ensure_manual_batch(self, cursor, created_by: str | None, lesson_date: date | None) -> int:
+        source_file_name = "manual-presence-entry"
+        if lesson_date is not None:
+            source_file_name = f"{source_file_name}-{lesson_date.strftime('%Y_%m_%d')}"
         cursor.execute(
             """
             INSERT INTO attendance_import_batches (
@@ -625,10 +628,10 @@ class PostgresAttendanceDraftMutationRepository:
                 status,
                 notes
             )
-            VALUES ('manual', 'manual-presence-entry', %s, 'official', 'Contenitore tecnico per presenze inserite manualmente')
+            VALUES ('manual', %s, %s, 'official', 'Contenitore tecnico per presenze inserite manualmente')
             RETURNING id
             """,
-            (created_by,),
+            (source_file_name, created_by),
         )
         row = cursor.fetchone()
         if row is None:
