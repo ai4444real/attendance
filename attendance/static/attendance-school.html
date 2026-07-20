@@ -44,6 +44,10 @@
         .scope-actions { display: flex; gap: 10px; flex-wrap: wrap; }
         .scope-button { border: 1px solid var(--brand-border); background: #fff; color: #155e75; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
         .scope-button:hover { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
+        .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; flex-wrap: wrap; }
+        .export-button { border: 1px solid var(--brand-pnl-blue); background: var(--brand-pnl-blue); color: white; border-radius: 999px; padding: 9px 13px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .export-button:hover { background: var(--brand-pnl-blue-dark); }
+        .export-button:disabled { opacity: 0.55; cursor: not-allowed; }
         .date-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
         .course-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; max-height: 156px; overflow: auto; padding: 2px; }
         .course-check { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 10px; background: #fff; color: var(--brand-ink); font-size: 13px; font-weight: 800; cursor: pointer; user-select: none; }
@@ -149,8 +153,13 @@
         <section id="summary" class="summary-grid"></section>
 
         <section class="panel">
-            <h2 class="panel-title">Presenze ufficiali</h2>
-            <p class="hint">Questa vista legge solo lesson official non ignorate. I filtri lavorano sul dataset già consolidato.</p>
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">Presenze ufficiali</h2>
+                    <p class="hint">Questa vista legge solo lesson official non ignorate. I filtri lavorano sul dataset già consolidato.</p>
+                </div>
+                <button type="button" id="exportCsvButton" class="export-button">Esporta CSV</button>
+            </div>
 
             <div class="filters">
                 <div class="filter-group">
@@ -190,6 +199,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-school.js?v=20260618-school-timezone"></script>
+    <script src="/attendance/static/js/attendance-school.js?v=20260720-school-export"></script>
 </body>
 </html>

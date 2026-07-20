@@ -461,7 +461,8 @@ class PostgresAttendanceDraftQueryRepository:
                             p.id AS participant_id,
                             p.canonical_full_name,
                             NULLIF(lower(COALESCE(p.email, '')), '') AS email,
-                            p.final_presence_status
+                            p.final_presence_status,
+                            p.total_minutes
                         FROM official_lessons AS l
                         JOIN attendance_lesson_participants AS p
                             ON p.lesson_id = l.id
@@ -516,6 +517,7 @@ class PostgresAttendanceDraftQueryRepository:
                             MIN(canonical_full_name) AS canonical_full_name,
                             MIN(email) AS email,
                             MAX(status_rank) AS status_rank,
+                            SUM(total_minutes) AS total_minutes,
                             MIN(participant_id) AS first_participant_id
                         FROM resolved_participants
                         GROUP BY
@@ -537,6 +539,7 @@ class PostgresAttendanceDraftQueryRepository:
                             WHEN 1 THEN 'prima_meta'
                             ELSE 'assente'
                         END AS final_presence_status,
+                        p.total_minutes,
                         COALESCE(c.expected_lessons_count, lc.official_lessons_count) AS expected_lessons_count,
                         CASE
                             WHEN c.expected_lessons_count IS NULL THEN 'official_lessons'
@@ -560,8 +563,9 @@ class PostgresAttendanceDraftQueryRepository:
                 canonical_full_name=str(row[3]),
                 email=row[4],
                 final_presence_status=str(row[5]),
-                expected_lessons_count=int(row[6]),
-                expected_lessons_source=str(row[7]),
+                total_minutes=float(row[6] or 0),
+                expected_lessons_count=int(row[7]),
+                expected_lessons_source=str(row[8]),
             )
             for row in rows
         ]

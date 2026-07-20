@@ -14,11 +14,13 @@ const AttendanceSchoolApp = {
             dateEndFilter: document.getElementById('dateEndFilter'),
             selectAllCourses: document.getElementById('selectAllCourses'),
             clearCourses: document.getElementById('clearCourses'),
+            exportCsvButton: document.getElementById('exportCsvButton'),
             orientationContainer: document.getElementById('orientationContainer'),
             tableContainer: document.getElementById('tableContainer'),
             sourceModalHost: document.getElementById('sourceModalHost'),
         };
         this._records = [];
+        this._currentRecords = [];
         this._filters = { courses: new Set(), dateStart: '', dateEnd: '', student: '', studentText: '' };
         this._allCourses = [];
         this._studentLabelsByFilterKey = new Map();
@@ -55,6 +57,7 @@ const AttendanceSchoolApp = {
             this._updateStudentAliasLink();
             this._render();
         });
+        this._els.exportCsvButton.addEventListener('click', () => this._downloadCurrentRecordsCsv());
 
         await this._load();
     },
@@ -204,6 +207,8 @@ const AttendanceSchoolApp = {
 
     _render() {
         const records = this._getFilteredRecords();
+        this._currentRecords = records;
+        this._els.exportCsvButton.disabled = records.length === 0;
         this._renderSummary(records);
         this._renderOrientation();
         this._renderTable(records);
@@ -329,6 +334,9 @@ const AttendanceSchoolApp = {
                     );
                     const firstRecord = recordsByCourse.find((record) => record.course_name === courseName);
                     const participation = firstRecord ? participationByStudentCourse.get(this._studentCourseKey(firstRecord)) : null;
+                    const totalMinutes = recordsByCourse
+                        .filter((record) => record.course_name === courseName)
+                        .reduce((sum, record) => sum + this._recordTotalMinutes(record), 0);
                     return `
                         <article class="course-map-card">
                             <div class="course-map-head">
@@ -337,6 +345,7 @@ const AttendanceSchoolApp = {
                                     <div class="course-map-meta">
                                         <span>${course?.lessons.length || 0} lezioni official</span>
                                         <span>${participantByLesson.size} lezioni con record</span>
+                                        <span>totale presenze ${this._escapeHtml(this._formatMinutes(totalMinutes))}</span>
                                     </div>
                                 </div>
                                 <div class="course-map-score">${this._renderCompactParticipation(participation)}</div>
@@ -419,6 +428,7 @@ const AttendanceSchoolApp = {
                         <th>Data</th>
                         <th>Studente</th>
                         <th>Stato di presenza</th>
+                        <th>Minuti</th>
                         <th>Partecipazione corso</th>
                         <th>Origine</th>
                     </tr>
@@ -432,6 +442,7 @@ const AttendanceSchoolApp = {
                                 <td><a class="lesson-link" href="${this._escapeAttr(this._draftLessonUrl(record.lesson_id))}" target="_blank" rel="noopener">${this._escapeHtml(this._formatDate(record.lesson_date))}</a></td>
                                 <td>${this._escapeHtml(this._formatPersonName(record.canonical_full_name))}</td>
                                 <td><span class="status-tag ${this._escapeAttr(record.final_presence_status)}">${this._escapeHtml(this._presenceLabel(record.final_presence_status))}</span></td>
+                                <td>${this._escapeHtml(this._formatMinutes(this._recordTotalMinutes(record)))}</td>
                                 <td class="participation-cell">${this._renderParticipation(participation)}</td>
                                 <td>
                                     <button type="button" class="origin-button" data-origin-record="${this._escapeAttr(this._originRecordPayload(record))}">Origine</button>
@@ -720,6 +731,92 @@ const AttendanceSchoolApp = {
             month: '2-digit',
             day: '2-digit',
         }).format(date);
+    },
+
+    _recordTotalMinutes(record) {
+        const value = Number(record.total_minutes || 0);
+        return Number.isFinite(value) ? value : 0;
+    },
+
+    _formatMinutes(value) {
+        const rounded = Math.round(Number(value || 0));
+        return `${rounded} minuti`;
+    },
+
+    _downloadCurrentRecordsCsv() {
+        const records = this._currentRecords || [];
+        if (!records.length) return;
+        const participationByStudentCourse = this._buildParticipationIndex(
+            this._records.filter((record) => this._recordMatchesScope(record))
+        );
+        const headers = [
+            'corso',
+            'data',
+            'studente',
+            'email',
+            'stato_presenza',
+            'minuti',
+            'partecipazione_percentuale',
+            'partecipazione_score',
+            'lezioni_attese',
+            'lezioni_attese_sorgente',
+            'lesson_id',
+        ];
+        const rows = records.map((record) => {
+            const participation = participationByStudentCourse.get(this._studentCourseKey(record));
+            return [
+                record.course_name,
+                record.lesson_date,
+                this._formatPersonName(record.canonical_full_name),
+                record.email || '',
+                this._presenceLabel(record.final_presence_status),
+                this._recordTotalMinutes(record),
+                participation && participation.percentage !== null ? this._formatPercentage(participation.percentage) : '',
+                participation ? this._formatScore(participation.score) : '',
+                participation ? participation.expectedLessons : '',
+                participation ? participation.expectedSource : '',
+                record.lesson_id,
+            ];
+        });
+        const csv = [headers, ...rows]
+            .map((row) => row.map((value) => this._csvEscape(value)).join(';'))
+            .join('\n');
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = this._schoolCsvFilename();
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    },
+
+    _schoolCsvFilename() {
+        const parts = ['analisi-scuola'];
+        if (this._filters.student) {
+            parts.push(this._safeFilenamePart(this._studentLabelsByFilterKey.get(this._filters.student) || 'studente'));
+        }
+        if (this._filters.dateStart || this._filters.dateEnd) {
+            parts.push(`${this._filters.dateStart || 'inizio'}_${this._filters.dateEnd || 'fine'}`);
+        }
+        return `${parts.join('-')}.csv`;
+    },
+
+    _safeFilenamePart(value) {
+        return String(value || '')
+            .trim()
+            .toLocaleLowerCase('it')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'export';
+    },
+
+    _csvEscape(value) {
+        const text = String(value ?? '');
+        if (/[",;\n\r]/.test(text)) {
+            return `"${text.replaceAll('"', '""')}"`;
+        }
+        return text;
     },
 
     _escapeHtml(value) {

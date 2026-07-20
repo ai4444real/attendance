@@ -223,6 +223,7 @@ class SchoolAttendanceRecordView:
     canonical_full_name: str
     email: Optional[str]
     final_presence_status: str
+    total_minutes: float
     expected_lessons_count: int
     expected_lessons_source: str
 
