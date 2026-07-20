@@ -504,6 +504,7 @@ class PostgresAttendanceDraftQueryRepository:
                                 WHEN 'prima_meta' THEN 1
                                 ELSE 0
                             END AS status_rank,
+                            b.total_minutes,
                             b.participant_id
                         FROM participant_base AS b
                         LEFT JOIN identity_emails_by_name AS e
