@@ -38,6 +38,7 @@ from backend.attendance_app.services import (
     _load_identity_alias_maps,
 )
 from backend.db.attendance_draft_import_repository import PostgresAttendanceDraftImportRepository
+from backend.db.attendance_identity_repository import PostgresAttendanceIdentityRepository
 from backend.db.attendance_identity_alias_repository import PostgresAttendanceIdentityAliasRepository
 from backend.db.attendance_instructor_repository import PostgresAttendanceInstructorRepository
 from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
@@ -193,6 +194,7 @@ ATTENDANCE_REVIEW_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "review-normalized.
 ATTENDANCE_IMPORT_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "import-zoom.html")
 ATTENDANCE_DRAFTS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "draft-imports.html")
 ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliases.html")
+ATTENDANCE_IDENTITIES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-identities.html")
 ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.html")
 ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
 ATTENDANCE_FOLLOWUPS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-followups.html")
@@ -889,6 +891,11 @@ async def attendance_home():
                     <h2>Alias identità</h2>
                     <p>Controlla gli alias nome registrati nel database e verifica rapidamente se un'unione è stata salvata.</p>
                 </a>
+                <a class="card" href="/attendance/identities">
+                    <span class="card-label">Supporto</span>
+                    <h2>Identità osservate</h2>
+                    <p>Registro tecnico degli studenti già incontrati nei dati attendance, utile per alias e futuri insiemi didattici.</p>
+                </a>
                 <a class="card" href="/attendance/instructors">
                     <span class="card-label">Supporto</span>
                     <h2>Docenti</h2>
@@ -948,6 +955,15 @@ async def attendance_drafts():
 async def attendance_aliases():
     return FileResponse(
         ATTENDANCE_ALIASES_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/identities")
+@app.get("/attendance/identities/")
+async def attendance_identities():
+    return FileResponse(
+        ATTENDANCE_IDENTITIES_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -1524,6 +1540,37 @@ async def attendance_search_identity_candidates(q: str = "", limit: int = 30):
             }
             for candidate in candidates
         ]
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/attendance/identities")
+async def attendance_list_identities(limit: int = 500):
+    repository = PostgresAttendanceIdentityRepository()
+    identities = repository.list_identities(limit=limit)
+    return JSONResponse({
+        "total_visible": len(identities),
+        "identities": [
+            {
+                "identity_key": identity.identity_key,
+                "display_name": identity.display_name,
+                "email": identity.email,
+            }
+            for identity in identities
+        ],
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.post("/api/attendance/identities/rebuild")
+async def attendance_rebuild_identities():
+    repository = PostgresAttendanceIdentityRepository()
+    try:
+        result = repository.rebuild_from_participants()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Ricostruzione identità fallita: {exc}") from exc
+    return JSONResponse({
+        "source_identities": result.source_identities,
+        "rows_upserted": result.rows_upserted,
+        "identities_count": result.identities_count,
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 

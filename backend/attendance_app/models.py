@@ -118,6 +118,20 @@ class AttendanceIdentityAlias:
 
 
 @dataclass(frozen=True)
+class AttendanceIdentity:
+    identity_key: str
+    display_name: str
+    email: Optional[str]
+
+
+@dataclass(frozen=True)
+class AttendanceIdentityRebuildResult:
+    source_identities: int
+    rows_upserted: int
+    identities_count: int
+
+
+@dataclass(frozen=True)
 class ImportBatchSummary:
     id: int
     source_system: str

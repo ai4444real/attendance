@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Protocol
 
 from .models import (
+    AttendanceIdentity,
     AttendanceIdentityAlias,
     AttendanceIdentityCandidateView,
+    AttendanceIdentityRebuildResult,
     DraftBatchDetail,
     DraftLessonSourceSegment,
     DraftLessonView,
@@ -53,6 +55,16 @@ class AttendanceIdentityAliasRepository(Protocol):
 
     def deactivate_alias(self, alias_id: int) -> None:
         """Deactivate one alias rule without deleting history."""
+
+
+class AttendanceIdentityRepository(Protocol):
+    """Read and rebuild observed attendance identities."""
+
+    def list_identities(self, limit: int = 500) -> list[AttendanceIdentity]:
+        """Return observed identities ordered by display name."""
+
+    def rebuild_from_participants(self) -> AttendanceIdentityRebuildResult:
+        """Bulk upsert observed identities from persisted participants."""
 
 
 class AttendanceDraftQueryRepository(Protocol):
