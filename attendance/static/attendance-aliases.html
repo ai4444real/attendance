@@ -33,10 +33,15 @@
         .aliases-table th, .aliases-table td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--brand-border); vertical-align: top; }
         .aliases-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); }
         .alias-name { font-weight: 800; color: var(--brand-ink); }
-        .actions-cell { width: 44px; text-align: right; }
+        .actions-cell { width: 120px; text-align: right; display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+        .alias-sync-button { border: 1px solid var(--brand-border); border-radius: 999px; background: #f8fbfd; color: var(--brand-pnl-blue); font-size: 12px; font-weight: 800; padding: 7px 10px; cursor: pointer; }
+        .alias-sync-button:hover { background: #eef7fb; }
+        .alias-sync-button:disabled { opacity: 0.5; cursor: wait; }
         .alias-delete-button { width: 30px; height: 30px; border-radius: 999px; border: 1px solid #f3c6cf; background: #fff5f7; color: #b42318; font-size: 20px; line-height: 1; cursor: pointer; }
         .alias-delete-button:hover { background: #ffe4e8; }
         .alias-delete-button:disabled { opacity: 0.5; cursor: wait; }
+        .identity-link { display: inline-block; border: 1px solid #cfe7d8; border-radius: 999px; background: #edf8f1; color: #087443; padding: 4px 8px; font-size: 12px; font-weight: 800; }
+        .identity-missing { display: inline-block; border: 1px solid #f5d0a7; border-radius: 999px; background: #fff7ed; color: #b54708; padding: 4px 8px; font-size: 12px; font-weight: 800; }
         .primary-action { border: 0; border-radius: 999px; padding: 10px 14px; background: var(--brand-pnl-blue); color: white; font-weight: 800; cursor: pointer; }
         .primary-action:hover { filter: brightness(0.95); }
         .primary-action:disabled { opacity: 0.55; cursor: wait; }
@@ -142,6 +147,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-aliases.js?v=20260517-identity-search"></script>
+    <script src="/attendance/static/js/attendance-aliases.js?v=20260721-alias-identity-sync"></script>
 </body>
 </html>

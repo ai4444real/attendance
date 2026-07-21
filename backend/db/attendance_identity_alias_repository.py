@@ -23,6 +23,7 @@ class PostgresAttendanceIdentityAliasRepository:
                         canonical_email,
                         alias_full_name,
                         alias_type,
+                        identity_id,
                         created_by,
                         created_at,
                         is_active,
@@ -41,10 +42,11 @@ class PostgresAttendanceIdentityAliasRepository:
                 canonical_email=row[2],
                 alias_value=str(row[3]),
                 alias_type=str(row[4]),
-                created_by=row[5],
-                created_at=_ensure_datetime(row[6]),
-                is_active=bool(row[7]),
-                notes=row[8],
+                identity_id=int(row[5]) if row[5] is not None else None,
+                created_by=row[6],
+                created_at=_ensure_datetime(row[7]),
+                is_active=bool(row[8]),
+                notes=row[9],
             )
             for row in rows
         ]
@@ -91,6 +93,7 @@ class PostgresAttendanceIdentityAliasRepository:
                         canonical_email,
                         alias_full_name,
                         alias_type,
+                        identity_id,
                         created_by,
                         created_at,
                         is_active,
@@ -119,10 +122,11 @@ class PostgresAttendanceIdentityAliasRepository:
             canonical_email=row[2],
             alias_value=str(row[3]),
             alias_type=str(row[4]),
-            created_by=row[5],
-            created_at=_ensure_datetime(row[6]),
-            is_active=bool(row[7]),
-            notes=row[8],
+            identity_id=int(row[5]) if row[5] is not None else None,
+            created_by=row[6],
+            created_at=_ensure_datetime(row[7]),
+            is_active=bool(row[8]),
+            notes=row[9],
         )
 
     def deactivate_alias(self, alias_id: int) -> None:

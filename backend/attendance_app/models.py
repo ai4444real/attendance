@@ -115,6 +115,7 @@ class AttendanceIdentityAlias:
     created_at: datetime
     is_active: bool
     notes: Optional[str]
+    identity_id: Optional[int] = None
 
 
 @dataclass(frozen=True)

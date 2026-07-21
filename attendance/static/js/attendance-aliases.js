@@ -69,7 +69,7 @@ const AttendanceAliasesApp = {
         });
 
         this._els.aliasesBody.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-action="deactivate-alias"]');
+            const button = event.target.closest('[data-action][data-alias-id]');
             if (!button) {
                 return;
             }
@@ -77,10 +77,18 @@ const AttendanceAliasesApp = {
             if (!aliasId) {
                 return;
             }
-            this._deactivateAlias(aliasId, button).catch((error) => {
-                console.error(error);
-                window.alert(error.message || 'Impossibile disattivare l’alias.');
-            });
+            if (button.dataset.action === 'deactivate-alias') {
+                this._deactivateAlias(aliasId, button).catch((error) => {
+                    console.error(error);
+                    window.alert(error.message || 'Impossibile disattivare l’alias.');
+                });
+            }
+            if (button.dataset.action === 'sync-alias-identity') {
+                this._syncAliasIdentity(aliasId, button).catch((error) => {
+                    console.error(error);
+                    window.alert(error.message || 'Sync identità fallito.');
+                });
+            }
         });
 
         await this._loadAliases();
@@ -291,6 +299,7 @@ const AttendanceAliasesApp = {
                         <th>Creato da</th>
                         <th>Creato il</th>
                         <th>Note</th>
+                        <th>Identità</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -303,7 +312,16 @@ const AttendanceAliasesApp = {
                             <td>${this._escapeHtml(alias.created_by || '—')}</td>
                             <td>${this._escapeHtml(this._formatDateTime(alias.created_at))}</td>
                             <td>${this._escapeHtml(alias.notes || '—')}</td>
+                            <td>${this._renderIdentityCell(alias)}</td>
                             <td class="actions-cell">
+                                <button
+                                    type="button"
+                                    class="alias-sync-button"
+                                    data-action="sync-alias-identity"
+                                    data-alias-id="${this._escapeAttr(alias.id)}"
+                                    title="Sincronizza identità stabile"
+                                    aria-label="Sincronizza identità per alias ${this._escapeAttr(alias.alias_value)}"
+                                >Sync</button>
                                 <button
                                     type="button"
                                     class="alias-delete-button"
@@ -318,6 +336,38 @@ const AttendanceAliasesApp = {
                 </tbody>
             </table>
         `;
+    },
+
+    _renderIdentityCell(alias) {
+        return alias.identity_id
+            ? `<span class="identity-link">#${this._escapeHtml(alias.identity_id)}</span>`
+            : '<span class="identity-missing">non collegata</span>';
+    },
+
+    async _syncAliasIdentity(aliasId, button) {
+        button.disabled = true;
+        const response = await fetch(`/api/attendance/identity-aliases/${aliasId}/sync-identity`, {
+            method: 'POST',
+            cache: 'no-store',
+        });
+        let payload = {};
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = {};
+        }
+        if (!response.ok) {
+            throw new Error(payload.detail || 'Sync identità fallito.');
+        }
+        const pieces = [
+            `Alias #${payload.alias_id} collegato a identità #${payload.identity_id}`,
+        ];
+        if (payload.alias_identity_deactivated) {
+            pieces.push('identità alias nascosta');
+        }
+        this._els.rebuildAliasesResult.classList.remove('is-error');
+        this._els.rebuildAliasesResult.textContent = pieces.join(' · ');
+        await this._loadAliases();
     },
 
     async _deactivateAlias(aliasId, button) {
