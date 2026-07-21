@@ -27,8 +27,10 @@ class PostgresAttendanceIdentityRepository:
                         id,
                         identity_key,
                         display_name,
-                        email
+                        email,
+                        is_active
                     FROM attendance_identities
+                    WHERE is_active = TRUE
                     ORDER BY display_name ASC, email ASC NULLS LAST, identity_key ASC
                     LIMIT %s
                     """,
@@ -42,9 +44,25 @@ class PostgresAttendanceIdentityRepository:
                 identity_key=str(row[1]),
                 display_name=str(row[2]),
                 email=row[3],
+                is_active=bool(row[4]),
             )
             for row in rows
         ]
+
+    def deactivate_identity(self, identity_id: int) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE attendance_identities
+                    SET is_active = FALSE
+                    WHERE id = %s
+                    """,
+                    (identity_id,),
+                )
+                if cursor.rowcount == 0:
+                    raise LookupError(f"Attendance identity {identity_id} not found.")
+            connection.commit()
 
     def rebuild_from_participants(self) -> AttendanceIdentityRebuildResult:
         with get_db_connection() as connection:
@@ -160,6 +178,7 @@ class PostgresAttendanceIdentityRepository:
                     identity_key=identity_key,
                     display_name=full_name,
                     email=identity_email or None,
+                    is_active=True,
                 )
                 continue
             identities_by_key[identity_key] = AttendanceIdentity(
@@ -167,6 +186,7 @@ class PostgresAttendanceIdentityRepository:
                 identity_key=identity_key,
                 display_name=existing.display_name,
                 email=existing.email or identity_email or None,
+                is_active=existing.is_active,
             )
 
         return sorted(

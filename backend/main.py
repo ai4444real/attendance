@@ -1555,6 +1555,7 @@ async def attendance_list_identities(limit: int = 500):
                 "identity_key": identity.identity_key,
                 "display_name": identity.display_name,
                 "email": identity.email,
+                "is_active": identity.is_active,
             }
             for identity in identities
         ],
@@ -1573,6 +1574,21 @@ async def attendance_rebuild_identities():
         "rows_upserted": result.rows_upserted,
         "identities_count": result.identities_count,
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.post("/api/attendance/identities/{identity_id}/deactivate")
+async def attendance_deactivate_identity(identity_id: int):
+    repository = PostgresAttendanceIdentityRepository()
+    try:
+        repository.deactivate_identity(identity_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Disattivazione identità fallita: {exc}") from exc
+    return JSONResponse(
+        {"identity_id": identity_id, "is_active": False},
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.post("/api/attendance/identity-aliases/rebuild-all")

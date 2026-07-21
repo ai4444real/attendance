@@ -35,6 +35,13 @@ const AttendanceIdentitiesApp = {
             if (button.dataset.action === 'select-alias') {
                 this._selectedAlias = identity;
             }
+            if (button.dataset.action === 'deactivate-identity') {
+                this._deactivateIdentity(identity).catch((error) => {
+                    console.error(error);
+                    window.alert(error.message || 'Impossibile ignorare l’identità.');
+                });
+                return;
+            }
             this._renderAliasPreview();
             this._renderTable(this._filteredIdentities);
         });
@@ -115,6 +122,7 @@ const AttendanceIdentitiesApp = {
                                 <div class="identity-row-actions">
                                     <button class="tiny-action" type="button" data-action="select-canonical" data-identity-index="${this._escapeAttr(index)}">Canonico</button>
                                     <button class="tiny-action" type="button" data-action="select-alias" data-identity-index="${this._escapeAttr(index)}">Alias</button>
+                                    <button class="tiny-action" type="button" data-action="deactivate-identity" data-identity-index="${this._escapeAttr(index)}">Ignora</button>
                                 </div>
                             </td>
                         </tr>
@@ -192,6 +200,26 @@ const AttendanceIdentitiesApp = {
             this._els.createAliasButton.disabled = false;
             this._renderAliasPreview();
         }
+    },
+
+    async _deactivateIdentity(identity) {
+        if (!identity?.id) return;
+        if (!window.confirm(`Ignorare "${identity.display_name}" dalla lista identità? Non viene cancellata dal database.`)) {
+            return;
+        }
+        const response = await fetch(`/api/attendance/identities/${encodeURIComponent(String(identity.id))}/deactivate`, {
+            method: 'POST',
+            cache: 'no-store',
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.detail || 'Disattivazione identità fallita.');
+        }
+        this._selectedCanonical = this._selectedCanonical?.id === identity.id ? null : this._selectedCanonical;
+        this._selectedAlias = this._selectedAlias?.id === identity.id ? null : this._selectedAlias;
+        this._identities = this._identities.filter((item) => item.id !== identity.id);
+        this._applyFilter();
+        this._renderAliasPreview();
     },
 
     _rowClass(identity) {

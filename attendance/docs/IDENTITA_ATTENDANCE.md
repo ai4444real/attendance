@@ -119,6 +119,16 @@ Ma la chiave da usare per funzionalita future e':
 attendance_identities.id
 ```
 
+Le identita possono essere nascoste dalla UI con:
+
+```text
+is_active = false
+```
+
+Questo serve per casi come `User`, `Utente Zoom`, nomi troppo generici o record
+tecnici che non vogliamo usare come studenti. La riga non viene cancellata dal
+database: viene solo esclusa dalla lista operativa.
+
 ## Identita forte e debole
 
 Regola concettuale:

@@ -123,6 +123,7 @@ class AttendanceIdentity:
     identity_key: str
     display_name: str
     email: Optional[str]
+    is_active: bool
 
 
 @dataclass(frozen=True)
