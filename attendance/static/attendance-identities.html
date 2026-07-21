@@ -27,7 +27,6 @@
         .panel-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
         .panel-title { font-size: 18px; font-weight: 800; color: var(--brand-ink); margin: 0; }
         .hint { color: var(--brand-muted); font-size: 14px; line-height: 1.6; }
-        .action-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
         .primary-action { border: 0; border-radius: 999px; padding: 10px 14px; background: var(--brand-pnl-blue); color: white; font-weight: 800; cursor: pointer; }
         .primary-action:hover { filter: brightness(0.95); }
         .primary-action:disabled { opacity: 0.55; cursor: wait; }
@@ -93,13 +92,9 @@
             <div class="panel-head">
                 <div>
                     <h2 class="panel-title">Tabella identità</h2>
-                    <div class="hint">Chiave: email normalizzata se presente, altrimenti nome normalizzato. La ricostruzione usa un bulk upsert dai partecipanti già persistiti.</div>
+                    <div class="hint">Chiave tecnica: email normalizzata se presente, altrimenti nome normalizzato. L’aggiornamento da presenze resta disponibile solo come manutenzione backend.</div>
                 </div>
                 <div id="identitiesMeta" class="meta-strip"></div>
-            </div>
-            <div class="action-row">
-                <button id="rebuildIdentitiesButton" class="primary-action" type="button">Ricostruisci identità</button>
-                <span id="rebuildIdentitiesResult" class="action-result">Aggiorna la tabella partendo dai partecipanti salvati.</span>
             </div>
             <div class="identity-tools">
                 <div>
@@ -122,6 +117,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-identities.js?v=20260721-stable-id"></script>
+    <script src="/attendance/static/js/attendance-identities.js?v=20260721-no-rebuild-button"></script>
 </body>
 </html>

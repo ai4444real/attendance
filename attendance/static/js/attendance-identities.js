@@ -5,8 +5,6 @@ const AttendanceIdentitiesApp = {
         this._els = {
             identitiesMeta: document.getElementById('identitiesMeta'),
             identitiesBody: document.getElementById('identitiesBody'),
-            rebuildIdentitiesButton: document.getElementById('rebuildIdentitiesButton'),
-            rebuildIdentitiesResult: document.getElementById('rebuildIdentitiesResult'),
             identityFilterInput: document.getElementById('identityFilterInput'),
             clearIdentityFilterButton: document.getElementById('clearIdentityFilterButton'),
             aliasPreviewCard: document.getElementById('aliasPreviewCard'),
@@ -19,13 +17,6 @@ const AttendanceIdentitiesApp = {
         this._selectedCanonical = null;
         this._selectedAlias = null;
 
-        this._els.rebuildIdentitiesButton.addEventListener('click', () => {
-            this._rebuildIdentities().catch((error) => {
-                console.error(error);
-                this._els.rebuildIdentitiesResult.textContent = error.message || 'Ricostruzione identità fallita.';
-                this._els.rebuildIdentitiesResult.classList.add('is-error');
-            });
-        });
         this._els.identityFilterInput.addEventListener('input', () => {
             this._applyFilter();
         });
@@ -72,33 +63,6 @@ const AttendanceIdentitiesApp = {
         } catch (error) {
             console.error(error);
             this._els.identitiesBody.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
-        }
-    },
-
-    async _rebuildIdentities() {
-        if (!window.confirm('Ricostruire il registro identità dai partecipanti già salvati?')) {
-            return;
-        }
-        this._els.rebuildIdentitiesButton.disabled = true;
-        this._els.rebuildIdentitiesResult.classList.remove('is-error');
-        this._els.rebuildIdentitiesResult.textContent = 'Ricostruzione in corso...';
-        try {
-            const response = await fetch('/api/attendance/identities/rebuild', {
-                method: 'POST',
-                cache: 'no-store',
-            });
-            const payload = await response.json();
-            if (!response.ok) {
-                throw new Error(payload.detail || 'Ricostruzione identità fallita.');
-            }
-            this._els.rebuildIdentitiesResult.textContent = [
-                `${payload.source_identities || 0} identità trovate`,
-                `${payload.rows_upserted || 0} righe upsert`,
-                `${payload.identities_count || 0} totali`,
-            ].join(' · ');
-            await this._loadIdentities();
-        } finally {
-            this._els.rebuildIdentitiesButton.disabled = false;
         }
     },
 
