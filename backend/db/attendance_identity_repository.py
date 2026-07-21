@@ -24,6 +24,7 @@ class PostgresAttendanceIdentityRepository:
                 cursor.execute(
                     """
                     SELECT
+                        id,
                         identity_key,
                         display_name,
                         email
@@ -37,9 +38,10 @@ class PostgresAttendanceIdentityRepository:
 
         return [
             AttendanceIdentity(
-                identity_key=str(row[0]),
-                display_name=str(row[1]),
-                email=row[2],
+                id=int(row[0]),
+                identity_key=str(row[1]),
+                display_name=str(row[2]),
+                email=row[3],
             )
             for row in rows
         ]
@@ -154,12 +156,14 @@ class PostgresAttendanceIdentityRepository:
             existing = identities_by_key.get(identity_key)
             if existing is None:
                 identities_by_key[identity_key] = AttendanceIdentity(
+                    id=0,
                     identity_key=identity_key,
                     display_name=full_name,
                     email=identity_email or None,
                 )
                 continue
             identities_by_key[identity_key] = AttendanceIdentity(
+                id=existing.id,
                 identity_key=identity_key,
                 display_name=existing.display_name,
                 email=existing.email or identity_email or None,

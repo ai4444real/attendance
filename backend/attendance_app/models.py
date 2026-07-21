@@ -119,6 +119,7 @@ class AttendanceIdentityAlias:
 
 @dataclass(frozen=True)
 class AttendanceIdentity:
+    id: int
     identity_key: str
     display_name: str
     email: Optional[str]

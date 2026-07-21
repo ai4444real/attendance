@@ -135,6 +135,7 @@ const AttendanceIdentitiesApp = {
                     <tr>
                         <th>Nome</th>
                         <th>Email</th>
+                        <th>ID</th>
                         <th>Identity key</th>
                         <th>Azioni</th>
                     </tr>
@@ -144,6 +145,7 @@ const AttendanceIdentitiesApp = {
                         <tr class="${this._rowClass(identity)}">
                             <td><span class="identity-name">${this._escapeHtml(identity.display_name)}</span></td>
                             <td>${this._escapeHtml(identity.email || 'senza email')}</td>
+                            <td><span class="identity-key">#${this._escapeHtml(identity.id || '—')}</span></td>
                             <td><span class="identity-key">${this._escapeHtml(identity.identity_key)}</span></td>
                             <td>
                                 <div class="identity-row-actions">
@@ -175,6 +177,7 @@ const AttendanceIdentitiesApp = {
         return `
             <strong>${this._escapeHtml(identity.display_name)}</strong>
             <span class="hint">${this._escapeHtml(identity.email || 'senza email')}</span><br>
+            <span class="identity-key">#${this._escapeHtml(identity.id || '—')}</span><br>
             <span class="identity-key">${this._escapeHtml(identity.identity_key)}</span>
         `;
     },

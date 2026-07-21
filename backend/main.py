@@ -1551,6 +1551,7 @@ async def attendance_list_identities(limit: int = 500):
         "total_visible": len(identities),
         "identities": [
             {
+                "id": identity.id,
                 "identity_key": identity.identity_key,
                 "display_name": identity.display_name,
                 "email": identity.email,
