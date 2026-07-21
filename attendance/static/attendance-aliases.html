@@ -29,10 +29,20 @@
         .hint { color: var(--brand-muted); font-size: 14px; line-height: 1.6; }
         .meta-strip { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--brand-muted); }
         .meta-pill { border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 12px; background: #fafcfd; }
-        .aliases-table { width: 100%; border-collapse: collapse; }
-        .aliases-table th, .aliases-table td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--brand-border); vertical-align: top; }
+        .aliases-filter-row { display: grid; grid-template-columns: minmax(220px, 420px) auto 1fr; gap: 10px; align-items: center; margin: 10px 0 14px; }
+        .aliases-filter-row input { width: 100%; border: 1px solid var(--brand-border); border-radius: 999px; padding: 10px 14px; font-size: 14px; color: var(--brand-ink); }
+        .aliases-filter-row input:focus { outline: 2px solid rgba(0, 96, 160, 0.14); border-color: var(--brand-pnl-blue); }
+        .table-shell { width: 100%; overflow-x: auto; border: 1px solid var(--brand-border); border-radius: 16px; }
+        .aliases-table { width: 100%; min-width: 980px; border-collapse: collapse; table-layout: fixed; }
+        .aliases-table th, .aliases-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--brand-border); vertical-align: middle; }
         .aliases-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); }
+        .aliases-table tbody tr:last-child td { border-bottom: 0; }
+        .aliases-table tbody tr:hover { background: #f8fbfd; }
         .alias-name { font-weight: 800; color: var(--brand-ink); }
+        .alias-value { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .alias-date { white-space: nowrap; }
+        .alias-type { color: var(--brand-muted); font-size: 13px; }
+        .alias-created-by { color: var(--brand-muted); font-size: 13px; }
         .actions-cell { width: 120px; text-align: right; display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
         .alias-sync-button { border: 1px solid var(--brand-border); border-radius: 999px; background: #f8fbfd; color: var(--brand-pnl-blue); font-size: 12px; font-weight: 800; padding: 7px 10px; cursor: pointer; }
         .alias-sync-button:hover { background: #eef7fb; }
@@ -68,7 +78,7 @@
         .alias-preview-card { border: 1px solid var(--brand-border); border-radius: 14px; padding: 10px 12px; background: #fff; min-width: 220px; }
         .alias-preview-arrow { font-weight: 900; color: var(--brand-muted); }
         @media (max-width: 800px) {
-            .alias-search-row, .candidate-layout { grid-template-columns: 1fr; }
+            .alias-search-row, .candidate-layout, .aliases-filter-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -109,6 +119,11 @@
                 <button id="rebuildAliasesButton" class="primary-action" type="button">Applica alias alle lezioni</button>
                 <span id="rebuildAliasesResult" class="action-result">Ricostruisce solo le identità normalizzate, senza toccare origine, marker o stato lezioni.</span>
             </div>
+            <div class="aliases-filter-row">
+                <input id="aliasesFilterInput" type="search" placeholder="Filtra alias, canonico, email..." autocomplete="off">
+                <button id="clearAliasesFilterButton" class="secondary-action" type="button">Pulisci filtro</button>
+                <span class="hint">Filtro locale sulla tabella caricata.</span>
+            </div>
             <div id="aliasesBody" class="empty">Carico alias...</div>
 
             <div class="alias-builder">
@@ -147,6 +162,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-aliases.js?v=20260721-alias-identity-sync"></script>
+    <script src="/attendance/static/js/attendance-aliases.js?v=20260721-alias-filter-compact"></script>
 </body>
 </html>

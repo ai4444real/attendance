@@ -5,6 +5,8 @@ const AttendanceAliasesApp = {
         this._els = {
             aliasesMeta: document.getElementById('aliasesMeta'),
             aliasesBody: document.getElementById('aliasesBody'),
+            aliasesFilterInput: document.getElementById('aliasesFilterInput'),
+            clearAliasesFilterButton: document.getElementById('clearAliasesFilterButton'),
             rebuildAliasesButton: document.getElementById('rebuildAliasesButton'),
             rebuildAliasesResult: document.getElementById('rebuildAliasesResult'),
             identitySearchInput: document.getElementById('identitySearchInput'),
@@ -18,8 +20,18 @@ const AttendanceAliasesApp = {
             createAliasResult: document.getElementById('createAliasResult'),
         };
         this._identityCandidates = [];
+        this._aliases = [];
+        this._filteredAliases = [];
         this._selectedCanonical = null;
         this._selectedAlias = null;
+
+        this._els.aliasesFilterInput.addEventListener('input', () => {
+            this._applyAliasesFilter();
+        });
+        this._els.clearAliasesFilterButton.addEventListener('click', () => {
+            this._els.aliasesFilterInput.value = '';
+            this._applyAliasesFilter();
+        });
 
         this._els.rebuildAliasesButton.addEventListener('click', () => {
             this._rebuildAllLessons().catch((error) => {
@@ -269,17 +281,35 @@ const AttendanceAliasesApp = {
             }
 
             const aliases = payload.aliases || [];
-            this._renderMeta(aliases);
-            this._renderTable(aliases);
+            this._aliases = aliases;
+            this._applyAliasesFilter();
         } catch (error) {
             console.error(error);
             this._els.aliasesBody.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
         }
     },
 
+    _applyAliasesFilter() {
+        const needle = this._normalize(this._els.aliasesFilterInput.value);
+        this._filteredAliases = this._aliases.filter((alias) => {
+            if (!needle) return true;
+            return [
+                alias.canonical_full_name,
+                alias.canonical_email || '',
+                alias.alias_value,
+                alias.alias_type,
+                alias.created_by || '',
+                String(alias.identity_id || ''),
+            ].some((value) => this._normalize(value).includes(needle));
+        });
+        this._renderMeta(this._filteredAliases);
+        this._renderTable(this._filteredAliases);
+    },
+
     _renderMeta(aliases) {
         this._els.aliasesMeta.innerHTML = `
-            <span class="meta-pill"><strong>${aliases.length}</strong> alias attivi</span>
+            <span class="meta-pill"><strong>${aliases.length}</strong> alias visibili</span>
+            <span class="meta-pill"><strong>${this._aliases.length}</strong> alias attivi</span>
         `;
     },
 
@@ -290,7 +320,17 @@ const AttendanceAliasesApp = {
         }
 
         this._els.aliasesBody.innerHTML = `
+            <div class="table-shell">
             <table class="aliases-table">
+                <colgroup>
+                    <col style="width: 28%;">
+                    <col style="width: 10%;">
+                    <col style="width: 22%;">
+                    <col style="width: 11%;">
+                    <col style="width: 12%;">
+                    <col style="width: 8%;">
+                    <col style="width: 9%;">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>Identità canonica</th>
@@ -298,7 +338,6 @@ const AttendanceAliasesApp = {
                         <th>Alias</th>
                         <th>Creato da</th>
                         <th>Creato il</th>
-                        <th>Note</th>
                         <th>Identità</th>
                         <th></th>
                     </tr>
@@ -307,11 +346,10 @@ const AttendanceAliasesApp = {
                     ${aliases.map((alias) => `
                         <tr>
                             <td><span class="alias-name">${this._escapeHtml(alias.canonical_full_name)}</span>${alias.canonical_email ? `<br><span class="hint">${this._escapeHtml(alias.canonical_email)}</span>` : ''}</td>
-                            <td>${this._escapeHtml(alias.alias_type)}</td>
-                            <td>${this._escapeHtml(alias.alias_value)}</td>
-                            <td>${this._escapeHtml(alias.created_by || '—')}</td>
-                            <td>${this._escapeHtml(this._formatDateTime(alias.created_at))}</td>
-                            <td>${this._escapeHtml(alias.notes || '—')}</td>
+                            <td><span class="alias-type">${this._escapeHtml(alias.alias_type)}</span></td>
+                            <td><span class="alias-value" title="${this._escapeAttr(alias.alias_value)}">${this._escapeHtml(alias.alias_value)}</span></td>
+                            <td><span class="alias-created-by">${this._escapeHtml(alias.created_by || '—')}</span></td>
+                            <td><span class="alias-date">${this._escapeHtml(this._formatDateTime(alias.created_at))}</span></td>
                             <td>${this._renderIdentityCell(alias)}</td>
                             <td class="actions-cell">
                                 <button
@@ -335,6 +373,7 @@ const AttendanceAliasesApp = {
                     `).join('')}
                 </tbody>
             </table>
+            </div>
         `;
     },
 
@@ -417,6 +456,10 @@ const AttendanceAliasesApp = {
 
     _candidateKey(candidate) {
         return `${String(candidate.canonical_full_name || '').trim().toLowerCase()}||${String(candidate.email || '').trim().toLowerCase()}`;
+    },
+
+    _normalize(value) {
+        return String(value || '').trim().toLocaleLowerCase('it');
     },
 };
 
