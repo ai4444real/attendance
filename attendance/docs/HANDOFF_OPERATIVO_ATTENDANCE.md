@@ -31,6 +31,10 @@ Pipeline desiderata:
   - alias `full_name`
   - alias `email`
 
+Documentazione completa sul modello identità stabile:
+
+- `IDENTITA_ATTENDANCE.md`
+
 ### Regola importante
 
 - Alias ambigui globali sono pericolosi.
