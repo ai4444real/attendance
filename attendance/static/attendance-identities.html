@@ -33,14 +33,35 @@
         .primary-action:disabled { opacity: 0.55; cursor: wait; }
         .action-result { font-size: 13px; color: var(--brand-muted); }
         .action-result.is-error { color: #b42318; font-weight: 800; }
+        .identity-tools { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 12px; align-items: end; margin: 16px 0; }
+        .identity-tools label { display: block; font-size: 12px; font-weight: 800; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+        .identity-tools input { width: 100%; border: 1px solid var(--brand-border); border-radius: 14px; padding: 12px 14px; font-size: 16px; color: var(--brand-ink); }
+        .alias-panel { border: 1px solid var(--brand-border); border-radius: 16px; background: #fbfdfe; padding: 14px; margin-bottom: 16px; }
+        .alias-panel-title { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); margin-bottom: 10px; }
+        .alias-preview { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto; gap: 10px; align-items: center; }
+        .alias-preview-card { min-height: 62px; border: 1px solid var(--brand-border); border-radius: 14px; background: white; padding: 10px 12px; }
+        .alias-preview-card strong { display: block; color: var(--brand-ink); }
+        .alias-preview-arrow { color: var(--brand-muted); font-weight: 900; text-align: center; }
+        .secondary-action { border: 1px solid var(--brand-border); border-radius: 999px; padding: 10px 14px; background: #f8fbfd; color: var(--brand-ink); font-weight: 800; cursor: pointer; }
+        .secondary-action:hover { background: #eef7fb; }
+        .secondary-action:disabled { opacity: 0.55; cursor: not-allowed; }
         .meta-strip { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--brand-muted); }
         .meta-pill { border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 12px; background: #fafcfd; }
         .identities-table { width: 100%; border-collapse: collapse; }
         .identities-table th, .identities-table td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--brand-border); vertical-align: top; }
         .identities-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-muted); }
+        .identities-table tr.is-selected-canonical { background: #eef7ff; }
+        .identities-table tr.is-selected-alias { background: #fff7e8; }
         .identity-name { font-weight: 800; color: var(--brand-ink); }
         .identity-key { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 12px; color: var(--brand-muted); }
+        .identity-row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tiny-action { border: 1px solid var(--brand-border); border-radius: 999px; background: white; color: var(--brand-ink); font-size: 12px; font-weight: 800; padding: 6px 9px; cursor: pointer; }
+        .tiny-action:hover { border-color: var(--brand-pnl-blue); color: var(--brand-pnl-blue); }
         .empty { padding: 24px; border: 1px dashed var(--brand-border); border-radius: 16px; color: var(--brand-muted); background: #fafcfd; }
+        @media (max-width: 900px) {
+            .identity-tools, .alias-preview { grid-template-columns: 1fr; }
+            .alias-preview-arrow { text-align: left; }
+        }
     </style>
 </head>
 <body>
@@ -80,10 +101,27 @@
                 <button id="rebuildIdentitiesButton" class="primary-action" type="button">Ricostruisci identità</button>
                 <span id="rebuildIdentitiesResult" class="action-result">Aggiorna la tabella partendo dai partecipanti salvati.</span>
             </div>
+            <div class="identity-tools">
+                <div>
+                    <label for="identityFilterInput">Filtro</label>
+                    <input id="identityFilterInput" type="search" placeholder="Cerca in nome, email o identity key..." autocomplete="off">
+                </div>
+                <button id="clearIdentityFilterButton" class="secondary-action" type="button">Pulisci filtro</button>
+            </div>
+            <div class="alias-panel">
+                <div class="alias-panel-title">Crea alias rapido</div>
+                <div class="alias-preview">
+                    <div id="aliasPreviewCard" class="alias-preview-card hint">Alias non selezionato</div>
+                    <span class="alias-preview-arrow">→</span>
+                    <div id="canonicalPreviewCard" class="alias-preview-card hint">Canonico non selezionato</div>
+                    <button id="createAliasButton" class="primary-action" type="button" disabled>Crea alias</button>
+                </div>
+                <div id="createAliasResult" class="action-result">Seleziona una riga come alias e una come canonico.</div>
+            </div>
             <div id="identitiesBody" class="empty">Carico identità...</div>
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-identities.js?v=20260720-identities"></script>
+    <script src="/attendance/static/js/attendance-identities.js?v=20260721-quick-alias"></script>
 </body>
 </html>
