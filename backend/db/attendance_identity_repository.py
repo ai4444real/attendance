@@ -8,7 +8,11 @@ from backend.attendance_app.services import (
     _load_identity_alias_maps,
     _normalize_identity_key,
 )
-from backend.attendance_app.models import AttendanceIdentity, AttendanceIdentityRebuildResult
+from backend.attendance_app.models import (
+    AttendanceAliasIdentitySyncResult,
+    AttendanceIdentity,
+    AttendanceIdentityRebuildResult,
+)
 
 from .connection import get_db_connection
 from .attendance_identity_alias_repository import PostgresAttendanceIdentityAliasRepository
@@ -63,6 +67,115 @@ class PostgresAttendanceIdentityRepository:
                 if cursor.rowcount == 0:
                     raise LookupError(f"Attendance identity {identity_id} not found.")
             connection.commit()
+
+    def sync_alias_identity(self, alias_id: int) -> AttendanceAliasIdentitySyncResult:
+        """Attach one alias row to the stable canonical identity.
+
+        This intentionally does not rebuild lessons and does not rewrite lesson
+        participants. It only keeps the identity registry coherent after a new
+        alias has been created.
+        """
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        canonical_full_name,
+                        canonical_email,
+                        alias_full_name,
+                        alias_type,
+                        is_active
+                    FROM attendance_identity_aliases
+                    WHERE id = %s
+                    """,
+                    (alias_id,),
+                )
+                alias_row = cursor.fetchone()
+                if alias_row is None:
+                    raise LookupError(f"Attendance identity alias {alias_id} not found.")
+                if not bool(alias_row[5]):
+                    raise ValueError(f"Attendance identity alias {alias_id} is not active.")
+
+                canonical_full_name = _clean_name(alias_row[1])
+                canonical_email = _clean_email(alias_row[2])
+                alias_value = _clean_name(alias_row[3])
+                alias_type = str(alias_row[4] or "full_name")
+                if not canonical_full_name:
+                    raise ValueError("Canonical full name is required.")
+                if not alias_value:
+                    raise ValueError("Alias value is required.")
+
+                identity_key = _identity_key(canonical_full_name, canonical_email)
+                cursor.execute(
+                    """
+                    INSERT INTO attendance_identities (
+                        identity_key,
+                        display_name,
+                        email,
+                        is_active
+                    )
+                    VALUES (%s, %s, %s, TRUE)
+                    ON CONFLICT (identity_key)
+                    DO UPDATE SET
+                        display_name = COALESCE(NULLIF(attendance_identities.display_name, ''), EXCLUDED.display_name),
+                        email = COALESCE(attendance_identities.email, EXCLUDED.email),
+                        is_active = TRUE
+                    RETURNING id, (xmax = 0) AS inserted
+                    """,
+                    (identity_key, canonical_full_name, canonical_email),
+                )
+                identity_row = cursor.fetchone()
+                if identity_row is None:
+                    raise RuntimeError("Failed to create or read canonical identity.")
+                identity_id = int(identity_row[0])
+                identity_created = bool(identity_row[1])
+
+                cursor.execute(
+                    """
+                    UPDATE attendance_identity_aliases
+                    SET identity_id = %s
+                    WHERE id = %s
+                    """,
+                    (identity_id, alias_id),
+                )
+
+                alias_identity_key = _alias_identity_key(alias_value, alias_type)
+                alias_identity_id = None
+                alias_identity_deactivated = False
+                if alias_identity_key != identity_key:
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM attendance_identities
+                        WHERE identity_key = %s
+                        LIMIT 1
+                        """,
+                        (alias_identity_key,),
+                    )
+                    alias_identity_row = cursor.fetchone()
+                    if alias_identity_row is not None:
+                        alias_identity_id = int(alias_identity_row[0])
+                        if alias_identity_id != identity_id:
+                            cursor.execute(
+                                """
+                                UPDATE attendance_identities
+                                SET is_active = FALSE
+                                WHERE id = %s
+                                """,
+                                (alias_identity_id,),
+                            )
+                            alias_identity_deactivated = cursor.rowcount > 0
+            connection.commit()
+
+        return AttendanceAliasIdentitySyncResult(
+            alias_id=int(alias_id),
+            identity_id=identity_id,
+            identity_key=identity_key,
+            identity_created=identity_created,
+            alias_identity_id=alias_identity_id,
+            alias_identity_deactivated=alias_identity_deactivated,
+        )
 
     def rebuild_from_participants(self) -> AttendanceIdentityRebuildResult:
         with get_db_connection() as connection:
@@ -193,3 +306,24 @@ class PostgresAttendanceIdentityRepository:
             identities_by_key.values(),
             key=lambda identity: (identity.display_name.casefold(), identity.email or "", identity.identity_key),
         )
+
+
+def _clean_name(value: object) -> str:
+    return " ".join(str(value or "").strip().split())
+
+
+def _clean_email(value: object) -> str | None:
+    email = str(value or "").strip().casefold()
+    return email or None
+
+
+def _identity_key(full_name: str, email: str | None) -> str:
+    if email:
+        return f"email:{email}"
+    return f"name:{_normalize_identity_key(full_name)}"
+
+
+def _alias_identity_key(alias_value: str, alias_type: str) -> str:
+    if alias_type == "email":
+        return f"email:{alias_value.strip().casefold()}"
+    return f"name:{_normalize_identity_key(alias_value)}"

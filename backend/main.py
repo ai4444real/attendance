@@ -1457,6 +1457,8 @@ async def attendance_create_identity_alias(payload: dict):
     notes = payload.get("notes")
     service = AttendanceIdentityAliasService(PostgresAttendanceIdentityAliasRepository())
     rebuilt_lesson = None
+    identity_sync = None
+    identity_sync_error = None
     try:
         alias = service.merge_participants(
             canonical_full_name=canonical_full_name,
@@ -1478,6 +1480,18 @@ async def attendance_create_identity_alias(payload: dict):
                 forced_canonical_full_name=canonical_full_name,
                 forced_canonical_email=canonical_email,
             )
+        try:
+            sync_result = PostgresAttendanceIdentityRepository().sync_alias_identity(alias.id)
+            identity_sync = {
+                "alias_id": sync_result.alias_id,
+                "identity_id": sync_result.identity_id,
+                "identity_key": sync_result.identity_key,
+                "identity_created": sync_result.identity_created,
+                "alias_identity_id": sync_result.alias_identity_id,
+                "alias_identity_deactivated": sync_result.alias_identity_deactivated,
+            }
+        except Exception as exc:
+            identity_sync_error = str(exc)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -1499,6 +1513,8 @@ async def attendance_create_identity_alias(payload: dict):
         "lesson_id": int(lesson_id) if lesson_id is not None else None,
         "lesson_summary": rebuilt_lesson.summary if rebuilt_lesson is not None else None,
         "participants_count": len(rebuilt_lesson.participants) if rebuilt_lesson is not None else None,
+        "identity_sync": identity_sync,
+        "identity_sync_error": identity_sync_error,
     }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
@@ -1587,6 +1603,30 @@ async def attendance_deactivate_identity(identity_id: int):
         raise HTTPException(status_code=400, detail=f"Disattivazione identità fallita: {exc}") from exc
     return JSONResponse(
         {"identity_id": identity_id, "is_active": False},
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.post("/api/attendance/identity-aliases/{alias_id}/sync-identity")
+async def attendance_sync_identity_alias(alias_id: int):
+    repository = PostgresAttendanceIdentityRepository()
+    try:
+        result = repository.sync_alias_identity(alias_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Sync alias-identità fallito: {exc}") from exc
+    return JSONResponse(
+        {
+            "alias_id": result.alias_id,
+            "identity_id": result.identity_id,
+            "identity_key": result.identity_key,
+            "identity_created": result.identity_created,
+            "alias_identity_id": result.alias_identity_id,
+            "alias_identity_deactivated": result.alias_identity_deactivated,
+        },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 

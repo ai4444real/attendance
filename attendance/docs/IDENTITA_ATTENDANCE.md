@@ -171,15 +171,43 @@ TRUNCATE TABLE attendance_identities RESTART IDENTITY;
 
 Da usare solo con consapevolezza.
 
+## Sync mirato dopo un alias
+
+Quando viene creato un nuovo alias non serve piu svuotare e ricostruire tutta
+la tabella identita.
+
+Il flusso ordinario e':
+
+1. creare alias;
+2. collegare quell'alias alla sua identita stabile;
+3. nascondere l'eventuale identita separata rappresentata dall'alias.
+
+L'endpoint dedicato e':
+
+```text
+POST /api/attendance/identity-aliases/{alias_id}/sync-identity
+```
+
+Questo endpoint:
+
+- trova o crea l'identita canonica in `attendance_identities`;
+- scrive `attendance_identity_aliases.identity_id`;
+- se esiste una riga identita per l'alias, la marca `is_active = false`;
+- non cancella dati;
+- non modifica i partecipanti delle lezioni;
+- non cambia il merge delle presenze.
+
+La creazione alias dalla UI prova gia a fare questo sync automaticamente. Il
+curl resta utile per riallineare alias gia esistenti o casi di manutenzione.
+
 ## Flusso attuale sicuro
 
 Per correggere identita:
 
 1. creare alias dalla UI alias o dalla pagina identita;
-2. applicare alias alle lezioni se serve consolidare i partecipanti;
-3. ricostruire identita solo come manutenzione;
-4. se necessario, aggiornare `attendance_identity_aliases.identity_id` per casi
-   particolari.
+2. verificare che il sync mirato abbia collegato `identity_id`;
+3. applicare alias alle lezioni se serve consolidare i partecipanti;
+4. ricostruire identita solo come manutenzione.
 
 ## Perche non usare subito identity_id nelle lezioni
 

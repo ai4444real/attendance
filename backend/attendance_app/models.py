@@ -134,6 +134,16 @@ class AttendanceIdentityRebuildResult:
 
 
 @dataclass(frozen=True)
+class AttendanceAliasIdentitySyncResult:
+    alias_id: int
+    identity_id: int
+    identity_key: str
+    identity_created: bool
+    alias_identity_id: Optional[int]
+    alias_identity_deactivated: bool
+
+
+@dataclass(frozen=True)
 class ImportBatchSummary:
     id: int
     source_system: str

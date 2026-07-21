@@ -207,7 +207,10 @@ const AttendanceAliasesApp = {
             if (!response.ok) {
                 throw new Error(payload.detail || 'Creazione alias fallita.');
             }
-            this._els.createAliasResult.textContent = 'Alias salvato. Ora puoi applicare gli alias alle lezioni.';
+            this._els.createAliasResult.textContent = payload.identity_sync_error
+                ? `Alias salvato, ma sync identità fallito: ${payload.identity_sync_error}`
+                : 'Alias salvato. Identità collegata. Ora puoi applicare gli alias alle lezioni.';
+            this._els.createAliasResult.classList.toggle('is-error', Boolean(payload.identity_sync_error));
             await this._loadAliases();
         } finally {
             this._els.createAliasFromCandidatesButton.disabled = false;

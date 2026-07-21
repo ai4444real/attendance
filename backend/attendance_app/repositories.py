@@ -7,6 +7,7 @@ from typing import Protocol
 from .models import (
     AttendanceIdentity,
     AttendanceIdentityAlias,
+    AttendanceAliasIdentitySyncResult,
     AttendanceIdentityCandidateView,
     AttendanceIdentityRebuildResult,
     DraftBatchDetail,
@@ -65,6 +66,9 @@ class AttendanceIdentityRepository(Protocol):
 
     def rebuild_from_participants(self) -> AttendanceIdentityRebuildResult:
         """Bulk upsert observed identities from persisted participants."""
+
+    def sync_alias_identity(self, alias_id: int) -> AttendanceAliasIdentitySyncResult:
+        """Link one alias rule to its stable identity without a global rebuild."""
 
 
 class AttendanceDraftQueryRepository(Protocol):

@@ -192,10 +192,18 @@ const AttendanceIdentitiesApp = {
             if (!response.ok) {
                 throw new Error(payload.detail || 'Creazione alias fallita.');
             }
-            this._els.createAliasResult.textContent = 'Alias creato. Applica alias alle lezioni, poi svuota/ricostruisci identità per vedere la tabella consolidata.';
+            if (payload.identity_sync_error) {
+                this._els.createAliasResult.textContent = `Alias creato, ma sync identità fallito: ${payload.identity_sync_error}`;
+                this._els.createAliasResult.classList.add('is-error');
+            } else {
+                const syncText = payload.identity_sync?.alias_identity_deactivated
+                    ? 'Identità alias nascosta.'
+                    : 'Identità collegata.';
+                this._els.createAliasResult.textContent = `Alias creato. ${syncText}`;
+            }
             this._selectedAlias = null;
             this._renderAliasPreview();
-            this._renderTable(this._filteredIdentities);
+            await this._loadIdentities();
         } finally {
             this._els.createAliasButton.disabled = false;
             this._renderAliasPreview();
