@@ -1894,10 +1894,17 @@ class AttendanceLessonIdentityRebuildService:
 
         rebuilt_participants: list[dict] = []
         missing_target_keys: list[str] = []
+        missing_target_groups: list[dict] = []
         for target_key, participants in grouped_participants.items():
             record = aggregated.get(target_key)
             if record is None:
                 missing_target_keys.append(target_key)
+                missing_target_groups.append(
+                    {
+                        "target_key": target_key,
+                        "participants": participants,
+                    }
+                )
                 continue
             survivor = min(participants, key=lambda participant: participant.id)
             obsolete_ids = [participant.id for participant in participants if participant.id != survivor.id]
@@ -1941,7 +1948,8 @@ class AttendanceLessonIdentityRebuildService:
         if missing_target_keys:
             raise ValueError(
                 "Impossibile ricostruire completamente la lezione dopo l'unione: "
-                f"mancano record aggregati per {len(missing_target_keys)} identità."
+                f"mancano record aggregati per {len(missing_target_keys)} identità. "
+                f"Dettaglio: {self._format_missing_rebuild_groups(missing_target_groups)}"
             )
 
         diagnostics = dict(lesson.diagnostics or {})
@@ -1954,6 +1962,24 @@ class AttendanceLessonIdentityRebuildService:
             participants=rebuilt_participants,
         )
         return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _format_missing_rebuild_groups(self, missing_groups: list[dict]) -> str:
+        formatted_groups = []
+        for group in missing_groups[:8]:
+            participant_descriptions = []
+            for participant in group.get("participants", [])[:4]:
+                email = participant.email or "senza email"
+                participant_descriptions.append(f"#{participant.id} {participant.canonical_full_name} <{email}>")
+            suffix = ""
+            participants_count = len(group.get("participants", []))
+            if participants_count > 4:
+                suffix = f" (+{participants_count - 4})"
+            formatted_groups.append(
+                f"{group.get('target_key')}: {', '.join(participant_descriptions)}{suffix}"
+            )
+        if len(missing_groups) > 8:
+            formatted_groups.append(f"... altre {len(missing_groups) - 8}")
+        return " | ".join(formatted_groups)
 
     def _rebuild_aggregated_lesson_with_current_aliases(
         self,
