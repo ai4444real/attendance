@@ -2161,6 +2161,99 @@ class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
         self.assertIsNotNone(mutation.last_identity_rebuild)
         self.assertEqual(1, len(mutation.last_identity_rebuild["participants"]))
 
+    def test_rebuild_lesson_with_current_aliases_merges_manual_participants_without_segments(self) -> None:
+        lesson = DraftLessonView(
+            id=549,
+            course_name="FSEA",
+            lesson_date="2026-03-21",
+            source_meeting_id="manual:FSEA:2026-03-21",
+            status="official",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2026-03-21T18:00:00+00:00",
+            meeting_end_at="2026-03-21T21:00:00+00:00",
+            effective_start_at="2026-03-21T18:00:00+00:00",
+            break_point_at="2026-03-21T19:30:00+00:00",
+            effective_end_at="2026-03-21T21:00:00+00:00",
+            break_source="manual",
+            effective_start_source="manual",
+            effective_end_source="manual",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 2, "prima_meta": 0, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=21,
+                    participant_key="gesuina faranda",
+                    canonical_full_name="Gesuina Faranda",
+                    raw_full_name="Gesuina Faranda",
+                    email=None,
+                    segment_count=0,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=0.0,
+                    duration_second_half=0.0,
+                    total_minutes=0.0,
+                    calculated_presence_status="presente",
+                    manual_override_presence_status=None,
+                    final_presence_status="presente",
+                    presence_source="manual",
+                    flags=[],
+                    metadata={"manual_import": True},
+                ),
+                DraftLessonParticipantView(
+                    id=22,
+                    participant_key="giusy@example.com",
+                    canonical_full_name="Giusy Faranda",
+                    raw_full_name="Giusy Faranda",
+                    email="giusy@example.com",
+                    segment_count=0,
+                    minutes_first_half=0.0,
+                    minutes_second_half=0.0,
+                    duration_first_half=0.0,
+                    duration_second_half=0.0,
+                    total_minutes=0.0,
+                    calculated_presence_status="presente",
+                    manual_override_presence_status=None,
+                    final_presence_status="presente",
+                    presence_source="manual",
+                    flags=[],
+                    metadata={"manual_import": True},
+                ),
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        mutation = FakeAttendanceDraftMutationRepository()
+        alias_repo = FakeAttendanceIdentityAliasRepository()
+        alias_repo.aliases = [
+            AttendanceIdentityAlias(
+                id=1,
+                canonical_full_name="Giusy Faranda",
+                canonical_email="giusy@example.com",
+                alias_value="Gesuina Faranda",
+                alias_type="full_name",
+                created_by="test",
+                created_at=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            )
+        ]
+        service = AttendanceLessonIdentityRebuildService(query, mutation, alias_repo)
+
+        service.rebuild_lesson_with_current_aliases(549)
+
+        self.assertIsNotNone(mutation.last_identity_rebuild)
+        participants = mutation.last_identity_rebuild["participants"]
+        self.assertEqual(1, len(participants))
+        self.assertEqual("Giusy Faranda", participants[0]["canonical_full_name"])
+        self.assertEqual("giusy@example.com", participants[0]["email"])
+        self.assertEqual("giusy@example.com", participants[0]["participant_key"])
+        self.assertEqual([22], participants[0]["obsolete_ids"])
+        self.assertEqual("presente", participants[0]["final_presence_status"])
+        self.assertEqual(0.0, participants[0]["total_minutes"])
+        self.assertTrue(participants[0]["metadata"]["rebuilt_without_source_segments"])
+
 
 class AttendanceLessonStateServiceTest(unittest.TestCase):
     def test_set_lesson_ignored_delegates_to_repository(self) -> None:

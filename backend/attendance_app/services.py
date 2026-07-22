@@ -1821,7 +1821,13 @@ class AttendanceLessonIdentityRebuildService:
         if not source_segments:
             source_segments = _extract_source_segments_from_lesson(lesson)
             if not source_segments:
-                raise ValueError("Questa lezione non ha segmenti grezzi sufficienti per il re-merge identità.")
+                return self._rebuild_aggregated_lesson_with_current_aliases(
+                    lesson,
+                    canonical_participant_id=canonical_participant_id,
+                    alias_participant_id=alias_participant_id,
+                    forced_canonical_full_name=forced_canonical_full_name,
+                    forced_canonical_email=forced_canonical_email,
+                )
             self._mutation_repository.ensure_lesson_source_segments(lesson.id, source_segments)
             source_segments = self._query_repository.get_lesson_source_segments(lesson_id) or source_segments
 
@@ -1935,6 +1941,151 @@ class AttendanceLessonIdentityRebuildService:
         )
         return self._query_repository.get_lesson_detail(lesson_id)
 
+    def _rebuild_aggregated_lesson_with_current_aliases(
+        self,
+        lesson: DraftLessonView,
+        *,
+        canonical_participant_id: int | None = None,
+        alias_participant_id: int | None = None,
+        forced_canonical_full_name: str | None = None,
+        forced_canonical_email: str | None = None,
+    ) -> DraftLessonView:
+        name_alias_map, email_alias_map = _load_identity_alias_maps(self._identity_alias_repository)
+        forced_merge = None
+        if canonical_participant_id is not None and alias_participant_id is not None:
+            forced_merge = {
+                "canonical_participant_id": canonical_participant_id,
+                "alias_participant_id": alias_participant_id,
+                "canonical_full_name": forced_canonical_full_name or "",
+                "canonical_email": forced_canonical_email or "",
+            }
+
+        grouped_participants: dict[str, list] = defaultdict(list)
+        target_identities: dict[str, dict[str, str | None]] = {}
+        for participant in lesson.participants:
+            target_identity = self._participant_target_identity(
+                participant,
+                name_alias_map,
+                email_alias_map,
+                forced_merge=forced_merge,
+            )
+            target_key = str(target_identity["participant_key"])
+            grouped_participants[target_key].append(participant)
+            target_identities[target_key] = self._pick_target_identity(
+                target_identities.get(target_key),
+                target_identity,
+            )
+
+        grouped_participants, _ = self._merge_compatible_rebuild_groups(grouped_participants, {})
+        rebuilt_participants = [
+            self._merge_aggregated_participant_group(
+                target_key,
+                participants,
+                target_identity=target_identities.get(target_key),
+            )
+            for target_key, participants in grouped_participants.items()
+        ]
+
+        diagnostics = dict(lesson.diagnostics or {})
+        diagnostics["remerged_from_identity_aliases"] = True
+        diagnostics["remerged_aggregated_without_source_segments"] = True
+        diagnostics["remerged_at"] = datetime.now().isoformat()
+        diagnostics["remerged_participants_count"] = len(rebuilt_participants)
+        self._mutation_repository.replace_lesson_participants_after_identity_rebuild(
+            lesson.id,
+            diagnostics=diagnostics,
+            participants=rebuilt_participants,
+        )
+        return self._query_repository.get_lesson_detail(lesson.id)
+
+    def _merge_aggregated_participant_group(
+        self,
+        target_key: str,
+        participants: list,
+        *,
+        target_identity: dict[str, str | None] | None = None,
+    ) -> dict:
+        survivor = min(participants, key=lambda participant: participant.id)
+        canonical_full_name = (
+            (target_identity or {}).get("canonical_full_name")
+            or self._pick_canonical_full_name(participants)
+        )
+        canonical_email = (
+            (target_identity or {}).get("canonical_email")
+            or self._pick_canonical_email(participants)
+        )
+        raw_full_name = self._pick_raw_full_name(participants)
+        calculated = self._strongest_presence_status(
+            participant.calculated_presence_status for participant in participants
+        )
+        manual_override = self._strongest_optional_presence_status(
+            participant.manual_override_presence_status for participant in participants
+        )
+        final = manual_override or self._strongest_presence_status(
+            participant.final_presence_status for participant in participants
+        ) or calculated
+        metadata = dict(survivor.metadata or {})
+        metadata["identity_sources"] = self._merge_identity_sources_from_participants(participants)
+        metadata["canonicalized_by_identity_alias"] = canonical_full_name != (raw_full_name or canonical_full_name)
+        metadata["rebuilt_from_identity_aliases"] = True
+        metadata["rebuilt_without_source_segments"] = True
+        return {
+            "survivor_id": survivor.id,
+            "obsolete_ids": [participant.id for participant in participants if participant.id != survivor.id],
+            "participant_key": (canonical_email or "").strip().lower() or target_key,
+            "canonical_full_name": canonical_full_name,
+            "raw_full_name": raw_full_name,
+            "email": canonical_email,
+            "segment_count": sum(participant.segment_count for participant in participants),
+            "minutes_first_half": sum(participant.minutes_first_half for participant in participants),
+            "minutes_second_half": sum(participant.minutes_second_half for participant in participants),
+            "duration_first_half": max((participant.duration_first_half for participant in participants), default=0.0),
+            "duration_second_half": max((participant.duration_second_half for participant in participants), default=0.0),
+            "total_minutes": sum(participant.total_minutes for participant in participants),
+            "calculated_presence_status": calculated,
+            "manual_override_presence_status": manual_override,
+            "final_presence_status": final,
+            "flags": sorted({flag for participant in participants for flag in participant.flags}),
+            "metadata": metadata,
+        }
+
+    def _pick_target_identity(
+        self,
+        current: dict[str, str | None] | None,
+        candidate: dict[str, str | None],
+    ) -> dict[str, str | None]:
+        if current is None:
+            return candidate
+        if candidate.get("canonical_email") and not current.get("canonical_email"):
+            return candidate
+        return current
+
+    def _pick_canonical_full_name(self, participants: list) -> str:
+        with_email = [participant for participant in participants if participant.email]
+        if with_email:
+            return min(with_email, key=lambda participant: participant.id).canonical_full_name
+        return min(participants, key=lambda participant: participant.id).canonical_full_name
+
+    def _pick_canonical_email(self, participants: list) -> str | None:
+        for participant in sorted(participants, key=lambda item: item.id):
+            if participant.email:
+                return participant.email
+        return None
+
+    def _strongest_optional_presence_status(self, statuses) -> str | None:
+        valid = [status for status in statuses if status]
+        if not valid:
+            return None
+        return self._strongest_presence_status(valid)
+
+    def _strongest_presence_status(self, statuses) -> str:
+        rank = {"assente": 0, "prima_meta": 1, "seconda_meta": 2, "presente": 3}
+        strongest = "assente"
+        for status in statuses:
+            if rank.get(status or "assente", 0) > rank[strongest]:
+                strongest = status
+        return strongest
+
     def _participant_target_key(
         self,
         participant,
@@ -1943,10 +2094,31 @@ class AttendanceLessonIdentityRebuildService:
         *,
         forced_merge: dict | None = None,
     ) -> str:
+        return str(
+            self._participant_target_identity(
+                participant,
+                name_alias_map,
+                email_alias_map,
+                forced_merge=forced_merge,
+            )["participant_key"]
+        )
+
+    def _participant_target_identity(
+        self,
+        participant,
+        name_alias_map: dict[str, AttendanceIdentityAlias],
+        email_alias_map: dict[str, AttendanceIdentityAlias],
+        *,
+        forced_merge: dict | None = None,
+    ) -> dict[str, str | None]:
         if forced_merge and participant.id in {forced_merge["canonical_participant_id"], forced_merge["alias_participant_id"]}:
             canonical_full_name = forced_merge["canonical_full_name"] or participant.canonical_full_name
             canonical_email = forced_merge["canonical_email"] or participant.email or None
-            return (canonical_email or "").strip().lower() or canonical_full_name.lower()
+            return {
+                "participant_key": (canonical_email or "").strip().lower() or canonical_full_name.lower(),
+                "canonical_full_name": canonical_full_name,
+                "canonical_email": canonical_email,
+            }
         primary_source = _get_identity_sources(participant)[0]
         source_name = str(primary_source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
         source_email = str(primary_source.get("email") or participant.email or "").strip()
@@ -1956,7 +2128,11 @@ class AttendanceLessonIdentityRebuildService:
             name_alias_map,
             email_alias_map,
         )
-        return (canonical_email or "").strip().lower() or canonical_full_name.lower()
+        return {
+            "participant_key": (canonical_email or "").strip().lower() or canonical_full_name.lower(),
+            "canonical_full_name": canonical_full_name,
+            "canonical_email": canonical_email,
+        }
 
     def _merge_compatible_rebuild_groups(
         self,

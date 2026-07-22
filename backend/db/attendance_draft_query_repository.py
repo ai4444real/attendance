@@ -363,8 +363,8 @@ class PostgresAttendanceDraftQueryRepository:
                     WHERE l.is_ignored = FALSE
                       AND EXISTS (
                           SELECT 1
-                          FROM attendance_lesson_source_segments AS s
-                          WHERE s.lesson_id = l.id
+                          FROM attendance_lesson_participants AS p
+                          WHERE p.lesson_id = l.id
                       )
                     ORDER BY l.id ASC
                     """
