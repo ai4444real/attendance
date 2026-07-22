@@ -2368,15 +2368,32 @@ def _apply_identity_alias_maps(
     name_alias_map: dict[str, AttendanceIdentityAlias],
     email_alias_map: dict[str, AttendanceIdentityAlias],
 ) -> tuple[str, str | None]:
-    normalized_email = (email or "").strip().casefold()
-    if normalized_email and normalized_email in email_alias_map:
-        alias = email_alias_map[normalized_email]
-        return alias.canonical_full_name, alias.canonical_email or email
-    normalized_name = _normalize_identity_key(full_name)
-    if normalized_name in name_alias_map:
-        alias = name_alias_map[normalized_name]
-        return alias.canonical_full_name, alias.canonical_email or email
-    return full_name, email
+    resolved_name = full_name
+    resolved_email = email
+    seen_keys: set[tuple[str, str]] = set()
+    for _ in range(8):
+        normalized_email = (resolved_email or "").strip().casefold()
+        normalized_name = _normalize_identity_key(resolved_name)
+        loop_key = (normalized_name, normalized_email)
+        if loop_key in seen_keys:
+            break
+        seen_keys.add(loop_key)
+
+        alias = None
+        if normalized_email:
+            alias = email_alias_map.get(normalized_email)
+        if alias is None and normalized_name:
+            alias = name_alias_map.get(normalized_name)
+        if alias is None:
+            break
+
+        next_name = alias.canonical_full_name
+        next_email = alias.canonical_email or resolved_email
+        if next_name == resolved_name and next_email == resolved_email:
+            break
+        resolved_name = next_name
+        resolved_email = next_email
+    return resolved_name, resolved_email
 
 
 def _normalize_identity_key(value: str) -> str:

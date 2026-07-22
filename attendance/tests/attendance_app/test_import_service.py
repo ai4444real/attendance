@@ -2754,6 +2754,82 @@ class AttendanceManualPresenceServiceTest(unittest.TestCase):
         self.assertEqual("mario@example.com", saved.records[0].email)
         self.assertEqual("presente", saved.records[0].presence_status)
 
+    def test_import_manual_presence_resolves_alias_chains(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        aliases = FakeAttendanceIdentityAliasRepository()
+        aliases.aliases = [
+            AttendanceIdentityAlias(
+                id=1,
+                canonical_full_name="Liridona K.",
+                canonical_email=None,
+                alias_value="Liridona",
+                alias_type="full_name",
+                created_by="test",
+                created_at=datetime(2026, 5, 13, 10, 0, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            ),
+            AttendanceIdentityAlias(
+                id=2,
+                canonical_full_name="Liridona Kelmendi",
+                canonical_email=None,
+                alias_value="Liridona K.",
+                alias_type="full_name",
+                created_by="test",
+                created_at=datetime(2026, 5, 13, 10, 1, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            ),
+        ]
+        service = AttendanceManualPresenceService(mutation, aliases)
+
+        service.import_manual_presence(
+            course_name="Practitioner",
+            lesson_date="2026-05-13",
+            records=[{"full_name": "Liridona", "presence_status": "presente"}],
+        )
+
+        saved = mutation.manual_imports[0]
+        self.assertEqual("Liridona Kelmendi", saved.records[0].full_name)
+
+    def test_import_manual_presence_stops_alias_cycles(self) -> None:
+        mutation = FakeAttendanceDraftMutationRepository()
+        aliases = FakeAttendanceIdentityAliasRepository()
+        aliases.aliases = [
+            AttendanceIdentityAlias(
+                id=1,
+                canonical_full_name="Alias B",
+                canonical_email=None,
+                alias_value="Alias A",
+                alias_type="full_name",
+                created_by="test",
+                created_at=datetime(2026, 5, 13, 10, 0, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            ),
+            AttendanceIdentityAlias(
+                id=2,
+                canonical_full_name="Alias A",
+                canonical_email=None,
+                alias_value="Alias B",
+                alias_type="full_name",
+                created_by="test",
+                created_at=datetime(2026, 5, 13, 10, 1, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            ),
+        ]
+        service = AttendanceManualPresenceService(mutation, aliases)
+
+        service.import_manual_presence(
+            course_name="Practitioner",
+            lesson_date="2026-05-13",
+            records=[{"full_name": "Alias A", "presence_status": "presente"}],
+        )
+
+        saved = mutation.manual_imports[0]
+        self.assertIn(saved.records[0].full_name, {"Alias A", "Alias B"})
+
     def test_import_manual_presence_accepts_existing_lesson_without_course_or_date(self) -> None:
         mutation = FakeAttendanceDraftMutationRepository()
         service = AttendanceManualPresenceService(mutation)
