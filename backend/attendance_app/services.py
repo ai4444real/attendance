@@ -1924,9 +1924,14 @@ class AttendanceLessonIdentityRebuildService:
                 continue
             survivor = min(participants, key=lambda participant: participant.id)
             obsolete_ids = [participant.id for participant in participants if participant.id != survivor.id]
-            canonical_full_name = record["canonical_full_name"]
+            target_identity = target_identities.get(target_key, {})
+            canonical_full_name = target_identity.get("canonical_full_name") or record["canonical_full_name"]
             raw_full_name = self._pick_raw_full_name(participants)
-            canonical_email = (record["canonical_email"] or "").strip() or None
+            canonical_email = (
+                str(target_identity.get("canonical_email") or "").strip()
+                or (record["canonical_email"] or "").strip()
+                or None
+            )
             calculated = self._strongest_presence_status([
                 record["calculated_presence_status"],
                 *[
@@ -1957,7 +1962,7 @@ class AttendanceLessonIdentityRebuildService:
                 {
                     "survivor_id": survivor.id,
                     "obsolete_ids": obsolete_ids,
-                    "participant_key": target_key,
+                    "participant_key": (canonical_email or canonical_full_name).strip().lower(),
                     "canonical_full_name": canonical_full_name,
                     "raw_full_name": raw_full_name,
                     "email": canonical_email,
@@ -2204,18 +2209,28 @@ class AttendanceLessonIdentityRebuildService:
             }
         primary_source = _get_identity_sources(participant)[0]
         source_name = str(primary_source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
-        source_email = str(primary_source.get("email") or participant.email or "").strip()
+        source_email_value = primary_source.get("email") if "email" in primary_source else participant.email
+        source_email = str(source_email_value or "").strip()
         canonical_full_name, canonical_email = _apply_identity_alias_maps(
             source_name,
             source_email or None,
             name_alias_map,
             email_alias_map,
         )
+        if self._is_local_assignment_participant(participant):
+            return {
+                "participant_key": (canonical_email or "").strip().lower() or canonical_full_name.lower(),
+                "canonical_full_name": participant.canonical_full_name,
+                "canonical_email": participant.email,
+            }
         return {
             "participant_key": (canonical_email or "").strip().lower() or canonical_full_name.lower(),
             "canonical_full_name": canonical_full_name,
             "canonical_email": canonical_email,
         }
+
+    def _is_local_assignment_participant(self, participant) -> bool:
+        return str(participant.participant_key or "").startswith("local-assignment:")
 
     def _merge_compatible_rebuild_groups(
         self,
@@ -2232,8 +2247,7 @@ class AttendanceLessonIdentityRebuildService:
                     or participants[0].canonical_full_name
                 ),
                 "canonical_email": (
-                    (target_identities or {}).get(target_key, {}).get("canonical_email")
-                    or (target_key if "@" in target_key else None)
+                    target_key if "@" in target_key else None
                 ),
                 "participants": participants,
             }

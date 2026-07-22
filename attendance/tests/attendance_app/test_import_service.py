@@ -2453,6 +2453,85 @@ class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
         self.assertEqual("liridona kelmendi", participants[0]["participant_key"])
         self.assertEqual("Liridona Kelmendi", participants[0]["canonical_full_name"])
 
+    def test_rebuild_lesson_with_current_aliases_preserves_local_assignment_email(self) -> None:
+        lesson = DraftLessonView(
+            id=685,
+            course_name="FSEA",
+            lesson_date="2025-06-17",
+            source_meeting_id="manual:FSEA:2025-06-17",
+            status="official",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2025-06-17T17:00:00+00:00",
+            meeting_end_at="2025-06-17T20:30:00+00:00",
+            effective_start_at="2025-06-17T17:00:00+00:00",
+            break_point_at="2025-06-17T18:45:00+00:00",
+            effective_end_at="2025-06-17T20:30:00+00:00",
+            break_source="manual",
+            effective_start_source="manual",
+            effective_end_source="manual",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 0, "prima_meta": 0, "seconda_meta": 0, "assente": 1},
+            participants=[
+                DraftLessonParticipantView(
+                    id=7599,
+                    participant_key="local-assignment:7599:a.martinelli@betacom.ch",
+                    canonical_full_name="Alessandro Martinelli",
+                    raw_full_name="Alessandro Martinelli",
+                    email="a.martinelli@betacom.ch",
+                    segment_count=1,
+                    minutes_first_half=21.1,
+                    minutes_second_half=0.0,
+                    duration_first_half=105.0,
+                    duration_second_half=105.0,
+                    total_minutes=21.1,
+                    calculated_presence_status="assente",
+                    manual_override_presence_status=None,
+                    final_presence_status="assente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "segments": [["2025-06-17T17:04:53+00:00", "2025-06-17T17:30:05+00:00"]],
+                        "identity_sources": [
+                            {
+                                "raw_full_name": "Alessandro Martinelli",
+                                "email": "",
+                                "segments": [["2025-06-17T17:04:53+00:00", "2025-06-17T17:30:05+00:00"]],
+                            }
+                        ],
+                    },
+                ),
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Alessandro Martinelli",
+                observed_email=None,
+                join_time="2025-06-17T17:04:53+00:00",
+                leave_time="2025-06-17T17:30:05+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        service = AttendanceLessonIdentityRebuildService(
+            query,
+            mutation,
+            FakeAttendanceIdentityAliasRepository(),
+        )
+
+        service.rebuild_lesson_with_current_aliases(685)
+
+        self.assertIsNotNone(mutation.last_identity_rebuild)
+        participants = mutation.last_identity_rebuild["participants"]
+        self.assertEqual(1, len(participants))
+        self.assertEqual("a.martinelli@betacom.ch", participants[0]["participant_key"])
+        self.assertEqual("Alessandro Martinelli", participants[0]["canonical_full_name"])
+        self.assertEqual("a.martinelli@betacom.ch", participants[0]["email"])
+        self.assertGreater(participants[0]["total_minutes"], 0)
+
 
 class AttendanceLessonStateServiceTest(unittest.TestCase):
     def test_set_lesson_ignored_delegates_to_repository(self) -> None:
