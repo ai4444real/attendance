@@ -1895,6 +1895,7 @@ class AttendanceLessonIdentityRebuildService:
         grouped_participants, old_to_target_key = self._merge_compatible_rebuild_groups(
             grouped_participants,
             old_to_target_key,
+            target_identities=target_identities,
         )
         remapped_overrides = self._build_manual_override_map(action_sequence, lesson.participants, old_to_target_key)
 
@@ -2054,7 +2055,11 @@ class AttendanceLessonIdentityRebuildService:
                 target_identity,
             )
 
-        grouped_participants, _ = self._merge_compatible_rebuild_groups(grouped_participants, {})
+        grouped_participants, _ = self._merge_compatible_rebuild_groups(
+            grouped_participants,
+            {},
+            target_identities=target_identities,
+        )
         rebuilt_participants = [
             self._merge_aggregated_participant_group(
                 target_key,
@@ -2216,12 +2221,20 @@ class AttendanceLessonIdentityRebuildService:
         self,
         grouped_participants: dict[str, list],
         old_to_target_key: dict[int, str],
+        *,
+        target_identities: dict[str, dict[str, str | None]] | None = None,
     ) -> tuple[dict[str, list], dict[int, str]]:
         group_descriptors = [
             {
                 "target_key": target_key,
-                "canonical_full_name": participants[0].canonical_full_name,
-                "canonical_email": target_key if "@" in target_key else None,
+                "canonical_full_name": (
+                    (target_identities or {}).get(target_key, {}).get("canonical_full_name")
+                    or participants[0].canonical_full_name
+                ),
+                "canonical_email": (
+                    (target_identities or {}).get(target_key, {}).get("canonical_email")
+                    or (target_key if "@" in target_key else None)
+                ),
                 "participants": participants,
             }
             for target_key, participants in grouped_participants.items()
