@@ -68,6 +68,39 @@ class PostgresAttendanceIdentityRepository:
                     raise LookupError(f"Attendance identity {identity_id} not found.")
             connection.commit()
 
+    def update_display_name(self, identity_id: int, display_name: str) -> AttendanceIdentity:
+        clean_display_name = _clean_name(display_name)
+        if not clean_display_name:
+            raise ValueError("Display name is required.")
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE attendance_identities
+                    SET display_name = %s
+                    WHERE id = %s
+                    RETURNING
+                        id,
+                        identity_key,
+                        display_name,
+                        email,
+                        is_active
+                    """,
+                    (clean_display_name, identity_id),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise LookupError(f"Attendance identity {identity_id} not found.")
+            connection.commit()
+
+        return AttendanceIdentity(
+            id=int(row[0]),
+            identity_key=str(row[1]),
+            display_name=str(row[2]),
+            email=row[3],
+            is_active=bool(row[4]),
+        )
+
     def sync_alias_identity(self, alias_id: int) -> AttendanceAliasIdentitySyncResult:
         """Attach one alias row to the stable canonical identity.
 

@@ -1609,6 +1609,30 @@ async def attendance_deactivate_identity(identity_id: int):
     )
 
 
+@app.post("/api/attendance/identities/{identity_id}/display-name")
+async def attendance_update_identity_display_name(identity_id: int, payload: dict):
+    display_name = str(payload.get("display_name") or "").strip()
+    repository = PostgresAttendanceIdentityRepository()
+    try:
+        identity = repository.update_display_name(identity_id, display_name)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Aggiornamento nome identità fallito: {exc}") from exc
+    return JSONResponse(
+        {
+            "id": identity.id,
+            "identity_key": identity.identity_key,
+            "display_name": identity.display_name,
+            "email": identity.email,
+            "is_active": identity.is_active,
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.post("/api/attendance/identity-aliases/{alias_id}/sync-identity")
 async def attendance_sync_identity_alias(alias_id: int):
     repository = PostgresAttendanceIdentityRepository()

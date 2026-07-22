@@ -64,6 +64,9 @@ class AttendanceIdentityRepository(Protocol):
     def list_identities(self, limit: int = 500) -> list[AttendanceIdentity]:
         """Return observed identities ordered by display name."""
 
+    def update_display_name(self, identity_id: int, display_name: str) -> AttendanceIdentity:
+        """Update the visual display name of one stable identity."""
+
     def rebuild_from_participants(self) -> AttendanceIdentityRebuildResult:
         """Bulk upsert observed identities from persisted participants."""
 

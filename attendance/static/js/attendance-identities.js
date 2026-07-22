@@ -42,6 +42,13 @@ const AttendanceIdentitiesApp = {
                 });
                 return;
             }
+            if (button.dataset.action === 'edit-display-name') {
+                this._editDisplayName(identity).catch((error) => {
+                    console.error(error);
+                    window.alert(error.message || 'Impossibile aggiornare il nome.');
+                });
+                return;
+            }
             this._renderAliasPreview();
             this._renderTable(this._filteredIdentities);
         });
@@ -122,6 +129,7 @@ const AttendanceIdentitiesApp = {
                                 <div class="identity-row-actions">
                                     <button class="tiny-action" type="button" data-action="select-canonical" data-identity-index="${this._escapeAttr(index)}">Canonico</button>
                                     <button class="tiny-action" type="button" data-action="select-alias" data-identity-index="${this._escapeAttr(index)}">Alias</button>
+                                    <button class="tiny-action" type="button" data-action="edit-display-name" data-identity-index="${this._escapeAttr(index)}">Nome</button>
                                     <button class="tiny-action" type="button" data-action="deactivate-identity" data-identity-index="${this._escapeAttr(index)}">Ignora</button>
                                 </div>
                             </td>
@@ -208,6 +216,40 @@ const AttendanceIdentitiesApp = {
             this._els.createAliasButton.disabled = false;
             this._renderAliasPreview();
         }
+    },
+
+    async _editDisplayName(identity) {
+        if (!identity?.id) return;
+        const nextName = window.prompt(
+            'Nome visuale per questa identità. Non modifica alias, lezioni o analisi già normalizzate.',
+            identity.display_name || ''
+        );
+        if (nextName === null) {
+            return;
+        }
+        const displayName = nextName.trim().replace(/\s+/g, ' ');
+        if (!displayName) {
+            throw new Error('Il nome non può essere vuoto.');
+        }
+        const response = await fetch(`/api/attendance/identities/${encodeURIComponent(String(identity.id))}/display-name`, {
+            method: 'POST',
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name: displayName }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.detail || 'Aggiornamento nome fallito.');
+        }
+        this._identities = this._identities.map((item) => item.id === payload.id ? payload : item);
+        if (this._selectedCanonical?.id === payload.id) {
+            this._selectedCanonical = payload;
+        }
+        if (this._selectedAlias?.id === payload.id) {
+            this._selectedAlias = payload;
+        }
+        this._applyFilter();
+        this._renderAliasPreview();
     },
 
     async _deactivateIdentity(identity) {

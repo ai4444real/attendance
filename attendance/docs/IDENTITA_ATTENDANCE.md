@@ -113,6 +113,10 @@ La `identity_key` serve per riconoscere e aggiornare le righe in modo tecnico:
 - `email:...` quando c'e una email
 - `name:...` quando abbiamo solo nome
 
+`display_name` e' il nome visuale dell'identita. Puo essere corretto a mano
+senza modificare alias, partecipanti delle lezioni o report gia basati sui nomi
+normalizzati.
+
 Ma la chiave da usare per funzionalita future e':
 
 ```text
