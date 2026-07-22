@@ -54,6 +54,10 @@
         .identity-name { font-weight: 800; color: var(--brand-ink); }
         .identity-key { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 12px; color: var(--brand-muted); }
         .identity-row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .identity-segmented-action { display: inline-flex; border: 1px solid var(--brand-border); border-radius: 999px; overflow: hidden; background: white; }
+        .identity-segmented-action .tiny-action { border: 0; border-radius: 0; border-right: 1px solid var(--brand-border); }
+        .identity-segmented-action .tiny-action:last-child { border-right: 0; }
+        .identity-segmented-action .tiny-action:hover { background: #eef7fb; }
         .tiny-action { border: 1px solid var(--brand-border); border-radius: 999px; background: white; color: var(--brand-ink); font-size: 12px; font-weight: 800; padding: 6px 9px; cursor: pointer; }
         .tiny-action:hover { border-color: var(--brand-pnl-blue); color: var(--brand-pnl-blue); }
         .empty { padding: 24px; border: 1px dashed var(--brand-border); border-radius: 16px; color: var(--brand-muted); background: #fafcfd; }
@@ -117,6 +121,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-identities.js?v=20260722-edit-display-name"></script>
+    <script src="/attendance/static/js/attendance-identities.js?v=20260722-segmented-alias-actions"></script>
 </body>
 </html>

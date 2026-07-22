@@ -127,8 +127,10 @@ const AttendanceIdentitiesApp = {
                             <td><span class="identity-key">${this._escapeHtml(identity.identity_key)}</span></td>
                             <td>
                                 <div class="identity-row-actions">
-                                    <button class="tiny-action" type="button" data-action="select-canonical" data-identity-index="${this._escapeAttr(index)}">Canonico</button>
-                                    <button class="tiny-action" type="button" data-action="select-alias" data-identity-index="${this._escapeAttr(index)}">Alias</button>
+                                    <span class="identity-segmented-action" aria-label="Selezione alias">
+                                        <button class="tiny-action" type="button" data-action="select-canonical" data-identity-index="${this._escapeAttr(index)}">Main</button>
+                                        <button class="tiny-action" type="button" data-action="select-alias" data-identity-index="${this._escapeAttr(index)}">Alias</button>
+                                    </span>
                                     <button class="tiny-action" type="button" data-action="edit-display-name" data-identity-index="${this._escapeAttr(index)}">Nome</button>
                                     <button class="tiny-action" type="button" data-action="deactivate-identity" data-identity-index="${this._escapeAttr(index)}">Ignora</button>
                                 </div>
