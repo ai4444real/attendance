@@ -1778,6 +1778,7 @@ class AttendanceLessonIdentityRebuildService:
         skipped = []
         errors = []
         for lesson_id in lesson_ids:
+            before = None
             try:
                 before = self._query_repository.get_lesson_detail(lesson_id)
                 before_count = len(before.participants)
@@ -1792,9 +1793,9 @@ class AttendanceLessonIdentityRebuildService:
                     }
                 )
             except ValueError as exc:
-                skipped.append({"lesson_id": lesson_id, "reason": str(exc)})
+                skipped.append(self._build_rebuild_issue(lesson_id, exc, before))
             except Exception as exc:
-                errors.append({"lesson_id": lesson_id, "reason": str(exc)})
+                errors.append(self._build_rebuild_issue(lesson_id, exc, before))
         return {
             "candidate_lessons": len(lesson_ids),
             "rebuilt_lessons": len(rebuilt),
@@ -1804,6 +1805,19 @@ class AttendanceLessonIdentityRebuildService:
             "skipped": skipped,
             "errors": errors,
         }
+
+    def _build_rebuild_issue(self, lesson_id: int, exc: Exception, lesson: DraftLessonView | None) -> dict:
+        issue = {"lesson_id": lesson_id, "reason": str(exc)}
+        if lesson is not None:
+            issue.update(
+                {
+                    "course_name": lesson.course_name,
+                    "lesson_date": lesson.lesson_date,
+                    "status": lesson.status,
+                    "participants_count": len(lesson.participants),
+                }
+            )
+        return issue
 
     def rebuild_lesson_with_current_aliases_and_hint(
         self,

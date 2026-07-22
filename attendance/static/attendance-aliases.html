@@ -59,6 +59,15 @@
         .action-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
         .action-result { font-size: 13px; color: var(--brand-muted); }
         .action-result.is-error { color: #b42318; font-weight: 800; }
+        .rebuild-report { display: none; margin: -2px 0 14px; border: 1px solid var(--brand-border); border-radius: 16px; background: #fbfdfe; overflow: hidden; }
+        .rebuild-report.is-visible { display: block; }
+        .rebuild-report-head { padding: 10px 12px; font-size: 12px; font-weight: 900; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--brand-border); }
+        .rebuild-report-list { display: grid; gap: 0; max-height: 260px; overflow: auto; }
+        .rebuild-report-row { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--brand-border); }
+        .rebuild-report-row:last-child { border-bottom: 0; }
+        .rebuild-report-row a { color: var(--brand-pnl-blue); font-weight: 900; text-decoration: none; }
+        .rebuild-report-row a:hover { text-decoration: underline; }
+        .rebuild-report-reason { color: var(--brand-muted); font-size: 13px; line-height: 1.45; }
         .alias-builder { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--brand-border); }
         .alias-search-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 12px; align-items: end; margin: 14px 0; }
         .alias-search-row label { display: block; font-size: 12px; font-weight: 800; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
@@ -119,6 +128,7 @@
                 <button id="rebuildAliasesButton" class="primary-action" type="button">Applica alias alle lezioni</button>
                 <span id="rebuildAliasesResult" class="action-result">Ricostruisce solo le identità normalizzate, senza toccare origine, marker o stato lezioni.</span>
             </div>
+            <div id="rebuildAliasesReport" class="rebuild-report" aria-live="polite"></div>
             <div class="aliases-filter-row">
                 <input id="aliasesFilterInput" type="search" placeholder="Filtra alias, canonico, email..." autocomplete="off">
                 <button id="clearAliasesFilterButton" class="secondary-action" type="button">Pulisci filtro</button>

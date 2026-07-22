@@ -9,6 +9,7 @@ const AttendanceAliasesApp = {
             clearAliasesFilterButton: document.getElementById('clearAliasesFilterButton'),
             rebuildAliasesButton: document.getElementById('rebuildAliasesButton'),
             rebuildAliasesResult: document.getElementById('rebuildAliasesResult'),
+            rebuildAliasesReport: document.getElementById('rebuildAliasesReport'),
             identitySearchInput: document.getElementById('identitySearchInput'),
             identitySearchButton: document.getElementById('identitySearchButton'),
             identitySearchResult: document.getElementById('identitySearchResult'),
@@ -246,6 +247,7 @@ const AttendanceAliasesApp = {
         this._els.rebuildAliasesButton.disabled = true;
         this._els.rebuildAliasesResult.classList.remove('is-error');
         this._els.rebuildAliasesResult.textContent = 'Rebuild identità in corso...';
+        this._renderRebuildReport(null);
         try {
             const response = await fetch('/api/attendance/identity-aliases/rebuild-all', {
                 method: 'POST',
@@ -267,9 +269,65 @@ const AttendanceAliasesApp = {
                 `${payload.error_lessons || 0} errori`,
             ];
             this._els.rebuildAliasesResult.textContent = pieces.join(' · ');
+            this._renderRebuildReport(payload);
         } finally {
             this._els.rebuildAliasesButton.disabled = false;
         }
+    },
+
+    _renderRebuildReport(payload) {
+        if (!this._els.rebuildAliasesReport) {
+            return;
+        }
+        if (!payload) {
+            this._els.rebuildAliasesReport.classList.remove('is-visible');
+            this._els.rebuildAliasesReport.innerHTML = '';
+            return;
+        }
+
+        const skipped = payload.skipped || [];
+        const errors = payload.errors || [];
+        const rows = [
+            ...skipped.map((item) => ({ ...item, kind: 'saltata' })),
+            ...errors.map((item) => ({ ...item, kind: 'errore' })),
+        ];
+        if (rows.length === 0) {
+            this._els.rebuildAliasesReport.classList.remove('is-visible');
+            this._els.rebuildAliasesReport.innerHTML = '';
+            return;
+        }
+
+        const visibleRows = rows.slice(0, 80);
+        this._els.rebuildAliasesReport.classList.add('is-visible');
+        this._els.rebuildAliasesReport.innerHTML = `
+            <div class="rebuild-report-head">
+                Lezioni non ricostruite (${this._escapeHtml(rows.length)})
+                ${rows.length > visibleRows.length ? ` · prime ${this._escapeHtml(visibleRows.length)}` : ''}
+            </div>
+            <div class="rebuild-report-list">
+                ${visibleRows.map((item) => this._renderRebuildReportRow(item)).join('')}
+            </div>
+        `;
+    },
+
+    _renderRebuildReportRow(item) {
+        const lessonId = item.lesson_id || '';
+        const reason = item.reason || 'Motivo non disponibile.';
+        const details = [
+            item.course_name || '',
+            item.lesson_date || '',
+            item.status ? `stato ${item.status}` : '',
+            Number.isFinite(Number(item.participants_count)) ? `${item.participants_count} partecipanti` : '',
+        ].filter(Boolean).join(' · ');
+        return `
+            <div class="rebuild-report-row">
+                <a href="/attendance/drafts?lesson_id=${encodeURIComponent(lessonId)}" target="_blank" rel="noopener">#${this._escapeHtml(lessonId)}</a>
+                <div class="rebuild-report-reason">
+                    ${details ? `<div>${this._escapeHtml(details)}</div>` : ''}
+                    <strong>${this._escapeHtml(item.kind || 'info')}</strong>: ${this._escapeHtml(reason)}
+                </div>
+            </div>
+        `;
     },
 
     async _loadAliases() {
