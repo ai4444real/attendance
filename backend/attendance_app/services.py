@@ -1876,15 +1876,21 @@ class AttendanceLessonIdentityRebuildService:
 
         old_to_target_key: dict[int, str] = {}
         grouped_participants: dict[str, list] = defaultdict(list)
+        target_identities: dict[str, dict[str, str | None]] = {}
         for participant in lesson.participants:
-            rebuilt_key = self._participant_target_key(
+            target_identity = self._participant_target_identity(
                 participant,
                 name_alias_map,
                 email_alias_map,
                 forced_merge=forced_merge,
             )
+            rebuilt_key = str(target_identity["participant_key"])
             old_to_target_key[participant.id] = rebuilt_key
             grouped_participants[rebuilt_key].append(participant)
+            target_identities[rebuilt_key] = self._pick_target_identity(
+                target_identities.get(rebuilt_key),
+                target_identity,
+            )
 
         grouped_participants, old_to_target_key = self._merge_compatible_rebuild_groups(
             grouped_participants,
@@ -1898,6 +1904,15 @@ class AttendanceLessonIdentityRebuildService:
         for target_key, participants in grouped_participants.items():
             record = aggregated.get(target_key)
             if record is None:
+                if self._can_preserve_aggregated_participant_group(participants):
+                    rebuilt_participants.append(
+                        self._merge_aggregated_participant_group(
+                            target_key,
+                            participants,
+                            target_identity=target_identities.get(target_key),
+                        )
+                    )
+                    continue
                 missing_target_keys.append(target_key)
                 missing_target_groups.append(
                     {
@@ -1911,9 +1926,23 @@ class AttendanceLessonIdentityRebuildService:
             canonical_full_name = record["canonical_full_name"]
             raw_full_name = self._pick_raw_full_name(participants)
             canonical_email = (record["canonical_email"] or "").strip() or None
-            calculated = record["calculated_presence_status"]
+            calculated = self._strongest_presence_status([
+                record["calculated_presence_status"],
+                *[
+                    participant.calculated_presence_status
+                    for participant in participants
+                    if self._is_aggregated_manual_participant(participant)
+                ],
+            ])
             manual_override_presence_status = remapped_overrides.get(survivor.id)
-            final = manual_override_presence_status or calculated
+            final = manual_override_presence_status or self._strongest_presence_status([
+                calculated,
+                *[
+                    participant.final_presence_status
+                    for participant in participants
+                    if self._is_aggregated_manual_participant(participant)
+                ],
+            ])
             identity_sources = self._merge_identity_sources_from_participants(participants)
             first_name, last_name = _split_full_name(canonical_full_name)
             metadata = dict(survivor.metadata or {})
@@ -1962,6 +1991,15 @@ class AttendanceLessonIdentityRebuildService:
             participants=rebuilt_participants,
         )
         return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _can_preserve_aggregated_participant_group(self, participants: list) -> bool:
+        return bool(participants) and all(
+            self._is_aggregated_manual_participant(participant)
+            for participant in participants
+        )
+
+    def _is_aggregated_manual_participant(self, participant) -> bool:
+        return participant.presence_source in {"manual", "qr_form", "csv_manual"}
 
     def _format_missing_rebuild_groups(self, missing_groups: list[dict]) -> str:
         formatted_groups = []
