@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Rebekko Agent</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Rebekko Agent</h1>
+      <p>Repository di sviluppo Rebekko</p>
+    </div>
+    <span id="connection" class="connection">Online</span>
+  </header>
+  <main>
+    <section id="messages" aria-live="polite" aria-label="Storico chat"></section>
+    <section id="work-status" class="work-status hidden" aria-live="polite">
+      <strong id="status-title">Codex sta lavorando…</strong>
+      <span id="elapsed"></span>
+      <span id="updated"></span>
+      <button id="stop" class="danger" type="button">Interrompi</button>
+      <details>
+        <summary>Dettagli tecnici</summary>
+        <pre id="technical-output"></pre>
+      </details>
+    </section>
+  </main>
+  <form id="composer">
+    <label class="sr-only" for="message">Messaggio</label>
+    <textarea id="message" rows="4" placeholder="Scrivi o detta una richiesta…" required></textarea>
+    <button id="send" type="submit">Invia</button>
+  </form>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

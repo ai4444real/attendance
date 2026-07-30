@@ -1,0 +1,23 @@
+[Unit]
+Description=Private Rebekko Codex Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/rebekko-agent
+EnvironmentFile=/etc/rebekko-agent.env
+ExecStart=/opt/rebekko-agent/.venv/bin/uvicorn rebekko_agent.main:app --host ${REBEKKO_AGENT_BIND} --port ${REBEKKO_AGENT_PORT} --no-proxy-headers
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/.codex /home/ubuntu/src/rebekko-webapps /var/lib/rebekko-agent
+
+[Install]
+WantedBy=multi-user.target
