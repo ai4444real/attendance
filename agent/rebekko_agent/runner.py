@@ -172,10 +172,11 @@ class JobRunner:
             "--json",
             "--color",
             "never",
-            "-c",
-            "approval_policy=\"never\"",
-            "--sandbox",
-            "workspace-write",
+            # Bubblewrap cannot create its loopback interface under the VPS
+            # systemd/AppArmor constraints. The service unit supplies the
+            # filesystem boundary: Codex can write only the non-prod clone,
+            # ~/.codex and the agent runtime directory.
+            "--dangerously-bypass-approvals-and-sandbox",
             "-C",
             str(self.settings.repo),
         ]

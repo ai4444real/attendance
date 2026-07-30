@@ -35,13 +35,13 @@ Il file di configurazione privato e':
 /etc/rebekko-agent.env
 ```
 
-Il servizio usa due livelli di protezione:
+Il servizio usa il sandbox del filesystem di systemd: Codex puo' scrivere nel
+clone di sviluppo, in `~/.codex` e nel database interno dell'agente, ma non
+nella produzione.
 
-- Codex viene avviato con sandbox `workspace-write` sul clone di sviluppo.
-- systemd limita comunque le directory scrivibili a clone, `~/.codex` e database
-  interno dell'agente.
-
-La produzione viene toccata solo dal deploy confermato.
+Il sandbox interno bubblewrap di Codex non viene usato per questo servizio:
+sotto systemd/AppArmor sul VPS fallisce con `bwrap: loopback: Operation not
+permitted`. La produzione viene toccata solo dal deploy confermato.
 
 Il deploy confermato viene eseguito in una unita' systemd transitoria e
 separata tramite `sudo systemd-run`. L'utente `ubuntu` deve avere il permesso
