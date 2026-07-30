@@ -172,10 +172,10 @@ class JobRunner:
             "--json",
             "--color",
             "never",
-            # Bubblewrap cannot create its loopback interface on this VPS
-            # (AppArmor restricts unprivileged user namespaces). The systemd
-            # unit supplies the filesystem boundary instead.
-            "--dangerously-bypass-approvals-and-sandbox",
+            "--sandbox",
+            "workspace-write",
+            "--ask-for-approval",
+            "never",
             "-C",
             str(self.settings.repo),
         ]
