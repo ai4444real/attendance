@@ -394,7 +394,7 @@ def render_module_shell(title: str, subtitle: str, body_html: str) -> str:
                 </div>
             </a>
             <nav class="nav" aria-label="Workspace navigation">
-                <a href="/">Casa</a>
+                <a href="/">Home</a>
                 <a href="/attendance">Attendance</a>
             </nav>
         </div>
