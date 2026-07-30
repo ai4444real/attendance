@@ -33,6 +33,15 @@ cd /opt/rebekko-agent
 sudo ./scripts/install.sh
 ```
 
+## Aggiornamento sul VPS
+
+Dopo il primo setup, dal clone non-prod:
+
+```bash
+cd /home/ubuntu/src/rebekko-webapps
+./agent/deploy.sh
+```
+
 Per impostazione predefinita il servizio ascolta solo su `127.0.0.1:8090`.
 Non esporre la porta tramite Caddy pubblico senza un livello di autenticazione
 e controllo accessi dedicato.

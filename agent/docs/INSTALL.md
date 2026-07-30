@@ -108,3 +108,19 @@ sudo systemctl restart rebekko-agent
 
 Un job in esecuzione durante il riavvio viene terminato dal gruppo systemd e
 marcato `failed` al successivo avvio.
+
+## Aggiornamento
+
+Dopo la prima installazione non serve ricordare i singoli comandi di copia e
+restart. Dal clone non-prod:
+
+```bash
+cd /home/ubuntu/src/rebekko-webapps
+./agent/deploy.sh
+```
+
+Lo script esegue:
+
+- `git pull --ff-only origin main`;
+- copia `agent/` in `/opt/rebekko-agent`;
+- riavvio e status di `rebekko-agent`.
