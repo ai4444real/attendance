@@ -172,10 +172,10 @@ class JobRunner:
             "--json",
             "--color",
             "never",
+            "-c",
+            "approval_policy=\"never\"",
             "--sandbox",
             "workspace-write",
-            "--ask-for-approval",
-            "never",
             "-C",
             str(self.settings.repo),
         ]
