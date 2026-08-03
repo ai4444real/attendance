@@ -5,7 +5,7 @@ Single backend entry point for the Rebekko webapps workspace.
 At the moment it serves the Attendance module and its related APIs.
 """
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -902,8 +902,7 @@ def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:
     }
 
 
-@app.get("/api/utilities/payment-reminders/smallinvoice-reminders")
-async def payment_reminders_smallinvoice_reminders():
+async def _fetch_smallinvoice_payment_reminders() -> tuple[list[dict], list[dict]]:
     reminder_statuses = ("R", "R1", "R2", "R3")
     reminders: list[dict] = []
     status_errors: list[dict] = []
@@ -961,7 +960,13 @@ async def payment_reminders_smallinvoice_reminders():
                 "status_errors": status_errors,
             },
         )
+    reminders.sort(key=_smallinvoice_client_sort_key)
+    return reminders, status_errors
 
+
+@app.get("/api/utilities/payment-reminders/smallinvoice-reminders")
+async def payment_reminders_smallinvoice_reminders():
+    reminders, status_errors = await _fetch_smallinvoice_payment_reminders()
     reminders.sort(key=_smallinvoice_client_sort_key)
     response_reminders = [
         {key: value for key, value in reminder.items() if key not in {"total_decimal", "tokens"}}
@@ -1250,13 +1255,25 @@ def _match_payment_reminder(invoice: dict, transactions: list[dict], used_transa
 
 @app.post("/api/utilities/payment-reminders/match")
 async def payment_reminders_match(
-    smallinvoice: UploadFile = File(...),
     postfinance: UploadFile = File(...),
+    smallinvoice: UploadFile | None = File(None),
+    use_online_smallinvoice: str = Form("false"),
 ):
-    smallinvoice_text = _decode_csv_upload(await smallinvoice.read())
     postfinance_text = _decode_csv_upload(await postfinance.read())
-    reminders = _parse_smallinvoice_reminders(smallinvoice_text)
-    reminders.sort(key=_smallinvoice_client_sort_key)
+    should_use_online = use_online_smallinvoice.casefold() in {"1", "true", "yes", "on"}
+    source_errors: list[dict] = []
+    if should_use_online:
+        reminders, source_errors = await _fetch_smallinvoice_payment_reminders()
+        smallinvoice_source = "smallinvoice_online"
+        smallinvoice_filename = None
+    else:
+        if smallinvoice is None:
+            raise HTTPException(status_code=400, detail="Carica Smallinvoice CSV oppure usa i richiami online.")
+        smallinvoice_text = _decode_csv_upload(await smallinvoice.read())
+        reminders = _parse_smallinvoice_reminders(smallinvoice_text)
+        reminders.sort(key=_smallinvoice_client_sort_key)
+        smallinvoice_source = "smallinvoice_csv"
+        smallinvoice_filename = smallinvoice.filename
     transactions = _parse_postfinance_transactions(postfinance_text)
 
     results = []
@@ -1277,7 +1294,9 @@ async def payment_reminders_match(
         status_counts[status] = status_counts.get(status, 0) + 1
 
     return {
-        "smallinvoice_file": smallinvoice.filename,
+        "smallinvoice_source": smallinvoice_source,
+        "smallinvoice_file": smallinvoice_filename,
+        "smallinvoice_status_errors": source_errors,
         "postfinance_file": postfinance.filename,
         "reminder_count": len(reminders),
         "transaction_count": len(transactions),

@@ -109,6 +109,28 @@
             color: var(--brand-ink);
             font: inherit;
         }
+        .source-choice {
+            border: 1px solid var(--brand-border);
+            border-radius: 15px;
+            padding: 16px;
+            background: #f8fbfd;
+        }
+        .source-choice label {
+            align-items: center;
+            color: var(--brand-ink);
+            display: flex;
+            gap: 10px;
+            letter-spacing: 0;
+            margin: 0 0 12px;
+            text-transform: none;
+        }
+        .source-choice input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        .source-choice input[type="file"]:disabled {
+            opacity: 0.45;
+        }
         .actions {
             display: flex;
             align-items: center;
@@ -223,8 +245,15 @@
         <section class="panel">
             <div class="upload-grid">
                 <div>
-                    <label for="smallinvoiceFile">Smallinvoice CSV</label>
-                    <input id="smallinvoiceFile" type="file" accept=".csv,text/csv">
+                    <label>Richiami Smallinvoice</label>
+                    <div class="source-choice">
+                        <label for="useOnlineSmallinvoice">
+                            <input id="useOnlineSmallinvoice" type="checkbox" checked>
+                            Usa richiami online Smallinvoice
+                        </label>
+                        <div class="muted">Se disattivi questa opzione, usa il vecchio export CSV.</div>
+                        <input id="smallinvoiceFile" type="file" accept=".csv,text/csv" disabled>
+                    </div>
                 </div>
                 <div>
                     <label for="postfinanceFile">PostFinance CSV</label>
@@ -261,6 +290,7 @@
 
     <script>
         const smallinvoiceFile = document.getElementById("smallinvoiceFile");
+        const useOnlineSmallinvoice = document.getElementById("useOnlineSmallinvoice");
         const postfinanceFile = document.getElementById("postfinanceFile");
         const runButton = document.getElementById("runButton");
         const message = document.getElementById("message");
@@ -286,7 +316,11 @@
 
         function renderStats(payload) {
             const counts = payload.status_counts || {};
+            const sourceLabel = payload.smallinvoice_source === "smallinvoice_online"
+                ? "Smallinvoice online"
+                : "Smallinvoice CSV";
             stats.innerHTML = `
+                <span class="stat">${sourceLabel}</span>
                 <span class="stat">Richiami ${payload.reminder_count}</span>
                 <span class="stat">Movimenti banca ${payload.transaction_count}</span>
                 <span class="stat">Pagati ${counts.paid || 0}</span>
@@ -342,16 +376,26 @@
         async function runMatch() {
             message.textContent = "";
             message.className = "message";
-            if (!smallinvoiceFile.files[0] || !postfinanceFile.files[0]) {
-                message.textContent = "Carica entrambi i file.";
+            if (!postfinanceFile.files[0]) {
+                message.textContent = "Carica il file PostFinance.";
+                message.classList.add("error");
+                return;
+            }
+            if (!useOnlineSmallinvoice.checked && !smallinvoiceFile.files[0]) {
+                message.textContent = "Carica Smallinvoice CSV oppure usa i richiami online.";
                 message.classList.add("error");
                 return;
             }
             runButton.disabled = true;
-            message.textContent = "Elaborazione...";
+            message.textContent = useOnlineSmallinvoice.checked
+                ? "Recupero richiami online ed elaboro..."
+                : "Elaborazione da CSV...";
             const formData = new FormData();
-            formData.append("smallinvoice", smallinvoiceFile.files[0]);
             formData.append("postfinance", postfinanceFile.files[0]);
+            formData.append("use_online_smallinvoice", useOnlineSmallinvoice.checked ? "1" : "0");
+            if (!useOnlineSmallinvoice.checked) {
+                formData.append("smallinvoice", smallinvoiceFile.files[0]);
+            }
             try {
                 const response = await fetch("/api/utilities/payment-reminders/match", {
                     method: "POST",
@@ -370,6 +414,9 @@
             }
         }
 
+        useOnlineSmallinvoice.addEventListener("change", () => {
+            smallinvoiceFile.disabled = useOnlineSmallinvoice.checked;
+        });
         runButton.addEventListener("click", runMatch);
     </script>
 </body>
