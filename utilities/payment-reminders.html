@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PNL Evolution - Controllo richiami</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--brand-surface);
+            color: var(--brand-ink);
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            line-height: 1.55;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 10px 28px;
+            background: #fff;
+            border-bottom: 1px solid var(--brand-border);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: var(--brand-ink);
+            text-decoration: none;
+        }
+        .brand img { width: 126px; height: auto; }
+        .brand-title {
+            display: block;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .brand-subtitle {
+            color: var(--brand-muted);
+            font-size: 13px;
+        }
+        .nav {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .nav a {
+            color: #0b5870;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .nav a.active {
+            color: var(--brand-pnl-green-dark);
+            background: var(--brand-pnl-green-soft);
+            border-radius: 999px;
+            padding: 8px 14px;
+        }
+        .container {
+            width: min(1480px, calc(100% - 48px));
+            margin: 0 auto;
+            padding: 24px 0 42px;
+        }
+        .hero {
+            background: linear-gradient(135deg, var(--brand-pnl-blue) 0%, #006d75 55%, var(--brand-pnl-green) 100%);
+            color: #fff;
+            border-radius: 20px;
+            padding: 34px;
+            margin-bottom: 24px;
+            box-shadow: 0 18px 38px rgba(16, 42, 67, 0.12);
+        }
+        .hero h1 { margin: 0 0 8px; font-size: clamp(34px, 5vw, 56px); }
+        .hero p { margin: 0; max-width: 880px; font-size: 18px; }
+        .panel {
+            background: #fff;
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            box-shadow: 0 14px 30px rgba(16, 42, 67, 0.08);
+            padding: 24px;
+            margin-bottom: 18px;
+        }
+        .upload-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+        label {
+            display: block;
+            color: #4d5d6c;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        input[type="file"] {
+            width: 100%;
+            border: 1px solid var(--brand-border);
+            border-radius: 15px;
+            padding: 16px;
+            background: #f8fbfd;
+            color: var(--brand-ink);
+            font: inherit;
+        }
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            appearance: none;
+            border: 0;
+            border-radius: 16px;
+            background: var(--brand-pnl-blue);
+            color: #fff;
+            cursor: pointer;
+            font-weight: 900;
+            padding: 14px 24px;
+            font-size: 16px;
+        }
+        button:disabled { opacity: 0.55; cursor: wait; }
+        .message { font-weight: 800; }
+        .message.ok { color: #087c3f; }
+        .message.error { color: #b42318; }
+        .stats {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .stat {
+            border: 1px solid var(--brand-border);
+            border-radius: 999px;
+            padding: 10px 14px;
+            background: #f8fbfd;
+            font-weight: 900;
+        }
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1120px;
+        }
+        th, td {
+            border-bottom: 1px solid var(--brand-border);
+            padding: 13px 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            color: #4d5d6c;
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .client { font-weight: 900; }
+        .muted { color: #4d5d6c; font-size: 13px; }
+        .badge {
+            display: inline-flex;
+            border-radius: 999px;
+            padding: 7px 11px;
+            font-weight: 900;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .badge-paid { background: #e3f6ea; color: #087c3f; }
+        .badge-mismatch { background: #fff4d8; color: #9a5b00; }
+        .badge-ambiguous { background: #e8f2ff; color: #0b5a96; }
+        .badge-missing { background: #ffe6ec; color: #b42318; }
+        details summary {
+            cursor: pointer;
+            color: #0b5870;
+            font-weight: 900;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f8fbfd;
+            border: 1px solid var(--brand-border);
+            border-radius: 12px;
+            padding: 12px;
+            max-width: 560px;
+        }
+        @media (max-width: 800px) {
+            .container { width: min(100% - 24px, 1480px); }
+            .topbar { align-items: flex-start; flex-direction: column; }
+            .upload-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/utilities">
+            <img src="/assets/brand/pnl-evolution-logo.png" alt="PNL Evolution">
+            <span>
+                <strong class="brand-title">Rebekko Webapps</strong>
+                <span class="brand-subtitle">PNL Evolution</span>
+            </span>
+        </a>
+        <nav class="nav">
+            <a href="/">Home</a>
+            <a href="/utilities">Utilities</a>
+            <a class="active" href="/utilities/payment-reminders">Controllo richiami</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>Controllo richiami</h1>
+            <p>Carica export Smallinvoice e movimenti PostFinance. Lo strumento cerca i richiami ancora aperti e prova a capire se nel frattempo e' arrivato un pagamento.</p>
+        </section>
+
+        <section class="panel">
+            <div class="upload-grid">
+                <div>
+                    <label for="smallinvoiceFile">Smallinvoice CSV</label>
+                    <input id="smallinvoiceFile" type="file" accept=".csv,text/csv">
+                </div>
+                <div>
+                    <label for="postfinanceFile">PostFinance CSV</label>
+                    <input id="postfinanceFile" type="file" accept=".csv,text/csv">
+                </div>
+            </div>
+            <div class="actions">
+                <button id="runButton" type="button">Go</button>
+                <span id="message" class="message"></span>
+            </div>
+        </section>
+
+        <section id="resultsPanel" class="panel" hidden>
+            <div id="stats" class="stats"></div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Esito</th>
+                            <th>Fattura</th>
+                            <th>Cliente</th>
+                            <th>Richiamo</th>
+                            <th>Importo</th>
+                            <th>Pagamento trovato</th>
+                            <th>Metodo</th>
+                            <th>Dettagli</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const smallinvoiceFile = document.getElementById("smallinvoiceFile");
+        const postfinanceFile = document.getElementById("postfinanceFile");
+        const runButton = document.getElementById("runButton");
+        const message = document.getElementById("message");
+        const resultsPanel = document.getElementById("resultsPanel");
+        const resultsBody = document.getElementById("resultsBody");
+        const stats = document.getElementById("stats");
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function badgeClass(status) {
+            if (status === "paid") return "badge-paid";
+            if (status === "amount_mismatch" || status === "name_found_amount_different") return "badge-mismatch";
+            if (status === "ambiguous") return "badge-ambiguous";
+            return "badge-missing";
+        }
+
+        function renderStats(payload) {
+            const counts = payload.status_counts || {};
+            stats.innerHTML = `
+                <span class="stat">Richiami ${payload.reminder_count}</span>
+                <span class="stat">Movimenti banca ${payload.transaction_count}</span>
+                <span class="stat">Pagati ${counts.paid || 0}</span>
+                <span class="stat">Dubbi ${(counts.amount_mismatch || 0) + (counts.name_found_amount_different || 0) + (counts.ambiguous || 0)}</span>
+                <span class="stat">Non trovati ${counts.not_found || 0}</span>
+            `;
+        }
+
+        function renderTransaction(match) {
+            if (!match.transaction) return '<span class="muted">-</span>';
+            const tokens = match.transaction.matched_tokens?.length
+                ? `<div class="muted">token: ${escapeHtml(match.transaction.matched_tokens.join(", "))}</div>`
+                : "";
+            return `
+                <strong>${escapeHtml(match.transaction.date)}</strong>
+                <div>${escapeHtml(match.transaction.amount)} CHF</div>
+                ${tokens}
+            `;
+        }
+
+        function renderDetails(match) {
+            const lines = [];
+            if (match.transaction?.text) lines.push(match.transaction.text);
+            for (const candidate of match.candidates || []) {
+                if (candidate.text && candidate.text !== match.transaction?.text) lines.push(candidate.text);
+            }
+            if (!lines.length) return '<span class="muted">Nessun dettaglio</span>';
+            return `
+                <details>
+                    <summary>${lines.length === 1 ? "movimento" : `${lines.length} candidati`}</summary>
+                    <pre>${escapeHtml(lines.join("\\n\\n---\\n\\n"))}</pre>
+                </details>
+            `;
+        }
+
+        function renderResults(payload) {
+            renderStats(payload);
+            resultsBody.innerHTML = payload.results.map(({ invoice, match }) => `
+                <tr>
+                    <td><span class="badge ${badgeClass(match.status)}">${escapeHtml(match.label)}</span><div class="muted">${escapeHtml(match.confidence)}</div></td>
+                    <td><strong>#${escapeHtml(invoice.number)}</strong><div class="muted">ESR ${escapeHtml(invoice.esr_number || "-")}</div></td>
+                    <td><div class="client">${escapeHtml(invoice.client_name)}</div><div class="muted">${escapeHtml(invoice.client_number || "")}</div></td>
+                    <td><strong>${escapeHtml(invoice.status)}</strong><div class="muted">due ${escapeHtml(invoice.due || "-")}</div></td>
+                    <td><strong>${escapeHtml(invoice.total)} ${escapeHtml(invoice.currency || "")}</strong></td>
+                    <td>${renderTransaction(match)}</td>
+                    <td>${escapeHtml(match.method)}</td>
+                    <td>${renderDetails(match)}</td>
+                </tr>
+            `).join("");
+            resultsPanel.hidden = false;
+        }
+
+        async function runMatch() {
+            message.textContent = "";
+            message.className = "message";
+            if (!smallinvoiceFile.files[0] || !postfinanceFile.files[0]) {
+                message.textContent = "Carica entrambi i file.";
+                message.classList.add("error");
+                return;
+            }
+            runButton.disabled = true;
+            message.textContent = "Elaborazione...";
+            const formData = new FormData();
+            formData.append("smallinvoice", smallinvoiceFile.files[0]);
+            formData.append("postfinance", postfinanceFile.files[0]);
+            try {
+                const response = await fetch("/api/utilities/payment-reminders/match", {
+                    method: "POST",
+                    body: formData,
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Elaborazione fallita.");
+                renderResults(payload);
+                message.textContent = "Elaborazione completata.";
+                message.classList.add("ok");
+            } catch (error) {
+                message.textContent = error.message || String(error);
+                message.classList.add("error");
+            } finally {
+                runButton.disabled = false;
+            }
+        }
+
+        runButton.addEventListener("click", runMatch);
+    </script>
+</body>
+</html>

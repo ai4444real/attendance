@@ -10,13 +10,18 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
+import re
 import secrets
 import tempfile
 import time
+import unicodedata
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import httpx
@@ -204,6 +209,7 @@ ATTENDANCE_ADAPTER_DIR = os.path.join(WORKSPACE_DIR, "attendance", "adapter")
 UTILITIES_STATIC_DIR = os.path.join(WORKSPACE_DIR, "utilities")
 UTILITIES_CLASSROOM_MANAGER_FILE = os.path.join(UTILITIES_STATIC_DIR, "classroom-manager.html")
 UTILITIES_SMALLINVOICE_FILE = os.path.join(UTILITIES_STATIC_DIR, "smallinvoice.html")
+UTILITIES_PAYMENT_REMINDERS_FILE = os.path.join(UTILITIES_STATIC_DIR, "payment-reminders.html")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
 SMALLINVOICE_API_BASE_URL = os.getenv("SMALLINVOICE_API_BASE_URL", "https://api.smallinvoice.com/v2").rstrip("/")
@@ -692,6 +698,15 @@ async def utilities_smallinvoice():
     )
 
 
+@app.get("/utilities/payment-reminders")
+@app.get("/utilities/payment-reminders/")
+async def utilities_payment_reminders():
+    return FileResponse(
+        UTILITIES_PAYMENT_REMINDERS_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
 def _smallinvoice_is_configured() -> bool:
     return bool(SMALLINVOICE_CLIENT_ID and SMALLINVOICE_CLIENT_SECRET)
 
@@ -848,6 +863,270 @@ async def smallinvoice_contact_invoices(contact_id: str):
 
     invoices.sort(key=_smallinvoice_invoice_sort_key, reverse=True)
     return {"contact_id": contact_id, "count": len(invoices), "invoices": invoices}
+
+
+PAYMENT_REMINDER_STATUSES = {
+    "payment rem.",
+    "1st reminder",
+    "2nd reminder",
+    "3rd reminder",
+}
+
+
+def _decode_csv_upload(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="replace")
+
+
+def _parse_money(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    text = str(value).strip().strip('"').strip("=")
+    if not text:
+        return None
+    text = text.replace("'", "").replace(" ", "").replace(",", ".")
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def _money_to_json(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return format(value.quantize(Decimal("0.01")), "f")
+
+
+def _money_equals(left: Decimal | None, right: Decimal | None) -> bool:
+    if left is None or right is None:
+        return False
+    return abs(left - right) <= Decimal("0.01")
+
+
+def _fold_for_match(value: object) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
+
+
+def _name_tokens(value: str) -> list[str]:
+    ignored = {"del", "della", "dello", "dei", "di", "da", "de", "la", "il", "lo", "via"}
+    tokens = []
+    for token in _fold_for_match(value).split():
+        if len(token) >= 3 and token not in ignored:
+            tokens.append(token)
+    return list(dict.fromkeys(tokens))
+
+
+def _extract_digits(value: object) -> str:
+    return re.sub(r"\D+", "", str(value or ""))
+
+
+def _parse_smallinvoice_reminders(text: str) -> list[dict]:
+    reader = csv.DictReader(io.StringIO(text), delimiter=";", quotechar='"')
+    reminders: list[dict] = []
+    for index, row in enumerate(reader, start=2):
+        status = (row.get("status") or "").strip()
+        if status.casefold() not in PAYMENT_REMINDER_STATUSES:
+            continue
+        total = _parse_money(row.get("total"))
+        esr_number = _extract_digits(row.get("esr_number"))
+        reminders.append(
+            {
+                "row": index,
+                "number": (row.get("number") or "").strip(),
+                "client_name": (row.get("client_name") or "").strip(),
+                "client_number": (row.get("client_number") or "").strip(),
+                "date": (row.get("date") or "").strip(),
+                "due": (row.get("due") or "").strip(),
+                "total": _money_to_json(total),
+                "total_decimal": total,
+                "currency": (row.get("currency") or "").strip(),
+                "status": status,
+                "paid_date": (row.get("paid_date") or "").strip(),
+                "paid_amount": (row.get("paid_amount") or "").strip(),
+                "esr_number": esr_number,
+                "tokens": _name_tokens(row.get("client_name") or ""),
+            }
+        )
+    return reminders
+
+
+def _parse_postfinance_transactions(text: str) -> list[dict]:
+    transactions: list[dict] = []
+    date_pattern = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+    for row in csv.reader(io.StringIO(text), delimiter=";", quotechar='"'):
+        if len(row) < 5:
+            continue
+        date = row[0].strip().strip('"').strip("=")
+        if not date_pattern.match(date):
+            continue
+        text_value = (row[1] or "").strip()
+        credit = _parse_money(row[2] if len(row) > 2 else "")
+        debit = _parse_money(row[3] if len(row) > 3 else "")
+        amount = credit if credit is not None else (-debit if debit is not None else None)
+        if amount is None or amount <= 0:
+            continue
+        transactions.append(
+            {
+                "date": date,
+                "text": text_value,
+                "text_key": _fold_for_match(text_value),
+                "text_digits": _extract_digits(text_value),
+                "amount": amount,
+                "amount_json": _money_to_json(amount),
+                "value_date": row[4].strip() if len(row) > 4 else "",
+                "balance": row[5].strip() if len(row) > 5 else "",
+            }
+        )
+    return transactions
+
+
+def _transaction_summary(transaction: dict, matched_tokens: list[str] | None = None) -> dict:
+    return {
+        "date": transaction["date"],
+        "value_date": transaction.get("value_date", ""),
+        "amount": transaction["amount_json"],
+        "matched_tokens": matched_tokens or [],
+        "text": transaction["text"],
+    }
+
+
+def _best_name_matches(invoice: dict, transactions: list[dict], *, amount_must_match: bool) -> list[dict]:
+    tokens = invoice["tokens"]
+    if not tokens:
+        return []
+    matches = []
+    for transaction in transactions:
+        if amount_must_match and not _money_equals(invoice["total_decimal"], transaction["amount"]):
+            continue
+        matched_tokens = [token for token in tokens if token in transaction["text_key"]]
+        if len(matched_tokens) >= 2 or (len(tokens) == 1 and matched_tokens):
+            matches.append({"transaction": transaction, "tokens": matched_tokens})
+    return matches
+
+
+def _match_payment_reminder(invoice: dict, transactions: list[dict]) -> dict:
+    invoice_number = _extract_digits(invoice["number"])
+    esr_number = invoice["esr_number"]
+    reference_candidates = []
+    if esr_number:
+        reference_candidates = [
+            transaction for transaction in transactions if esr_number in transaction["text_digits"]
+        ]
+    if not reference_candidates and invoice_number:
+        reference_candidates = [
+            transaction for transaction in transactions if invoice_number in transaction["text_digits"]
+        ]
+
+    for transaction in reference_candidates:
+        if _money_equals(invoice["total_decimal"], transaction["amount"]):
+            return {
+                "status": "paid",
+                "label": "Pagamento trovato",
+                "confidence": "alta",
+                "method": "riferimento + importo",
+                "transaction": _transaction_summary(transaction),
+                "candidates": [],
+            }
+
+    if reference_candidates:
+        return {
+            "status": "amount_mismatch",
+            "label": "Riferimento trovato, importo diverso",
+            "confidence": "media",
+            "method": "riferimento",
+            "transaction": _transaction_summary(reference_candidates[0]),
+            "candidates": [_transaction_summary(item) for item in reference_candidates[:5]],
+        }
+
+    name_amount_matches = _best_name_matches(invoice, transactions, amount_must_match=True)
+    if len(name_amount_matches) == 1:
+        match = name_amount_matches[0]
+        return {
+            "status": "paid",
+            "label": "Pagamento probabile",
+            "confidence": "media",
+            "method": "nome + importo",
+            "transaction": _transaction_summary(match["transaction"], match["tokens"]),
+            "candidates": [],
+        }
+    if len(name_amount_matches) > 1:
+        return {
+            "status": "ambiguous",
+            "label": "Più pagamenti compatibili",
+            "confidence": "bassa",
+            "method": "nome + importo",
+            "transaction": None,
+            "candidates": [
+                _transaction_summary(match["transaction"], match["tokens"])
+                for match in name_amount_matches[:5]
+            ],
+        }
+
+    name_matches = _best_name_matches(invoice, transactions, amount_must_match=False)
+    if name_matches:
+        latest = name_matches[0]
+        return {
+            "status": "name_found_amount_different",
+            "label": "Nome trovato, importo diverso",
+            "confidence": "bassa",
+            "method": "nome",
+            "transaction": _transaction_summary(latest["transaction"], latest["tokens"]),
+            "candidates": [
+                _transaction_summary(match["transaction"], match["tokens"])
+                for match in name_matches[:5]
+            ],
+        }
+
+    return {
+        "status": "not_found",
+        "label": "Nessun pagamento trovato",
+        "confidence": "nessuna",
+        "method": "nessun match",
+        "transaction": None,
+        "candidates": [],
+    }
+
+
+@app.post("/api/utilities/payment-reminders/match")
+async def payment_reminders_match(
+    smallinvoice: UploadFile = File(...),
+    postfinance: UploadFile = File(...),
+):
+    smallinvoice_text = _decode_csv_upload(await smallinvoice.read())
+    postfinance_text = _decode_csv_upload(await postfinance.read())
+    reminders = _parse_smallinvoice_reminders(smallinvoice_text)
+    transactions = _parse_postfinance_transactions(postfinance_text)
+
+    results = []
+    for invoice in reminders:
+        match = _match_payment_reminder(invoice, transactions)
+        invoice_payload = {
+            key: value
+            for key, value in invoice.items()
+            if key not in {"total_decimal", "tokens"}
+        }
+        invoice_payload["tokens"] = invoice["tokens"]
+        results.append({"invoice": invoice_payload, "match": match})
+
+    status_counts: dict[str, int] = {}
+    for result in results:
+        status = result["match"]["status"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    return {
+        "smallinvoice_file": smallinvoice.filename,
+        "postfinance_file": postfinance.filename,
+        "reminder_count": len(reminders),
+        "transaction_count": len(transactions),
+        "status_counts": status_counts,
+        "results": results,
+    }
 
 
 @app.get("/attendance")
