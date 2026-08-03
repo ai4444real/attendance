@@ -865,6 +865,97 @@ async def smallinvoice_contact_invoices(contact_id: str):
     return {"contact_id": contact_id, "count": len(invoices), "invoices": invoices}
 
 
+def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:
+    contact = invoice.get("contact") if isinstance(invoice.get("contact"), dict) else {}
+    total = _parse_money(invoice.get("total"))
+    esr_number = _extract_digits(
+        invoice.get("isr_reference_number")
+        or invoice.get("esr_number")
+        or invoice.get("reference_number")
+    )
+    client_name = str(invoice.get("contact_name") or contact.get("name") or "").strip()
+    return {
+        "row": None,
+        "number": str(invoice.get("number") or "").strip(),
+        "client_name": client_name,
+        "client_number": str(contact.get("number") or "").strip(),
+        "contact_id": invoice.get("contact_id"),
+        "date": str(invoice.get("date") or "").strip(),
+        "due": str(invoice.get("due") or "").strip(),
+        "total": _money_to_json(total),
+        "total_decimal": total,
+        "currency": str(invoice.get("currency") or "").strip(),
+        "status": str(invoice.get("status") or "").strip(),
+        "paid_date": str(invoice.get("paid_date") or "").strip(),
+        "paid_amount": str(invoice.get("total_paid") or "").strip(),
+        "esr_number": esr_number,
+        "tokens": _name_tokens(client_name),
+        "source_id": invoice.get("id"),
+    }
+
+
+@app.get("/api/utilities/payment-reminders/smallinvoice-reminders")
+async def payment_reminders_smallinvoice_reminders():
+    filter_payload = {
+        "or": [
+            {"status": "Payment rem."},
+            {"status": "1st reminder"},
+            {"status": "2nd reminder"},
+            {"status": "3rd reminder"},
+        ]
+    }
+    reminders: list[dict] = []
+    limit = 200
+    max_pages = 20
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        token = await _smallinvoice_access_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        for page in range(max_pages):
+            response = await client.get(
+                f"{SMALLINVOICE_API_BASE_URL}/receivables/invoices",
+                headers=headers,
+                params={
+                    "filter": json.dumps(filter_payload, separators=(",", ":")),
+                    "with": "contact",
+                    "sort": "contact_id",
+                    "limit": limit,
+                    "offset": page * limit,
+                },
+            )
+            if response.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Recupero richiami Smallinvoice fallito: HTTP {response.status_code}.",
+                )
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise HTTPException(status_code=502, detail="Risposta richiami Smallinvoice non valida.") from exc
+            page_invoices = _smallinvoice_extract_items(payload)
+            reminders.extend(_smallinvoice_api_invoice_to_reminder(invoice) for invoice in page_invoices)
+            pagination = payload.get("pagination") if isinstance(payload, dict) else None
+            has_next = bool(pagination and pagination.get("next"))
+            if len(page_invoices) < limit or not has_next:
+                break
+
+    reminders.sort(key=_smallinvoice_client_sort_key)
+    response_reminders = [
+        {key: value for key, value in reminder.items() if key not in {"total_decimal", "tokens"}}
+        | {"tokens": reminder["tokens"]}
+        for reminder in reminders
+    ]
+    status_counts: dict[str, int] = {}
+    for reminder in response_reminders:
+        status = reminder.get("status") or ""
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return {
+        "count": len(response_reminders),
+        "status_counts": status_counts,
+        "reminders": response_reminders[:200],
+    }
+
+
 PAYMENT_REMINDER_STATUSES = {
     "payment rem.",
     "1st reminder",
