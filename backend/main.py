@@ -867,6 +867,13 @@ async def smallinvoice_contact_invoices(contact_id: str):
 
 def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:
     contact = invoice.get("contact") if isinstance(invoice.get("contact"), dict) else {}
+    status = str(invoice.get("status") or "").strip()
+    status_label_map = {
+        "R": "Payment rem.",
+        "R1": "1st reminder",
+        "R2": "2nd reminder",
+        "R3": "3rd reminder",
+    }
     total = _parse_money(invoice.get("total"))
     esr_number = _extract_digits(
         invoice.get("isr_reference_number")
@@ -885,7 +892,8 @@ def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:
         "total": _money_to_json(total),
         "total_decimal": total,
         "currency": str(invoice.get("currency") or "").strip(),
-        "status": str(invoice.get("status") or "").strip(),
+        "status": status_label_map.get(status, status),
+        "status_code": status,
         "paid_date": str(invoice.get("paid_date") or "").strip(),
         "paid_amount": str(invoice.get("total_paid") or "").strip(),
         "esr_number": esr_number,
@@ -896,14 +904,7 @@ def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:
 
 @app.get("/api/utilities/payment-reminders/smallinvoice-reminders")
 async def payment_reminders_smallinvoice_reminders():
-    filter_payload = {
-        "or": [
-            {"status": "Payment rem."},
-            {"status": "1st reminder"},
-            {"status": "2nd reminder"},
-            {"status": "3rd reminder"},
-        ]
-    }
+    reminder_statuses = ("R", "R1", "R2", "R3")
     reminders: list[dict] = []
     limit = 200
     max_pages = 20
@@ -911,33 +912,34 @@ async def payment_reminders_smallinvoice_reminders():
     async with httpx.AsyncClient(timeout=30.0) as client:
         token = await _smallinvoice_access_token(client)
         headers = {"Authorization": f"Bearer {token}"}
-        for page in range(max_pages):
-            response = await client.get(
-                f"{SMALLINVOICE_API_BASE_URL}/receivables/invoices",
-                headers=headers,
-                params={
-                    "filter": json.dumps(filter_payload, separators=(",", ":")),
-                    "with": "contact",
-                    "sort": "contact_id",
-                    "limit": limit,
-                    "offset": page * limit,
-                },
-            )
-            if response.status_code >= 400:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Recupero richiami Smallinvoice fallito: HTTP {response.status_code}.",
+        for status in reminder_statuses:
+            for page in range(max_pages):
+                response = await client.get(
+                    f"{SMALLINVOICE_API_BASE_URL}/receivables/invoices",
+                    headers=headers,
+                    params={
+                        "filter": json.dumps({"status": status}, separators=(",", ":")),
+                        "with": "contact",
+                        "sort": "contact_id",
+                        "limit": limit,
+                        "offset": page * limit,
+                    },
                 )
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                raise HTTPException(status_code=502, detail="Risposta richiami Smallinvoice non valida.") from exc
-            page_invoices = _smallinvoice_extract_items(payload)
-            reminders.extend(_smallinvoice_api_invoice_to_reminder(invoice) for invoice in page_invoices)
-            pagination = payload.get("pagination") if isinstance(payload, dict) else None
-            has_next = bool(pagination and pagination.get("next"))
-            if len(page_invoices) < limit or not has_next:
-                break
+                if response.status_code >= 400:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Recupero richiami Smallinvoice fallito per stato {status}: HTTP {response.status_code}.",
+                    )
+                try:
+                    payload = response.json()
+                except ValueError as exc:
+                    raise HTTPException(status_code=502, detail="Risposta richiami Smallinvoice non valida.") from exc
+                page_invoices = _smallinvoice_extract_items(payload)
+                reminders.extend(_smallinvoice_api_invoice_to_reminder(invoice) for invoice in page_invoices)
+                pagination = payload.get("pagination") if isinstance(payload, dict) else None
+                has_next = bool(pagination and pagination.get("next"))
+                if len(page_invoices) < limit or not has_next:
+                    break
 
     reminders.sort(key=_smallinvoice_client_sort_key)
     response_reminders = [
