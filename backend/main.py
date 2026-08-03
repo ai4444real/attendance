@@ -959,7 +959,8 @@ def _parse_smallinvoice_reminders(text: str) -> list[dict]:
 def _parse_postfinance_transactions(text: str) -> list[dict]:
     transactions: list[dict] = []
     date_pattern = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
-    for row in csv.reader(io.StringIO(text), delimiter=";", quotechar='"'):
+    reference_pattern = re.compile(r"\b0{8,}\d{4,}\b")
+    for index, row in enumerate(csv.reader(io.StringIO(text), delimiter=";", quotechar='"')):
         if len(row) < 5:
             continue
         date = row[0].strip().strip('"').strip("=")
@@ -977,6 +978,8 @@ def _parse_postfinance_transactions(text: str) -> list[dict]:
                 "text": text_value,
                 "text_key": _fold_for_match(text_value),
                 "text_digits": _extract_digits(text_value),
+                "long_references": reference_pattern.findall(text_value),
+                "index": index,
                 "amount": amount,
                 "amount_json": _money_to_json(amount),
                 "value_date": row[4].strip() if len(row) > 4 else "",
@@ -996,12 +999,30 @@ def _transaction_summary(transaction: dict, matched_tokens: list[str] | None = N
     }
 
 
-def _best_name_matches(invoice: dict, transactions: list[dict], *, amount_must_match: bool) -> list[dict]:
+def _transaction_has_other_reference(invoice: dict, transaction: dict) -> bool:
+    esr_number = invoice["esr_number"]
+    if not esr_number:
+        return False
+    references = transaction.get("long_references") or []
+    return bool(references and esr_number not in references)
+
+
+def _best_name_matches(
+    invoice: dict,
+    transactions: list[dict],
+    *,
+    amount_must_match: bool,
+    used_transaction_indexes: set[int],
+) -> list[dict]:
     tokens = invoice["tokens"]
     if not tokens:
         return []
     matches = []
     for transaction in transactions:
+        if transaction["index"] in used_transaction_indexes:
+            continue
+        if _transaction_has_other_reference(invoice, transaction):
+            continue
         if amount_must_match and not _money_equals(invoice["total_decimal"], transaction["amount"]):
             continue
         matched_tokens = [token for token in tokens if token in transaction["text_key"]]
@@ -1010,7 +1031,7 @@ def _best_name_matches(invoice: dict, transactions: list[dict], *, amount_must_m
     return matches
 
 
-def _match_payment_reminder(invoice: dict, transactions: list[dict]) -> dict:
+def _match_payment_reminder(invoice: dict, transactions: list[dict], used_transaction_indexes: set[int]) -> dict:
     invoice_number = _extract_digits(invoice["number"])
     esr_number = invoice["esr_number"]
     reference_candidates = []
@@ -1025,6 +1046,7 @@ def _match_payment_reminder(invoice: dict, transactions: list[dict]) -> dict:
 
     for transaction in reference_candidates:
         if _money_equals(invoice["total_decimal"], transaction["amount"]):
+            used_transaction_indexes.add(transaction["index"])
             return {
                 "status": "paid",
                 "label": "Pagamento trovato",
@@ -1044,9 +1066,15 @@ def _match_payment_reminder(invoice: dict, transactions: list[dict]) -> dict:
             "candidates": [_transaction_summary(item) for item in reference_candidates[:5]],
         }
 
-    name_amount_matches = _best_name_matches(invoice, transactions, amount_must_match=True)
+    name_amount_matches = _best_name_matches(
+        invoice,
+        transactions,
+        amount_must_match=True,
+        used_transaction_indexes=used_transaction_indexes,
+    )
     if len(name_amount_matches) == 1:
         match = name_amount_matches[0]
+        used_transaction_indexes.add(match["transaction"]["index"])
         return {
             "status": "paid",
             "label": "Pagamento probabile",
@@ -1068,7 +1096,12 @@ def _match_payment_reminder(invoice: dict, transactions: list[dict]) -> dict:
             ],
         }
 
-    name_matches = _best_name_matches(invoice, transactions, amount_must_match=False)
+    name_matches = _best_name_matches(
+        invoice,
+        transactions,
+        amount_must_match=False,
+        used_transaction_indexes=used_transaction_indexes,
+    )
     if name_matches:
         latest = name_matches[0]
         return {
@@ -1104,8 +1137,9 @@ async def payment_reminders_match(
     transactions = _parse_postfinance_transactions(postfinance_text)
 
     results = []
+    used_transaction_indexes: set[int] = set()
     for invoice in reminders:
-        match = _match_payment_reminder(invoice, transactions)
+        match = _match_payment_reminder(invoice, transactions, used_transaction_indexes)
         invoice_payload = {
             key: value
             for key, value in invoice.items()
