@@ -956,6 +956,13 @@ def _parse_smallinvoice_reminders(text: str) -> list[dict]:
     return reminders
 
 
+def _smallinvoice_client_sort_key(invoice: dict) -> tuple[int, object, str]:
+    client_number = invoice.get("client_number") or ""
+    if client_number.isdigit():
+        return (0, int(client_number), invoice.get("number") or "")
+    return (1, client_number, invoice.get("number") or "")
+
+
 def _parse_postfinance_transactions(text: str) -> list[dict]:
     transactions: list[dict] = []
     date_pattern = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
@@ -1134,6 +1141,7 @@ async def payment_reminders_match(
     smallinvoice_text = _decode_csv_upload(await smallinvoice.read())
     postfinance_text = _decode_csv_upload(await postfinance.read())
     reminders = _parse_smallinvoice_reminders(smallinvoice_text)
+    reminders.sort(key=_smallinvoice_client_sort_key)
     transactions = _parse_postfinance_transactions(postfinance_text)
 
     results = []
