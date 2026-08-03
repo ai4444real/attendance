@@ -906,6 +906,7 @@ def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:
 async def payment_reminders_smallinvoice_reminders():
     reminder_statuses = ("R", "R1", "R2", "R3")
     reminders: list[dict] = []
+    status_errors: list[dict] = []
     limit = 200
     max_pages = 20
 
@@ -926,20 +927,40 @@ async def payment_reminders_smallinvoice_reminders():
                     },
                 )
                 if response.status_code >= 400:
-                    raise HTTPException(
-                        status_code=502,
-                        detail=f"Recupero richiami Smallinvoice fallito per stato {status}: HTTP {response.status_code}.",
+                    status_errors.append(
+                        {
+                            "status": status,
+                            "http_status": response.status_code,
+                            "body": response.text[:500],
+                        }
                     )
+                    break
                 try:
                     payload = response.json()
                 except ValueError as exc:
-                    raise HTTPException(status_code=502, detail="Risposta richiami Smallinvoice non valida.") from exc
+                    status_errors.append(
+                        {
+                            "status": status,
+                            "http_status": response.status_code,
+                            "body": response.text[:500],
+                        }
+                    )
+                    break
                 page_invoices = _smallinvoice_extract_items(payload)
                 reminders.extend(_smallinvoice_api_invoice_to_reminder(invoice) for invoice in page_invoices)
                 pagination = payload.get("pagination") if isinstance(payload, dict) else None
                 has_next = bool(pagination and pagination.get("next"))
                 if len(page_invoices) < limit or not has_next:
                     break
+
+    if not reminders and status_errors:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Recupero richiami Smallinvoice fallito per tutti gli stati richiesti.",
+                "status_errors": status_errors,
+            },
+        )
 
     reminders.sort(key=_smallinvoice_client_sort_key)
     response_reminders = [
@@ -954,6 +975,7 @@ async def payment_reminders_smallinvoice_reminders():
     return {
         "count": len(response_reminders),
         "status_counts": status_counts,
+        "status_errors": status_errors,
         "reminders": response_reminders[:200],
     }
 
