@@ -405,10 +405,26 @@ class AccountingPredictionService:
             return None
         if "accredito" not in normalized_text:
             return None
-        if "fattura" not in normalized_text or "riferimenti" not in normalized_text:
-            return None
         if "mittente" not in normalized_text and "comunicazioni" not in normalized_text:
             return None
+
+        is_invoice_payment = "fattura" in normalized_text and "riferimenti" in normalized_text
+        is_course_payment = "corso" in normalized_text and (
+            "rata" in normalized_text
+            or "pnl" in normalized_text
+            or "formazione" in normalized_text
+        )
+        is_customer_credit = "riferimenti" in normalized_text and "notprovided" in normalized_text
+        if not is_invoice_payment and not is_course_payment and not is_customer_credit:
+            return None
+
+        matched_tokens = ["accredito"]
+        if is_invoice_payment:
+            matched_tokens.extend(["fattura", "riferimenti"])
+        if is_course_payment:
+            matched_tokens.extend(["corso", "rata"])
+        if is_customer_credit:
+            matched_tokens.extend(["mittente", "riferimenti"])
 
         return AccountingPrediction(
             account_code=account_code,
@@ -416,7 +432,7 @@ class AccountingPredictionService:
             source="customer_invoice_payment",
             confidence="alta",
             needs_review=False,
-            message="Accredito con riferimento fattura cliente; importo ignorato per questa regola.",
+            message="Accredito cliente/corso; importo ignorato per questa regola.",
             score=1.0,
             evidence=[
                 {
@@ -424,7 +440,7 @@ class AccountingPredictionService:
                     "source": "rule",
                     "score": 1.0,
                     "amount": format(amount, "f"),
-                    "common_tokens": ["accredito", "fattura", "riferimenti"],
+                    "common_tokens": list(dict.fromkeys(matched_tokens)),
                 }
             ],
         )
