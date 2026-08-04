@@ -153,15 +153,30 @@
             font-size: 12px;
             white-space: nowrap;
         }
-        .badge-code_hint, .badge-feedback_override, .badge-feedback_override_amount {
+        .badge-code_hint, .badge-feedback_override, .badge-feedback_override_amount, .badge-historical_example {
             background: #e3f6ea;
             color: #087c3f;
+        }
+        .badge-historical_ambiguous {
+            background: #fff3d8;
+            color: #965b00;
         }
         .badge-review, .badge-code_hint_unknown {
             background: #ffe6ec;
             color: #b42318;
         }
         .muted { color: #4d5d6c; font-size: 13px; }
+        .evidence {
+            margin-top: 8px;
+            display: grid;
+            gap: 5px;
+            color: #4d5d6c;
+            font-size: 12px;
+        }
+        .evidence-item {
+            border-left: 3px solid var(--brand-border);
+            padding-left: 8px;
+        }
         .feedback-row {
             display: flex;
             gap: 8px;
@@ -170,10 +185,62 @@
             margin-top: 8px;
         }
         .feedback-row select { width: min(360px, 100%); }
+        .management-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 18px;
+        }
+        .mini-form {
+            display: grid;
+            grid-template-columns: 130px 1fr auto;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 12px;
+        }
+        .mini-form.code-hint-form {
+            grid-template-columns: 150px 1fr auto;
+        }
+        input[type="text"] {
+            width: 100%;
+            border: 1px solid var(--brand-border);
+            border-radius: 15px;
+            padding: 13px 14px;
+            background: #f8fbfd;
+            color: var(--brand-ink);
+            font: inherit;
+        }
+        .filter-input { margin-bottom: 12px; }
+        .mini-table {
+            min-width: 0;
+            font-size: 13px;
+        }
+        .mini-table th, .mini-table td { padding: 9px 8px; }
+        .status-pill {
+            display: inline-flex;
+            border-radius: 999px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+        .status-active {
+            background: #e3f6ea;
+            color: #087c3f;
+        }
+        .status-inactive {
+            background: #eef2f6;
+            color: #4d5d6c;
+        }
+        .danger {
+            background: #fff1f1;
+            color: #b42318;
+            border: 1px solid #ffc9c9;
+        }
         @media (max-width: 900px) {
             .container { width: min(100% - 24px, 1480px); }
             .topbar { align-items: flex-start; flex-direction: column; }
             .form-grid { grid-template-columns: 1fr; }
+            .management-grid { grid-template-columns: 1fr; }
+            .mini-form, .mini-form.code-hint-form { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -196,7 +263,7 @@
     <main class="container">
         <section class="hero">
             <h1>Consulente contabile</h1>
-            <p>Primo MVP isolato: legge un CSV bancario, applica code hint e feedback esatti persistiti. Il modello ML verra' aggiunto dopo questa base.</p>
+            <p>MVP isolato: legge un CSV bancario, applica code hint, feedback persistiti ed esempi storici simili. I casi incerti restano da revisionare.</p>
         </section>
 
         <section class="panel">
@@ -234,6 +301,70 @@
                 </table>
             </div>
         </section>
+
+        <section class="management-grid">
+            <section class="panel">
+                <h2>Code hints</h2>
+                <p class="muted">Scrivi nel testo bancario <strong>c:codice</strong> per forzare un conto.</p>
+                <input id="codeHintFilter" class="filter-input" type="text" placeholder="Filtra code hints...">
+                <div class="mini-form code-hint-form">
+                    <div>
+                        <label for="codeHintCode">Hint</label>
+                        <input id="codeHintCode" type="text" placeholder="es. affitto">
+                    </div>
+                    <div>
+                        <label for="codeHintAccount">Conto</label>
+                        <select id="codeHintAccount"></select>
+                    </div>
+                    <button id="saveCodeHintButton" type="button">Salva</button>
+                </div>
+                <div id="codeHintMessage" class="message"></div>
+                <div class="table-wrap">
+                    <table class="mini-table">
+                        <thead>
+                            <tr>
+                                <th>Hint</th>
+                                <th>Conto</th>
+                                <th>Stato</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="codeHintsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Conti</h2>
+                <p class="muted">I conti disattivati restano nello storico, ma non vengono proposti dal motore.</p>
+                <input id="accountFilter" class="filter-input" type="text" placeholder="Filtra conti...">
+                <div class="mini-form">
+                    <div>
+                        <label for="accountCode">Codice</label>
+                        <input id="accountCode" type="text" placeholder="1025">
+                    </div>
+                    <div>
+                        <label for="accountDescription">Descrizione</label>
+                        <input id="accountDescription" type="text" placeholder="Banca PostFinance">
+                    </div>
+                    <button id="saveAccountButton" type="button">Salva</button>
+                </div>
+                <div id="accountMessage" class="message"></div>
+                <div class="table-wrap">
+                    <table class="mini-table">
+                        <thead>
+                            <tr>
+                                <th>Codice</th>
+                                <th>Descrizione</th>
+                                <th>Stato</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
     </main>
 
     <script>
@@ -244,7 +375,21 @@
         const resultsPanel = document.getElementById("resultsPanel");
         const resultsBody = document.getElementById("resultsBody");
         const stats = document.getElementById("stats");
+        const codeHintFilter = document.getElementById("codeHintFilter");
+        const codeHintCode = document.getElementById("codeHintCode");
+        const codeHintAccount = document.getElementById("codeHintAccount");
+        const saveCodeHintButton = document.getElementById("saveCodeHintButton");
+        const codeHintMessage = document.getElementById("codeHintMessage");
+        const codeHintsBody = document.getElementById("codeHintsBody");
+        const accountFilter = document.getElementById("accountFilter");
+        const accountCode = document.getElementById("accountCode");
+        const accountDescription = document.getElementById("accountDescription");
+        const saveAccountButton = document.getElementById("saveAccountButton");
+        const accountMessage = document.getElementById("accountMessage");
+        const accountsBody = document.getElementById("accountsBody");
         let accounts = [];
+        let allAccounts = [];
+        let codeHints = [];
         let currentRows = [];
 
         function escapeHtml(value) {
@@ -272,6 +417,69 @@
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || "Caricamento conti fallito.");
             accounts = payload.accounts || [];
+            codeHintAccount.innerHTML = accountOptions("");
+        }
+
+        async function loadAllAccounts() {
+            const response = await fetch("/api/utilities/accounting/accounts/all");
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || "Caricamento conti fallito.");
+            allAccounts = payload.accounts || [];
+            renderAccounts();
+        }
+
+        async function loadCodeHints() {
+            const response = await fetch("/api/utilities/accounting/code-hints");
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || "Caricamento code hints fallito.");
+            codeHints = payload.code_hints || [];
+            renderCodeHints();
+        }
+
+        function renderAccounts() {
+            const filter = accountFilter.value.trim().toLowerCase();
+            const rows = allAccounts.filter(account => {
+                const haystack = `${account.code} ${account.description}`.toLowerCase();
+                return !filter || haystack.includes(filter);
+            });
+            accountsBody.innerHTML = rows.map(account => `
+                <tr>
+                    <td><strong>${escapeHtml(account.code)}</strong></td>
+                    <td>${escapeHtml(account.description)}</td>
+                    <td>
+                        <span class="status-pill ${account.active ? "status-active" : "status-inactive"}">
+                            ${account.active ? "attivo" : "spento"}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="secondary" type="button" data-edit-account="${escapeHtml(account.code)}">Edit</button>
+                        ${account.active ? `<button class="danger" type="button" data-disable-account="${escapeHtml(account.code)}">Spegni</button>` : ""}
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        function renderCodeHints() {
+            const filter = codeHintFilter.value.trim().toLowerCase();
+            const rows = codeHints.filter(hint => {
+                const haystack = `${hint.code} ${hint.account_code} ${hint.account_description || ""}`.toLowerCase();
+                return !filter || haystack.includes(filter);
+            });
+            codeHintsBody.innerHTML = rows.map(hint => `
+                <tr>
+                    <td><strong>c:${escapeHtml(hint.code)}</strong></td>
+                    <td>${escapeHtml(hint.account_code)}<div class="muted">${escapeHtml(hint.account_description || "")}</div></td>
+                    <td>
+                        <span class="status-pill ${hint.active ? "status-active" : "status-inactive"}">
+                            ${hint.active ? "attivo" : "spento"}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="secondary" type="button" data-edit-hint="${escapeHtml(hint.code)}">Edit</button>
+                        <button class="danger" type="button" data-delete-hint="${escapeHtml(hint.code)}">X</button>
+                    </td>
+                </tr>
+            `).join("");
         }
 
         function renderStats(payload) {
@@ -285,12 +493,32 @@
         function renderPrediction(row) {
             const prediction = row.prediction || {};
             const source = prediction.source || "review";
+            const score = Number(prediction.score || 0);
+            const evidence = Array.isArray(prediction.evidence) ? prediction.evidence.slice(0, 2) : [];
             const account = prediction.account_code
                 ? `<strong>${escapeHtml(prediction.account_code)}</strong><div class="muted">${escapeHtml(prediction.account_description || "")}</div>`
                 : `<strong>Da revisionare</strong><div class="muted">${escapeHtml(prediction.message || "")}</div>`;
+            const scoreLine = score
+                ? `<div class="muted">score ${escapeHtml(score.toFixed(2))}${prediction.confidence ? ` · ${escapeHtml(prediction.confidence)}` : ""}</div>`
+                : "";
+            const evidenceHtml = evidence.length
+                ? `<div class="evidence">${evidence.map(item => {
+                    const tokens = Array.isArray(item.common_tokens) ? item.common_tokens.join(", ") : "";
+                    return `
+                        <div class="evidence-item">
+                            <strong>${escapeHtml(item.account_code || "")}</strong>
+                            · score ${escapeHtml(Number(item.score || 0).toFixed(2))}
+                            · importo ${escapeHtml(item.amount || "-")}
+                            ${tokens ? `<div>token: ${escapeHtml(tokens)}</div>` : ""}
+                        </div>
+                    `;
+                }).join("")}</div>`
+                : "";
             return `
                 <span class="badge badge-${escapeHtml(source)}">${escapeHtml(source)}</span>
                 <div>${account}</div>
+                ${scoreLine}
+                ${evidenceHtml}
             `;
         }
 
@@ -374,14 +602,136 @@
             alert(includeAmount ? "Feedback salvato con importo." : "Feedback salvato solo sul testo.");
         }
 
+        async function saveAccount() {
+            accountMessage.textContent = "";
+            accountMessage.className = "message";
+            try {
+                const response = await fetch("/api/utilities/accounting/accounts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        code: accountCode.value,
+                        description: accountDescription.value,
+                        active: true,
+                    }),
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Salvataggio conto fallito.");
+                accountCode.value = "";
+                accountDescription.value = "";
+                accountMessage.textContent = "Conto salvato.";
+                accountMessage.classList.add("ok");
+                await loadAccounts();
+                await loadAllAccounts();
+            } catch (error) {
+                accountMessage.textContent = error.message || String(error);
+                accountMessage.classList.add("error");
+            }
+        }
+
+        async function disableAccount(code) {
+            if (!confirm(`Disattivare il conto ${code}?`)) return;
+            accountMessage.textContent = "";
+            accountMessage.className = "message";
+            try {
+                const response = await fetch(`/api/utilities/accounting/accounts/${encodeURIComponent(code)}`, {
+                    method: "DELETE",
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Disattivazione conto fallita.");
+                await loadAccounts();
+                await loadAllAccounts();
+                accountMessage.textContent = "Conto disattivato.";
+                accountMessage.classList.add("ok");
+            } catch (error) {
+                accountMessage.textContent = error.message || String(error);
+                accountMessage.classList.add("error");
+            }
+        }
+
+        async function saveCodeHint() {
+            codeHintMessage.textContent = "";
+            codeHintMessage.className = "message";
+            try {
+                const response = await fetch("/api/utilities/accounting/code-hints", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        code: codeHintCode.value,
+                        account_code: codeHintAccount.value,
+                        active: true,
+                    }),
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Salvataggio code hint fallito.");
+                codeHintCode.value = "";
+                codeHintAccount.value = "";
+                codeHintMessage.textContent = "Code hint salvato.";
+                codeHintMessage.classList.add("ok");
+                await loadCodeHints();
+            } catch (error) {
+                codeHintMessage.textContent = error.message || String(error);
+                codeHintMessage.classList.add("error");
+            }
+        }
+
+        async function deleteCodeHint(code) {
+            if (!confirm(`Cancellare c:${code}?`)) return;
+            codeHintMessage.textContent = "";
+            codeHintMessage.className = "message";
+            try {
+                const response = await fetch(`/api/utilities/accounting/code-hints/${encodeURIComponent(code)}`, {
+                    method: "DELETE",
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Cancellazione code hint fallita.");
+                await loadCodeHints();
+                codeHintMessage.textContent = "Code hint cancellato.";
+                codeHintMessage.classList.add("ok");
+            } catch (error) {
+                codeHintMessage.textContent = error.message || String(error);
+                codeHintMessage.classList.add("error");
+            }
+        }
+
         parseButton.addEventListener("click", parseAndPredict);
+        saveAccountButton.addEventListener("click", saveAccount);
+        saveCodeHintButton.addEventListener("click", saveCodeHint);
+        accountFilter.addEventListener("input", renderAccounts);
+        codeHintFilter.addEventListener("input", renderCodeHints);
         resultsBody.addEventListener("click", event => {
             const button = event.target.closest("button[data-feedback]");
             if (!button) return;
             saveFeedback(Number(button.dataset.feedback), button.dataset.amount === "true");
         });
+        accountsBody.addEventListener("click", event => {
+            const editButton = event.target.closest("button[data-edit-account]");
+            if (editButton) {
+                const account = allAccounts.find(item => item.code === editButton.dataset.editAccount);
+                if (!account) return;
+                accountCode.value = account.code;
+                accountDescription.value = account.description;
+                accountCode.focus();
+                return;
+            }
+            const disableButton = event.target.closest("button[data-disable-account]");
+            if (disableButton) disableAccount(disableButton.dataset.disableAccount);
+        });
+        codeHintsBody.addEventListener("click", event => {
+            const editButton = event.target.closest("button[data-edit-hint]");
+            if (editButton) {
+                const hint = codeHints.find(item => item.code === editButton.dataset.editHint);
+                if (!hint) return;
+                codeHintCode.value = hint.code;
+                codeHintAccount.value = hint.account_code;
+                codeHintCode.focus();
+                return;
+            }
+            const deleteButton = event.target.closest("button[data-delete-hint]");
+            if (deleteButton) deleteCodeHint(deleteButton.dataset.deleteHint);
+        });
 
-        loadAccounts().catch(error => {
+        Promise.all([loadAccounts(), loadAllAccounts(), loadCodeHints()]).catch(error => {
             message.textContent = error.message || String(error);
             message.classList.add("error");
         });

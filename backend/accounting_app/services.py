@@ -11,7 +11,9 @@ from typing import Protocol
 
 from .models import (
     AccountingAccount,
+    AccountingCodeHint,
     AccountingPrediction,
+    AccountingTrainingExample,
     ParsedBankTransaction,
     PredictedBankTransaction,
 )
@@ -19,8 +21,18 @@ from .models import (
 
 class AccountingRepository(Protocol):
     def list_accounts(self) -> list[AccountingAccount]: ...
+    def list_all_accounts(self) -> list[AccountingAccount]: ...
+    def upsert_account(self, code: str, description: str, active: bool) -> AccountingAccount: ...
+    def set_account_active(self, code: str, active: bool) -> None: ...
     def list_code_hints(self) -> dict[str, str]: ...
+    def list_code_hint_records(self) -> list[AccountingCodeHint]: ...
+    def upsert_code_hint(self, code: str, account_code: str, active: bool) -> AccountingCodeHint: ...
+    def delete_code_hint(self, code: str) -> None: ...
+    def list_training_examples(self) -> list[AccountingTrainingExample]: ...
     def find_latest_feedback(self, normalized_text: str, amount: Decimal): ...
+    def list_feedback_rules(self, limit: int = 200): ...
+    def update_feedback_account(self, feedback_id: int, account_code: str): ...
+    def delete_feedback_rule(self, feedback_id: int) -> None: ...
     def create_feedback(
         self,
         *,
@@ -49,6 +61,33 @@ BANK_PRESETS = {
     },
 }
 
+_GENERIC_TOKENS = {
+    "accredito",
+    "addebito",
+    "chf",
+    "conto",
+    "data",
+    "del",
+    "della",
+    "delle",
+    "di",
+    "fattura",
+    "finance",
+    "importo",
+    "iso",
+    "message",
+    "mittente",
+    "numero",
+    "opae",
+    "ordine",
+    "pagamento",
+    "per",
+    "prezzo",
+    "ridotto",
+    "transazioni",
+    "versamento",
+}
+
 
 def decode_upload(content: bytes) -> str:
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
@@ -64,6 +103,23 @@ def normalize_accounting_text(value: str) -> str:
     text = "".join(char for char in text if char.isprintable() or char in "\n\r\t ")
     text = re.sub(r"\s+", " ", text)
     return text.strip().casefold()
+
+
+def _accounting_tokens(normalized_text: str) -> set[str]:
+    tokens: set[str] = set()
+    for token in re.findall(r"\w+", normalized_text, flags=re.UNICODE):
+        if len(token) < 3:
+            continue
+        if token in _GENERIC_TOKENS:
+            continue
+        if token.isdecimal():
+            continue
+        if re.fullmatch(r"[0-9a-f]{12,}", token):
+            continue
+        if re.fullmatch(r"ch\d{10,}", token):
+            continue
+        tokens.add(token)
+    return tokens
 
 
 def parse_accounting_amount(value: object) -> Decimal:
@@ -141,26 +197,100 @@ class AccountingPredictionService:
     def list_accounts(self) -> list[AccountingAccount]:
         return self._repository.list_accounts()
 
+    def list_all_accounts(self) -> list[AccountingAccount]:
+        return self._repository.list_all_accounts()
+
+    def save_account(self, *, code: str, description: str, active: bool = True) -> AccountingAccount:
+        clean_code = code.strip()
+        clean_description = description.strip()
+        if not clean_code:
+            raise ValueError("Codice conto mancante.")
+        if not clean_description:
+            raise ValueError("Descrizione conto mancante.")
+        return self._repository.upsert_account(clean_code, clean_description, active)
+
+    def deactivate_account(self, code: str) -> None:
+        clean_code = code.strip()
+        if not clean_code:
+            raise ValueError("Codice conto mancante.")
+        self._repository.set_account_active(clean_code, False)
+
+    def list_code_hint_records(self) -> list[AccountingCodeHint]:
+        return self._repository.list_code_hint_records()
+
+    def save_code_hint(self, *, code: str, account_code: str, active: bool = True) -> AccountingCodeHint:
+        clean_code = code.strip().casefold()
+        clean_account_code = account_code.strip()
+        if not clean_code:
+            raise ValueError("Code hint mancante.")
+        if not re.fullmatch(r"[a-z0-9_-]+", clean_code):
+            raise ValueError("Code hint non valido: usa lettere, numeri, trattino o underscore.")
+        if not clean_account_code:
+            raise ValueError("Conto mancante.")
+        accounts = {account.code for account in self._repository.list_all_accounts()}
+        if clean_account_code not in accounts:
+            raise ValueError(f"Conto inesistente: {clean_account_code}")
+        return self._repository.upsert_code_hint(clean_code, clean_account_code, active)
+
+    def delete_code_hint(self, code: str) -> None:
+        clean_code = code.strip().casefold()
+        if not clean_code:
+            raise ValueError("Code hint mancante.")
+        self._repository.delete_code_hint(clean_code)
+
+    def list_feedback_rules(self, limit: int = 200):
+        safe_limit = max(1, min(int(limit), 500))
+        return self._repository.list_feedback_rules(safe_limit)
+
+    def update_feedback_account(self, feedback_id: int, account_code: str):
+        if feedback_id <= 0:
+            raise ValueError("Feedback id non valido.")
+        clean_account_code = account_code.strip()
+        if not clean_account_code:
+            raise ValueError("Conto mancante.")
+        accounts = {account.code for account in self._repository.list_all_accounts()}
+        if clean_account_code not in accounts:
+            raise ValueError(f"Conto inesistente: {clean_account_code}")
+        return self._repository.update_feedback_account(feedback_id, clean_account_code)
+
+    def delete_feedback_rule(self, feedback_id: int) -> None:
+        if feedback_id <= 0:
+            raise ValueError("Feedback id non valido.")
+        self._repository.delete_feedback_rule(feedback_id)
+
     def parse_and_predict_bank_csv(self, content: bytes, bank: str) -> list[PredictedBankTransaction]:
         text = decode_upload(content)
         transactions = parse_bank_csv(text, bank)
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
+        training_examples = self._repository.list_training_examples()
         return [
-            self._predict_transaction_with_context(transaction, accounts, code_hints)
+            self._predict_transaction_with_context(
+                transaction,
+                accounts,
+                code_hints,
+                training_examples,
+            )
             for transaction in transactions
         ]
 
     def predict_transaction(self, transaction: ParsedBankTransaction) -> PredictedBankTransaction:
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
-        return self._predict_transaction_with_context(transaction, accounts, code_hints)
+        training_examples = self._repository.list_training_examples()
+        return self._predict_transaction_with_context(
+            transaction,
+            accounts,
+            code_hints,
+            training_examples,
+        )
 
     def _predict_transaction_with_context(
         self,
         transaction: ParsedBankTransaction,
         accounts: dict[str, AccountingAccount],
         code_hints: dict[str, str],
+        training_examples: list[AccountingTrainingExample],
     ) -> PredictedBankTransaction:
         normalized_text = normalize_accounting_text(transaction.description)
 
@@ -181,6 +311,15 @@ class AccountingPredictionService:
                     needs_review=False,
                 ),
             )
+
+        historical_prediction = self._predict_from_training_examples(
+            normalized_text,
+            transaction.amount,
+            accounts,
+            training_examples,
+        )
+        if historical_prediction is not None:
+            return self._with_prediction(transaction, historical_prediction)
 
         return self._with_prediction(
             transaction,
@@ -243,6 +382,136 @@ class AccountingPredictionService:
             confidence="alta",
             needs_review=False,
         )
+
+    def _predict_from_training_examples(
+        self,
+        normalized_text: str,
+        amount: Decimal,
+        accounts: dict[str, AccountingAccount],
+        training_examples: list[AccountingTrainingExample],
+    ) -> AccountingPrediction | None:
+        query_tokens = _accounting_tokens(normalized_text)
+        if not query_tokens:
+            return None
+
+        candidates: list[dict[str, object]] = []
+        for example in training_examples:
+            if example.target_account_code not in accounts:
+                continue
+            example_tokens = _accounting_tokens(example.normalized_text)
+            if not example_tokens:
+                continue
+            text_score = self._text_similarity(query_tokens, example_tokens)
+            if text_score < 0.18:
+                continue
+            amount_score = self._amount_similarity(amount, example.amount)
+            if amount_score is None:
+                continue
+            score = (text_score * 0.72) + (amount_score * 0.28)
+            if amount_score < 0.15:
+                score = min(score, 0.44)
+            candidates.append(
+                {
+                    "account_code": example.target_account_code,
+                    "raw_text": example.raw_text,
+                    "amount": format(example.amount, "f") if example.amount is not None else None,
+                    "source": example.source,
+                    "score": round(score, 4),
+                    "text_score": round(text_score, 4),
+                    "amount_score": round(amount_score, 4),
+                    "common_tokens": sorted(query_tokens & example_tokens)[:8],
+                }
+            )
+
+        if not candidates:
+            return None
+
+        best_by_account: dict[str, dict[str, object]] = {}
+        for candidate in candidates:
+            account_code = str(candidate["account_code"])
+            existing = best_by_account.get(account_code)
+            if existing is None or float(candidate["score"]) > float(existing["score"]):
+                best_by_account[account_code] = candidate
+
+        ranked_accounts = sorted(
+            best_by_account.values(),
+            key=lambda candidate: float(candidate["score"]),
+            reverse=True,
+        )
+        best = ranked_accounts[0]
+        second = ranked_accounts[1] if len(ranked_accounts) > 1 else None
+        best_score = float(best["score"])
+        second_score = float(second["score"]) if second is not None else 0.0
+        margin = best_score - second_score
+        evidence = sorted(candidates, key=lambda candidate: float(candidate["score"]), reverse=True)[:3]
+
+        if best_score >= 0.68 and (second is None or margin >= 0.08):
+            account_code = str(best["account_code"])
+            account = accounts.get(account_code)
+            return AccountingPrediction(
+                account_code=account_code,
+                account_description=account.description if account else None,
+                source="historical_example",
+                confidence="alta" if best_score >= 0.80 else "media",
+                needs_review=False,
+                message=f"Esempio storico simile, score {best_score:.2f}.",
+                score=round(best_score, 4),
+                evidence=evidence,
+            )
+
+        if best_score >= 0.54:
+            return AccountingPrediction(
+                account_code=None,
+                account_description=None,
+                source="historical_ambiguous",
+                confidence=None,
+                needs_review=True,
+                message=(
+                    f"Esempi storici simili ma non abbastanza sicuri "
+                    f"(best {best_score:.2f}, margine {margin:.2f})."
+                ),
+                score=round(best_score, 4),
+                evidence=evidence,
+            )
+
+        return None
+
+    @staticmethod
+    def _text_similarity(query_tokens: set[str], example_tokens: set[str]) -> float:
+        common = query_tokens & example_tokens
+        if not common:
+            return 0.0
+        query_coverage = len(common) / len(query_tokens)
+        example_coverage = len(common) / len(example_tokens)
+        return (query_coverage * 0.72) + (example_coverage * 0.28)
+
+    @staticmethod
+    def _amount_similarity(amount: Decimal, example_amount: Decimal | None) -> float | None:
+        if example_amount is None:
+            return 0.35
+        if amount == 0 and example_amount == 0:
+            return 1.0
+        if amount == 0 or example_amount == 0:
+            return 0.0
+        if (amount > 0) != (example_amount > 0):
+            return None
+
+        current = abs(amount)
+        historical = abs(example_amount)
+        ratio = min(current, historical) / max(current, historical)
+        if ratio >= Decimal("0.95"):
+            return 1.0
+        if ratio >= Decimal("0.80"):
+            return 0.92
+        if ratio >= Decimal("0.60"):
+            return 0.75
+        if ratio >= Decimal("0.35"):
+            return 0.50
+        if ratio >= Decimal("0.15"):
+            return 0.28
+        if ratio >= Decimal("0.05"):
+            return 0.12
+        return 0.0
 
     @staticmethod
     def _with_prediction(

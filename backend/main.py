@@ -737,7 +737,21 @@ def _accounting_prediction_to_json(transaction) -> dict:
             "confidence": prediction.confidence,
             "needs_review": prediction.needs_review,
             "message": prediction.message,
+            "score": prediction.score,
+            "evidence": prediction.evidence or [],
         },
+    }
+
+
+def _accounting_feedback_to_json(rule) -> dict:
+    return {
+        "id": rule.id,
+        "raw_text": rule.raw_text,
+        "amount": format(rule.amount, "f") if rule.amount is not None else None,
+        "account_code": rule.account_code,
+        "account_description": rule.account_description,
+        "prediction_source": rule.prediction_source,
+        "created_at": rule.created_at,
     }
 
 
@@ -751,6 +765,126 @@ async def accounting_accounts():
             for account in accounts
         ],
     }
+
+
+@app.get("/api/utilities/accounting/accounts/all")
+async def accounting_all_accounts():
+    accounts = _accounting_service().list_all_accounts()
+    return {
+        "count": len(accounts),
+        "accounts": [
+            {"code": account.code, "description": account.description, "active": account.active}
+            for account in accounts
+        ],
+    }
+
+
+@app.post("/api/utilities/accounting/accounts")
+async def accounting_save_account(payload: dict = Body(...)):
+    try:
+        account = _accounting_service().save_account(
+            code=str(payload.get("code") or ""),
+            description=str(payload.get("description") or ""),
+            active=bool(payload.get("active", True)),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "status": "ok",
+        "account": {
+            "code": account.code,
+            "description": account.description,
+            "active": account.active,
+        },
+    }
+
+
+@app.delete("/api/utilities/accounting/accounts/{code}")
+async def accounting_deactivate_account(code: str):
+    try:
+        _accounting_service().deactivate_account(code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
+
+
+@app.get("/api/utilities/accounting/code-hints")
+async def accounting_code_hints():
+    hints = _accounting_service().list_code_hint_records()
+    return {
+        "count": len(hints),
+        "code_hints": [
+            {
+                "code": hint.code,
+                "account_code": hint.account_code,
+                "account_description": hint.account_description,
+                "active": hint.active,
+            }
+            for hint in hints
+        ],
+    }
+
+
+@app.post("/api/utilities/accounting/code-hints")
+async def accounting_save_code_hint(payload: dict = Body(...)):
+    try:
+        hint = _accounting_service().save_code_hint(
+            code=str(payload.get("code") or ""),
+            account_code=str(payload.get("account_code") or ""),
+            active=bool(payload.get("active", True)),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "status": "ok",
+        "code_hint": {
+            "code": hint.code,
+            "account_code": hint.account_code,
+            "account_description": hint.account_description,
+            "active": hint.active,
+        },
+    }
+
+
+@app.delete("/api/utilities/accounting/code-hints/{code}")
+async def accounting_delete_code_hint(code: str):
+    try:
+        _accounting_service().delete_code_hint(code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
+
+
+@app.get("/api/utilities/accounting/feedback")
+async def accounting_feedback_rules(limit: int = 200):
+    rules = _accounting_service().list_feedback_rules(limit)
+    return {
+        "count": len(rules),
+        "feedback": [_accounting_feedback_to_json(rule) for rule in rules],
+    }
+
+
+@app.put("/api/utilities/accounting/feedback/{feedback_id}")
+async def accounting_update_feedback(feedback_id: int, payload: dict = Body(...)):
+    try:
+        rule = _accounting_service().update_feedback_account(
+            feedback_id,
+            str(payload.get("account_code") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "ok", "feedback": _accounting_feedback_to_json(rule)}
+
+
+@app.delete("/api/utilities/accounting/feedback/{feedback_id}")
+async def accounting_delete_feedback(feedback_id: int):
+    try:
+        _accounting_service().delete_feedback_rule(feedback_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
 
 
 @app.post("/api/utilities/accounting/bank/parse-predict")
