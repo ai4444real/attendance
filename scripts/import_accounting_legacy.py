@@ -1,14 +1,14 @@
-"""Import legacy accounting consultant JSON files into PostgreSQL.
+"""Import legacy accounting consultant JSON seed files into PostgreSQL.
 
 Usage:
-    python scripts/import_accounting_legacy.py consulente-py.zip
+    python scripts/import_accounting_legacy.py
+    python scripts/import_accounting_legacy.py path/to/seed-dir
 """
 
 from __future__ import annotations
 
 import json
 import sys
-import zipfile
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -21,10 +21,6 @@ from backend.accounting_app.services import normalize_accounting_text  # noqa: E
 from backend.db.config import get_database_url  # noqa: E402
 
 
-def _read_json(zip_file: zipfile.ZipFile, name: str):
-    return json.loads(zip_file.read(name).decode("utf-8"))
-
-
 def _amount(value) -> Decimal | None:
     if value in (None, ""):
         return None
@@ -35,19 +31,18 @@ def _amount(value) -> Decimal | None:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: python scripts/import_accounting_legacy.py consulente-py.zip", file=sys.stderr)
+    if len(sys.argv) > 2:
+        print("Usage: python scripts/import_accounting_legacy.py [seed-dir]", file=sys.stderr)
         return 2
-    archive_path = Path(sys.argv[1])
-    if not archive_path.exists():
-        print(f"Archive not found: {archive_path}", file=sys.stderr)
+    seed_dir = Path(sys.argv[1]) if len(sys.argv) == 2 else ROOT / "backend" / "accounting_app" / "seed"
+    if not seed_dir.exists():
+        print(f"Seed directory not found: {seed_dir}", file=sys.stderr)
         return 2
 
-    with zipfile.ZipFile(archive_path) as zip_file:
-        accounts = _read_json(zip_file, "predictor/temp_data/default_contabilita_labels.json")
-        code_hints = _read_json(zip_file, "predictor/temp_data/default_contabilita_code_hints.json")
-        dataset = _read_json(zip_file, "local_tools/dataset_ai.json")
-        corrections = _read_json(zip_file, "predictor/temp_data/default_contabilita_corrections.json")
+    accounts = json.loads((seed_dir / "accounts.json").read_text(encoding="utf-8"))
+    code_hints = json.loads((seed_dir / "code_hints.json").read_text(encoding="utf-8"))
+    dataset = json.loads((seed_dir / "training_examples.json").read_text(encoding="utf-8"))
+    corrections = json.loads((seed_dir / "corrections.json").read_text(encoding="utf-8"))
 
     with psycopg.connect(get_database_url()) as connection:
         with connection.cursor() as cursor:
