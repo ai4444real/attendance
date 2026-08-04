@@ -320,6 +320,14 @@ class AccountingPredictionService:
         if customer_invoice_prediction is not None:
             return self._with_prediction(transaction, customer_invoice_prediction)
 
+        targeted_rule_prediction = self._predict_from_targeted_rules(
+            normalized_text,
+            transaction.amount,
+            accounts,
+        )
+        if targeted_rule_prediction is not None:
+            return self._with_prediction(transaction, targeted_rule_prediction)
+
         historical_prediction = self._predict_from_training_examples(
             normalized_text,
             transaction.amount,
@@ -453,6 +461,79 @@ class AccountingPredictionService:
             ],
         )
 
+    @staticmethod
+    def _rule_prediction(
+        *,
+        account_code: str,
+        source: str,
+        message: str,
+        amount: Decimal,
+        accounts: dict[str, AccountingAccount],
+        tokens: list[str],
+    ) -> AccountingPrediction | None:
+        account = accounts.get(account_code)
+        if account is None:
+            return None
+        return AccountingPrediction(
+            account_code=account_code,
+            account_description=account.description,
+            source=source,
+            confidence="alta",
+            needs_review=False,
+            message=message,
+            score=1.0,
+            evidence=[
+                {
+                    "account_code": account_code,
+                    "source": "rule",
+                    "score": 1.0,
+                    "amount": format(amount, "f"),
+                    "common_tokens": tokens,
+                }
+            ],
+        )
+
+    def _predict_from_targeted_rules(
+        self,
+        normalized_text: str,
+        amount: Decimal,
+        accounts: dict[str, AccountingAccount],
+    ) -> AccountingPrediction | None:
+        if amount < 0 and "ordine collettivo opae" in normalized_text and abs(amount) <= Decimal("200.00"):
+            return self._rule_prediction(
+                account_code="6660",
+                source="targeted_rule",
+                message="Ordine collettivo OPAE piccolo; classificato come spesa paghe/strumento.",
+                amount=amount,
+                accounts=accounts,
+                tokens=["ordine", "collettivo", "opae"],
+            )
+
+        if amount < 0 and "wise payments" in normalized_text and (
+            "panoramen" in normalized_text
+            or "eood" in normalized_text
+        ):
+            return self._rule_prediction(
+                account_code="4401",
+                source="targeted_rule",
+                message="Pagamento Wise verso Panoramen/EOOD.",
+                amount=amount,
+                accounts=accounts,
+                tokens=["wise", "payments", "panoramen", "eood"],
+            )
+
+        if amount < 0 and "posta ch sa" in normalized_text:
+            return self._rule_prediction(
+                account_code="6552",
+                source="targeted_rule",
+                message="Movimento carta/servizio POSTA CH SA.",
+                amount=amount,
+                accounts=accounts,
+                tokens=["posta", "ch", "sa"],
+            )
+
+        return None
+
     def _predict_from_training_examples(
         self,
         normalized_text: str,
@@ -514,8 +595,13 @@ class AccountingPredictionService:
         second_score = float(second["score"]) if second is not None else 0.0
         margin = best_score - second_score
         evidence = sorted(candidates, key=lambda candidate: float(candidate["score"]), reverse=True)[:3]
+        evidence_account_codes = {str(candidate["account_code"]) for candidate in evidence}
 
-        if best_score >= 0.68 and (second is None or margin >= 0.08):
+        if best_score >= 0.68 and (
+            second is None
+            or margin >= 0.08
+            or evidence_account_codes == {str(best["account_code"])}
+        ):
             account_code = str(best["account_code"])
             account = accounts.get(account_code)
             return AccountingPrediction(
