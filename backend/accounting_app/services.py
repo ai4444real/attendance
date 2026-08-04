@@ -415,7 +415,13 @@ class AccountingPredictionService:
             or "formazione" in normalized_text
         )
         is_customer_credit = "riferimenti" in normalized_text and "notprovided" in normalized_text
-        if not is_invoice_payment and not is_course_payment and not is_customer_credit:
+        is_generic_customer_credit = "mittente" in normalized_text or "comunicazioni" in normalized_text
+        if (
+            not is_invoice_payment
+            and not is_course_payment
+            and not is_customer_credit
+            and not is_generic_customer_credit
+        ):
             return None
 
         matched_tokens = ["accredito"]
@@ -425,6 +431,8 @@ class AccountingPredictionService:
             matched_tokens.extend(["corso", "rata"])
         if is_customer_credit:
             matched_tokens.extend(["mittente", "riferimenti"])
+        if is_generic_customer_credit:
+            matched_tokens.extend(["mittente", "comunicazioni"])
 
         return AccountingPrediction(
             account_code=account_code,
