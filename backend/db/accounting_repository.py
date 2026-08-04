@@ -8,6 +8,7 @@ from backend.accounting_app.models import (
     AccountingAccount,
     AccountingCodeHint,
     AccountingFeedbackRule,
+    AccountingPredictionRule,
     AccountingTrainingExample,
 )
 
@@ -330,5 +331,144 @@ class PostgresAccountingRepository:
                     WHERE id = %s
                     """,
                     (feedback_id,),
+                )
+            connection.commit()
+
+    def list_prediction_rules(self, *, active_only: bool = False) -> list[AccountingPredictionRule]:
+        where_clause = "WHERE r.active = TRUE" if active_only else ""
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT r.id, r.name, r.account_code, a.description, r.priority, r.active,
+                           r.amount_sign, r.min_abs_amount, r.max_abs_amount,
+                           r.required_tokens, r.any_tokens, r.message
+                    FROM accounting_prediction_rules r
+                    LEFT JOIN accounting_accounts a ON a.code = r.account_code
+                    {where_clause}
+                    ORDER BY r.priority ASC, r.id ASC
+                    """
+                )
+                rows = cursor.fetchall()
+        return [
+            AccountingPredictionRule(
+                id=int(row[0]),
+                name=str(row[1]),
+                account_code=str(row[2]),
+                account_description=str(row[3]) if row[3] is not None else None,
+                priority=int(row[4]),
+                active=bool(row[5]),
+                amount_sign=str(row[6]),
+                min_abs_amount=row[7],
+                max_abs_amount=row[8],
+                required_tokens=[str(item) for item in row[9] or []],
+                any_tokens=[str(item) for item in row[10] or []],
+                message=str(row[11]) if row[11] is not None else None,
+            )
+            for row in rows
+        ]
+
+    def upsert_prediction_rule(
+        self,
+        *,
+        rule_id: int | None,
+        name: str,
+        account_code: str,
+        priority: int,
+        active: bool,
+        amount_sign: str,
+        min_abs_amount: Decimal | None,
+        max_abs_amount: Decimal | None,
+        required_tokens: list[str],
+        any_tokens: list[str],
+        message: str | None,
+    ) -> AccountingPredictionRule:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                if rule_id is None:
+                    cursor.execute(
+                        """
+                        INSERT INTO accounting_prediction_rules (
+                            name, account_code, priority, active, amount_sign,
+                            min_abs_amount, max_abs_amount, required_tokens,
+                            any_tokens, message, updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                        ON CONFLICT (name) DO UPDATE
+                        SET account_code = EXCLUDED.account_code,
+                            priority = EXCLUDED.priority,
+                            active = EXCLUDED.active,
+                            amount_sign = EXCLUDED.amount_sign,
+                            min_abs_amount = EXCLUDED.min_abs_amount,
+                            max_abs_amount = EXCLUDED.max_abs_amount,
+                            required_tokens = EXCLUDED.required_tokens,
+                            any_tokens = EXCLUDED.any_tokens,
+                            message = EXCLUDED.message,
+                            updated_at = now()
+                        RETURNING id
+                        """,
+                        (
+                            name,
+                            account_code,
+                            priority,
+                            active,
+                            amount_sign,
+                            min_abs_amount,
+                            max_abs_amount,
+                            required_tokens,
+                            any_tokens,
+                            message,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE accounting_prediction_rules
+                        SET name = %s,
+                            account_code = %s,
+                            priority = %s,
+                            active = %s,
+                            amount_sign = %s,
+                            min_abs_amount = %s,
+                            max_abs_amount = %s,
+                            required_tokens = %s,
+                            any_tokens = %s,
+                            message = %s,
+                            updated_at = now()
+                        WHERE id = %s
+                        RETURNING id
+                        """,
+                        (
+                            name,
+                            account_code,
+                            priority,
+                            active,
+                            amount_sign,
+                            min_abs_amount,
+                            max_abs_amount,
+                            required_tokens,
+                            any_tokens,
+                            message,
+                            rule_id,
+                        ),
+                    )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("Accounting prediction rule not found.")
+        rules = [rule for rule in self.list_prediction_rules() if rule.id == int(row[0])]
+        if not rules:
+            raise RuntimeError("Failed to reload accounting prediction rule.")
+        return rules[0]
+
+    def delete_prediction_rule(self, rule_id: int) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM accounting_prediction_rules
+                    WHERE id = %s
+                    """,
+                    (rule_id,),
                 )
             connection.commit()

@@ -34,6 +34,22 @@ class AccountingFeedbackRule:
 
 
 @dataclass(frozen=True)
+class AccountingPredictionRule:
+    id: int | None
+    name: str
+    account_code: str
+    account_description: str | None
+    priority: int
+    active: bool
+    amount_sign: str
+    min_abs_amount: Decimal | None
+    max_abs_amount: Decimal | None
+    required_tokens: list[str]
+    any_tokens: list[str]
+    message: str | None
+
+
+@dataclass(frozen=True)
 class AccountingTrainingExample:
     raw_text: str
     normalized_text: str

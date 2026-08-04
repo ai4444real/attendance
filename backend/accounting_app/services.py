@@ -13,6 +13,7 @@ from .models import (
     AccountingAccount,
     AccountingCodeHint,
     AccountingPrediction,
+    AccountingPredictionRule,
     AccountingTrainingExample,
     ParsedBankTransaction,
     PredictedBankTransaction,
@@ -33,6 +34,23 @@ class AccountingRepository(Protocol):
     def list_feedback_rules(self, limit: int = 200): ...
     def update_feedback_account(self, feedback_id: int, account_code: str): ...
     def delete_feedback_rule(self, feedback_id: int) -> None: ...
+    def list_prediction_rules(self, *, active_only: bool = False) -> list[AccountingPredictionRule]: ...
+    def upsert_prediction_rule(
+        self,
+        *,
+        rule_id: int | None,
+        name: str,
+        account_code: str,
+        priority: int,
+        active: bool,
+        amount_sign: str,
+        min_abs_amount: Decimal | None,
+        max_abs_amount: Decimal | None,
+        required_tokens: list[str],
+        any_tokens: list[str],
+        message: str | None,
+    ) -> AccountingPredictionRule: ...
+    def delete_prediction_rule(self, rule_id: int) -> None: ...
     def create_feedback(
         self,
         *,
@@ -258,17 +276,76 @@ class AccountingPredictionService:
             raise ValueError("Feedback id non valido.")
         self._repository.delete_feedback_rule(feedback_id)
 
+    def list_prediction_rules(self) -> list[AccountingPredictionRule]:
+        try:
+            return self._repository.list_prediction_rules(active_only=False)
+        except Exception:
+            return []
+
+    def save_prediction_rule(
+        self,
+        *,
+        rule_id: int | None,
+        name: str,
+        account_code: str,
+        priority: int,
+        active: bool,
+        amount_sign: str,
+        min_abs_amount: Decimal | None,
+        max_abs_amount: Decimal | None,
+        required_tokens: list[str],
+        any_tokens: list[str],
+        message: str | None,
+    ) -> AccountingPredictionRule:
+        clean_name = name.strip()
+        clean_account_code = account_code.strip()
+        clean_amount_sign = amount_sign.strip().casefold()
+        if not clean_name:
+            raise ValueError("Nome regola mancante.")
+        if not clean_account_code:
+            raise ValueError("Conto mancante.")
+        if clean_amount_sign not in {"any", "positive", "negative"}:
+            raise ValueError("Segno importo non valido.")
+        accounts = {account.code for account in self._repository.list_all_accounts()}
+        if clean_account_code not in accounts:
+            raise ValueError(f"Conto inesistente: {clean_account_code}")
+        clean_required_tokens = self._clean_rule_tokens(required_tokens)
+        clean_any_tokens = self._clean_rule_tokens(any_tokens)
+        if not clean_required_tokens and not clean_any_tokens:
+            raise ValueError("La regola deve avere almeno un token.")
+        return self._repository.upsert_prediction_rule(
+            rule_id=rule_id,
+            name=clean_name,
+            account_code=clean_account_code,
+            priority=int(priority),
+            active=active,
+            amount_sign=clean_amount_sign,
+            min_abs_amount=min_abs_amount,
+            max_abs_amount=max_abs_amount,
+            required_tokens=clean_required_tokens,
+            any_tokens=clean_any_tokens,
+            message=message.strip() if message else None,
+        )
+
+    def delete_prediction_rule(self, rule_id: int) -> None:
+        if rule_id <= 0:
+            raise ValueError("Regola non valida.")
+        self._repository.delete_prediction_rule(rule_id)
+
     def parse_and_predict_bank_csv(self, content: bytes, bank: str) -> list[PredictedBankTransaction]:
         text = decode_upload(content)
         transactions = parse_bank_csv(text, bank)
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
+        prediction_rules_available, prediction_rules = self._safe_list_active_prediction_rules()
         training_examples = self._repository.list_training_examples()
         return [
             self._predict_transaction_with_context(
                 transaction,
                 accounts,
                 code_hints,
+                prediction_rules_available,
+                prediction_rules,
                 training_examples,
             )
             for transaction in transactions
@@ -277,11 +354,14 @@ class AccountingPredictionService:
     def predict_transaction(self, transaction: ParsedBankTransaction) -> PredictedBankTransaction:
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
+        prediction_rules_available, prediction_rules = self._safe_list_active_prediction_rules()
         training_examples = self._repository.list_training_examples()
         return self._predict_transaction_with_context(
             transaction,
             accounts,
             code_hints,
+            prediction_rules_available,
+            prediction_rules,
             training_examples,
         )
 
@@ -290,6 +370,8 @@ class AccountingPredictionService:
         transaction: ParsedBankTransaction,
         accounts: dict[str, AccountingAccount],
         code_hints: dict[str, str],
+        prediction_rules_available: bool,
+        prediction_rules: list[AccountingPredictionRule],
         training_examples: list[AccountingTrainingExample],
     ) -> PredictedBankTransaction:
         normalized_text = normalize_accounting_text(transaction.description)
@@ -312,21 +394,31 @@ class AccountingPredictionService:
                 ),
             )
 
-        customer_invoice_prediction = self._predict_customer_invoice_payment(
+        configured_rule_prediction = self._predict_from_configured_rules(
             normalized_text,
             transaction.amount,
             accounts,
+            prediction_rules,
         )
-        if customer_invoice_prediction is not None:
-            return self._with_prediction(transaction, customer_invoice_prediction)
+        if configured_rule_prediction is not None:
+            return self._with_prediction(transaction, configured_rule_prediction)
 
-        targeted_rule_prediction = self._predict_from_targeted_rules(
-            normalized_text,
-            transaction.amount,
-            accounts,
-        )
-        if targeted_rule_prediction is not None:
-            return self._with_prediction(transaction, targeted_rule_prediction)
+        if not prediction_rules_available:
+            customer_invoice_prediction = self._predict_customer_invoice_payment(
+                normalized_text,
+                transaction.amount,
+                accounts,
+            )
+            if customer_invoice_prediction is not None:
+                return self._with_prediction(transaction, customer_invoice_prediction)
+
+            targeted_rule_prediction = self._predict_from_targeted_rules(
+                normalized_text,
+                transaction.amount,
+                accounts,
+            )
+            if targeted_rule_prediction is not None:
+                return self._with_prediction(transaction, targeted_rule_prediction)
 
         historical_prediction = self._predict_from_training_examples(
             normalized_text,
@@ -369,6 +461,21 @@ class AccountingPredictionService:
             prediction_source=prediction_source,
             created_by=created_by,
         )
+
+    @staticmethod
+    def _clean_rule_tokens(values: list[str]) -> list[str]:
+        tokens: list[str] = []
+        for value in values:
+            token = normalize_accounting_text(str(value))
+            if token and token not in tokens:
+                tokens.append(token)
+        return tokens
+
+    def _safe_list_active_prediction_rules(self) -> tuple[bool, list[AccountingPredictionRule]]:
+        try:
+            return True, self._repository.list_prediction_rules(active_only=True)
+        except Exception:
+            return False, []
 
     def _predict_from_code_hint(
         self,
@@ -460,6 +567,47 @@ class AccountingPredictionService:
                 }
             ],
         )
+
+    def _predict_from_configured_rules(
+        self,
+        normalized_text: str,
+        amount: Decimal,
+        accounts: dict[str, AccountingAccount],
+        rules: list[AccountingPredictionRule],
+    ) -> AccountingPrediction | None:
+        for rule in rules:
+            if not self._configured_rule_matches(rule, normalized_text, amount):
+                continue
+            return self._rule_prediction(
+                account_code=rule.account_code,
+                source="configured_rule",
+                message=rule.message or f"Regola configurata: {rule.name}",
+                amount=amount,
+                accounts=accounts,
+                tokens=[*rule.required_tokens, *rule.any_tokens],
+            )
+        return None
+
+    @staticmethod
+    def _configured_rule_matches(
+        rule: AccountingPredictionRule,
+        normalized_text: str,
+        amount: Decimal,
+    ) -> bool:
+        if rule.amount_sign == "positive" and amount <= 0:
+            return False
+        if rule.amount_sign == "negative" and amount >= 0:
+            return False
+        abs_amount = abs(amount)
+        if rule.min_abs_amount is not None and abs_amount < rule.min_abs_amount:
+            return False
+        if rule.max_abs_amount is not None and abs_amount > rule.max_abs_amount:
+            return False
+        if any(token not in normalized_text for token in rule.required_tokens):
+            return False
+        if rule.any_tokens and not any(token in normalized_text for token in rule.any_tokens):
+            return False
+        return True
 
     @staticmethod
     def _rule_prediction(

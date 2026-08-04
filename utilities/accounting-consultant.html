@@ -166,7 +166,7 @@
             font-size: 12px;
             white-space: nowrap;
         }
-        .badge-code_hint, .badge-feedback_override, .badge-feedback_override_amount, .badge-historical_example, .badge-targeted_rule {
+        .badge-code_hint, .badge-feedback_override, .badge-feedback_override_amount, .badge-historical_example, .badge-targeted_rule, .badge-configured_rule {
             background: #e3f6ea;
             color: #087c3f;
         }
@@ -212,6 +212,26 @@
         }
         .mini-form.code-hint-form {
             grid-template-columns: 150px 1fr auto;
+        }
+        .rule-form {
+            display: grid;
+            grid-template-columns: 1.2fr 160px 110px 150px 130px 130px;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 12px;
+        }
+        .rule-form .wide { grid-column: span 2; }
+        .rule-form .actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .checkbox-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 49px;
+            font-weight: 900;
         }
         input[type="text"] {
             width: 100%;
@@ -259,6 +279,8 @@
             .form-grid { grid-template-columns: 1fr; }
             .management-grid { grid-template-columns: 1fr; }
             .mini-form, .mini-form.code-hint-form { grid-template-columns: 1fr; }
+            .rule-form { grid-template-columns: 1fr; }
+            .rule-form .wide { grid-column: auto; }
         }
     </style>
 </head>
@@ -385,6 +407,82 @@
         </section>
 
         <section class="panel">
+            <h2>Regole deterministiche</h2>
+            <p class="muted">Il motore le usa dopo code hint e match salvati, prima delle regole legacy e degli esempi storici.</p>
+            <input id="predictionRuleFilter" class="filter-input" type="text" placeholder="Filtra regole...">
+            <input id="predictionRuleId" type="hidden">
+            <div class="rule-form">
+                <div>
+                    <label for="predictionRuleName">Nome</label>
+                    <input id="predictionRuleName" type="text" placeholder="es. Accrediti clienti scuola">
+                </div>
+                <div>
+                    <label for="predictionRuleAccount">Conto</label>
+                    <select id="predictionRuleAccount"></select>
+                </div>
+                <div>
+                    <label for="predictionRulePriority">Priorita'</label>
+                    <input id="predictionRulePriority" type="text" placeholder="10">
+                </div>
+                <div>
+                    <label for="predictionRuleSign">Importo</label>
+                    <select id="predictionRuleSign">
+                        <option value="any">Qualsiasi</option>
+                        <option value="positive">Entrata</option>
+                        <option value="negative">Uscita</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="predictionRuleMinAmount">Min abs</label>
+                    <input id="predictionRuleMinAmount" type="text" placeholder="opzionale">
+                </div>
+                <div>
+                    <label for="predictionRuleMaxAmount">Max abs</label>
+                    <input id="predictionRuleMaxAmount" type="text" placeholder="opzionale">
+                </div>
+                <div class="wide">
+                    <label for="predictionRuleRequiredTokens">Token obbligatori</label>
+                    <input id="predictionRuleRequiredTokens" type="text" placeholder="accredito, mittente">
+                </div>
+                <div class="wide">
+                    <label for="predictionRuleAnyTokens">Almeno uno di</label>
+                    <input id="predictionRuleAnyTokens" type="text" placeholder="comunicazioni, fattura">
+                </div>
+                <div class="wide">
+                    <label for="predictionRuleMessage">Messaggio</label>
+                    <input id="predictionRuleMessage" type="text" placeholder="Perche' questa regola decide cosi'">
+                </div>
+                <div>
+                    <label>Stato</label>
+                    <span class="checkbox-row">
+                        <input id="predictionRuleActive" type="checkbox" checked>
+                        attiva
+                    </span>
+                </div>
+                <div class="actions">
+                    <button id="savePredictionRuleButton" type="button">Salva</button>
+                    <button id="clearPredictionRuleButton" class="secondary" type="button">Pulisci</button>
+                </div>
+            </div>
+            <div id="predictionRuleMessageBox" class="message"></div>
+            <div class="table-wrap">
+                <table class="mini-table rules-table">
+                    <thead>
+                        <tr>
+                            <th>Priorita'</th>
+                            <th>Regola</th>
+                            <th>Conto</th>
+                            <th>Condizioni</th>
+                            <th>Stato</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="predictionRulesBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
             <h2>Match account salvati</h2>
             <p class="muted">Sono le correzioni create con “Salva con importo” o “Salva solo testo”. Il motore le usa prima degli esempi storici.</p>
             <input id="feedbackFilter" class="filter-input" type="text" placeholder="Filtra match salvati...">
@@ -430,10 +528,27 @@
         const feedbackFilter = document.getElementById("feedbackFilter");
         const feedbackMessage = document.getElementById("feedbackMessage");
         const feedbackBody = document.getElementById("feedbackBody");
+        const predictionRuleFilter = document.getElementById("predictionRuleFilter");
+        const predictionRuleId = document.getElementById("predictionRuleId");
+        const predictionRuleName = document.getElementById("predictionRuleName");
+        const predictionRuleAccount = document.getElementById("predictionRuleAccount");
+        const predictionRulePriority = document.getElementById("predictionRulePriority");
+        const predictionRuleSign = document.getElementById("predictionRuleSign");
+        const predictionRuleMinAmount = document.getElementById("predictionRuleMinAmount");
+        const predictionRuleMaxAmount = document.getElementById("predictionRuleMaxAmount");
+        const predictionRuleRequiredTokens = document.getElementById("predictionRuleRequiredTokens");
+        const predictionRuleAnyTokens = document.getElementById("predictionRuleAnyTokens");
+        const predictionRuleMessage = document.getElementById("predictionRuleMessage");
+        const predictionRuleActive = document.getElementById("predictionRuleActive");
+        const savePredictionRuleButton = document.getElementById("savePredictionRuleButton");
+        const clearPredictionRuleButton = document.getElementById("clearPredictionRuleButton");
+        const predictionRuleMessageBox = document.getElementById("predictionRuleMessageBox");
+        const predictionRulesBody = document.getElementById("predictionRulesBody");
         let accounts = [];
         let allAccounts = [];
         let codeHints = [];
         let feedbackRules = [];
+        let predictionRules = [];
         let currentRows = [];
         let activeResultFilter = "all";
 
@@ -463,7 +578,9 @@
             if (!response.ok) throw new Error(payload.detail || "Caricamento conti fallito.");
             accounts = payload.accounts || [];
             codeHintAccount.innerHTML = accountOptions("");
+            predictionRuleAccount.innerHTML = accountOptions("");
             if (feedbackRules.length) renderFeedbackRules();
+            if (predictionRules.length) renderPredictionRules();
         }
 
         async function loadAllAccounts() {
@@ -488,6 +605,25 @@
             if (!response.ok) throw new Error(payload.detail || "Caricamento match salvati fallito.");
             feedbackRules = payload.feedback || [];
             renderFeedbackRules();
+        }
+
+        async function loadPredictionRules() {
+            const response = await fetch("/api/utilities/accounting/prediction-rules");
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || "Caricamento regole fallito.");
+            predictionRules = payload.rules || [];
+            renderPredictionRules();
+        }
+
+        function splitTokens(value) {
+            return String(value || "")
+                .split(",")
+                .map(item => item.trim())
+                .filter(Boolean);
+        }
+
+        function joinTokens(values) {
+            return (values || []).join(", ");
         }
 
         function renderAccounts() {
@@ -570,6 +706,54 @@
                     </td>
                 </tr>
             `).join("");
+        }
+
+        function renderPredictionRules() {
+            const filter = predictionRuleFilter.value.trim().toLowerCase();
+            const rows = predictionRules.filter(rule => {
+                const haystack = [
+                    rule.name,
+                    rule.account_code,
+                    rule.account_description,
+                    rule.amount_sign,
+                    rule.required_tokens?.join(" "),
+                    rule.any_tokens?.join(" "),
+                    rule.message,
+                ].join(" ").toLowerCase();
+                return !filter || haystack.includes(filter);
+            });
+            predictionRulesBody.innerHTML = rows.map(rule => {
+                const required = joinTokens(rule.required_tokens);
+                const any = joinTokens(rule.any_tokens);
+                const amountBounds = [
+                    rule.min_abs_amount ? `min ${rule.min_abs_amount}` : "",
+                    rule.max_abs_amount ? `max ${rule.max_abs_amount}` : "",
+                ].filter(Boolean).join(" · ");
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(rule.priority)}</strong></td>
+                        <td>
+                            <strong>${escapeHtml(rule.name)}</strong>
+                            ${rule.message ? `<div class="muted">${escapeHtml(rule.message)}</div>` : ""}
+                        </td>
+                        <td>${escapeHtml(rule.account_code)}<div class="muted">${escapeHtml(rule.account_description || "")}</div></td>
+                        <td class="rule-text">
+                            <div><strong>${escapeHtml(rule.amount_sign)}</strong>${amountBounds ? ` · ${escapeHtml(amountBounds)}` : ""}</div>
+                            ${required ? `<div>tutti: ${escapeHtml(required)}</div>` : ""}
+                            ${any ? `<div>uno di: ${escapeHtml(any)}</div>` : ""}
+                        </td>
+                        <td>
+                            <span class="status-pill ${rule.active ? "status-active" : "status-inactive"}">
+                                ${rule.active ? "attiva" : "spenta"}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="secondary" type="button" data-edit-prediction-rule="${escapeHtml(rule.id)}">Edit</button>
+                            <button class="danger" type="button" data-delete-prediction-rule="${escapeHtml(rule.id)}">X</button>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
         }
 
         function renderStats(payload) {
@@ -807,6 +991,72 @@
             }
         }
 
+        function clearPredictionRuleForm() {
+            predictionRuleId.value = "";
+            predictionRuleName.value = "";
+            predictionRuleAccount.value = "";
+            predictionRulePriority.value = "100";
+            predictionRuleSign.value = "any";
+            predictionRuleMinAmount.value = "";
+            predictionRuleMaxAmount.value = "";
+            predictionRuleRequiredTokens.value = "";
+            predictionRuleAnyTokens.value = "";
+            predictionRuleMessage.value = "";
+            predictionRuleActive.checked = true;
+        }
+
+        async function savePredictionRule() {
+            predictionRuleMessageBox.textContent = "";
+            predictionRuleMessageBox.className = "message";
+            try {
+                const response = await fetch("/api/utilities/accounting/prediction-rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        id: predictionRuleId.value || null,
+                        name: predictionRuleName.value,
+                        account_code: predictionRuleAccount.value,
+                        priority: predictionRulePriority.value || 100,
+                        active: predictionRuleActive.checked,
+                        amount_sign: predictionRuleSign.value,
+                        min_abs_amount: predictionRuleMinAmount.value || null,
+                        max_abs_amount: predictionRuleMaxAmount.value || null,
+                        required_tokens: splitTokens(predictionRuleRequiredTokens.value),
+                        any_tokens: splitTokens(predictionRuleAnyTokens.value),
+                        message: predictionRuleMessage.value,
+                    }),
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Salvataggio regola fallito.");
+                clearPredictionRuleForm();
+                await loadPredictionRules();
+                predictionRuleMessageBox.textContent = "Regola salvata.";
+                predictionRuleMessageBox.classList.add("ok");
+            } catch (error) {
+                predictionRuleMessageBox.textContent = error.message || String(error);
+                predictionRuleMessageBox.classList.add("error");
+            }
+        }
+
+        async function deletePredictionRule(id) {
+            if (!confirm(`Cancellare la regola #${id}?`)) return;
+            predictionRuleMessageBox.textContent = "";
+            predictionRuleMessageBox.className = "message";
+            try {
+                const response = await fetch(`/api/utilities/accounting/prediction-rules/${encodeURIComponent(id)}`, {
+                    method: "DELETE",
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Cancellazione regola fallita.");
+                await loadPredictionRules();
+                predictionRuleMessageBox.textContent = "Regola cancellata.";
+                predictionRuleMessageBox.classList.add("ok");
+            } catch (error) {
+                predictionRuleMessageBox.textContent = error.message || String(error);
+                predictionRuleMessageBox.classList.add("error");
+            }
+        }
+
         async function saveAccount() {
             accountMessage.textContent = "";
             accountMessage.className = "message";
@@ -903,9 +1153,12 @@
         parseButton.addEventListener("click", parseAndPredict);
         saveAccountButton.addEventListener("click", saveAccount);
         saveCodeHintButton.addEventListener("click", saveCodeHint);
+        savePredictionRuleButton.addEventListener("click", savePredictionRule);
+        clearPredictionRuleButton.addEventListener("click", clearPredictionRuleForm);
         accountFilter.addEventListener("input", renderAccounts);
         codeHintFilter.addEventListener("input", renderCodeHints);
         feedbackFilter.addEventListener("input", renderFeedbackRules);
+        predictionRuleFilter.addEventListener("input", renderPredictionRules);
         stats.addEventListener("click", event => {
             const filterButton = event.target.closest("button[data-result-filter]");
             if (filterButton) {
@@ -961,10 +1214,33 @@
             const deleteButton = event.target.closest("button[data-delete-feedback-rule]");
             if (deleteButton) deleteFeedbackRule(Number(deleteButton.dataset.deleteFeedbackRule));
         });
+        predictionRulesBody.addEventListener("click", event => {
+            const editButton = event.target.closest("button[data-edit-prediction-rule]");
+            if (editButton) {
+                const rule = predictionRules.find(item => String(item.id) === String(editButton.dataset.editPredictionRule));
+                if (!rule) return;
+                predictionRuleId.value = rule.id || "";
+                predictionRuleName.value = rule.name || "";
+                predictionRuleAccount.value = rule.account_code || "";
+                predictionRulePriority.value = rule.priority || 100;
+                predictionRuleSign.value = rule.amount_sign || "any";
+                predictionRuleMinAmount.value = rule.min_abs_amount || "";
+                predictionRuleMaxAmount.value = rule.max_abs_amount || "";
+                predictionRuleRequiredTokens.value = joinTokens(rule.required_tokens);
+                predictionRuleAnyTokens.value = joinTokens(rule.any_tokens);
+                predictionRuleMessage.value = rule.message || "";
+                predictionRuleActive.checked = Boolean(rule.active);
+                predictionRuleName.focus();
+                return;
+            }
+            const deleteButton = event.target.closest("button[data-delete-prediction-rule]");
+            if (deleteButton) deletePredictionRule(Number(deleteButton.dataset.deletePredictionRule));
+        });
 
         async function initializeManagement() {
             await loadAccounts();
-            await Promise.all([loadAllAccounts(), loadCodeHints(), loadFeedbackRules()]);
+            clearPredictionRuleForm();
+            await Promise.all([loadAllAccounts(), loadCodeHints(), loadPredictionRules(), loadFeedbackRules()]);
         }
 
         initializeManagement().catch(error => {

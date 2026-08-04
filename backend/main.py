@@ -755,6 +755,23 @@ def _accounting_feedback_to_json(rule) -> dict:
     }
 
 
+def _accounting_prediction_rule_to_json(rule) -> dict:
+    return {
+        "id": rule.id,
+        "name": rule.name,
+        "account_code": rule.account_code,
+        "account_description": rule.account_description,
+        "priority": rule.priority,
+        "active": rule.active,
+        "amount_sign": rule.amount_sign,
+        "min_abs_amount": format(rule.min_abs_amount, "f") if rule.min_abs_amount is not None else None,
+        "max_abs_amount": format(rule.max_abs_amount, "f") if rule.max_abs_amount is not None else None,
+        "required_tokens": rule.required_tokens,
+        "any_tokens": rule.any_tokens,
+        "message": rule.message,
+    }
+
+
 @app.get("/api/utilities/accounting/accounts")
 async def accounting_accounts():
     accounts = _accounting_service().list_accounts()
@@ -850,6 +867,51 @@ async def accounting_save_code_hint(payload: dict = Body(...)):
 async def accounting_delete_code_hint(code: str):
     try:
         _accounting_service().delete_code_hint(code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
+
+
+@app.get("/api/utilities/accounting/prediction-rules")
+async def accounting_prediction_rules():
+    rules = _accounting_service().list_prediction_rules()
+    return {
+        "count": len(rules),
+        "rules": [_accounting_prediction_rule_to_json(rule) for rule in rules],
+    }
+
+
+@app.post("/api/utilities/accounting/prediction-rules")
+async def accounting_save_prediction_rule(payload: dict = Body(...)):
+    try:
+        rule_id_value = payload.get("id")
+        rule_id = int(rule_id_value) if rule_id_value not in (None, "") else None
+        min_abs_value = payload.get("min_abs_amount")
+        max_abs_value = payload.get("max_abs_amount")
+        rule = _accounting_service().save_prediction_rule(
+            rule_id=rule_id,
+            name=str(payload.get("name") or ""),
+            account_code=str(payload.get("account_code") or ""),
+            priority=int(payload.get("priority") or 100),
+            active=bool(payload.get("active", True)),
+            amount_sign=str(payload.get("amount_sign") or "any"),
+            min_abs_amount=parse_accounting_amount(min_abs_value) if min_abs_value not in (None, "") else None,
+            max_abs_amount=parse_accounting_amount(max_abs_value) if max_abs_value not in (None, "") else None,
+            required_tokens=payload.get("required_tokens") or [],
+            any_tokens=payload.get("any_tokens") or [],
+            message=str(payload.get("message") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "ok", "rule": _accounting_prediction_rule_to_json(rule)}
+
+
+@app.delete("/api/utilities/accounting/prediction-rules/{rule_id}")
+async def accounting_delete_prediction_rule(rule_id: int):
+    try:
+        _accounting_service().delete_prediction_rule(rule_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok"}
