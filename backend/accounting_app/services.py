@@ -312,6 +312,14 @@ class AccountingPredictionService:
                 ),
             )
 
+        customer_invoice_prediction = self._predict_customer_invoice_payment(
+            normalized_text,
+            transaction.amount,
+            accounts,
+        )
+        if customer_invoice_prediction is not None:
+            return self._with_prediction(transaction, customer_invoice_prediction)
+
         historical_prediction = self._predict_from_training_examples(
             normalized_text,
             transaction.amount,
@@ -381,6 +389,44 @@ class AccountingPredictionService:
             source="code_hint",
             confidence="alta",
             needs_review=False,
+        )
+
+    @staticmethod
+    def _predict_customer_invoice_payment(
+        normalized_text: str,
+        amount: Decimal,
+        accounts: dict[str, AccountingAccount],
+    ) -> AccountingPrediction | None:
+        account_code = "3400"
+        account = accounts.get(account_code)
+        if account is None:
+            return None
+        if amount <= 0:
+            return None
+        if "accredito" not in normalized_text:
+            return None
+        if "fattura" not in normalized_text or "riferimenti" not in normalized_text:
+            return None
+        if "mittente" not in normalized_text and "comunicazioni" not in normalized_text:
+            return None
+
+        return AccountingPrediction(
+            account_code=account_code,
+            account_description=account.description,
+            source="customer_invoice_payment",
+            confidence="alta",
+            needs_review=False,
+            message="Accredito con riferimento fattura cliente; importo ignorato per questa regola.",
+            score=1.0,
+            evidence=[
+                {
+                    "account_code": account_code,
+                    "source": "rule",
+                    "score": 1.0,
+                    "amount": format(amount, "f"),
+                    "common_tokens": ["accredito", "fattura", "riferimenti"],
+                }
+            ],
         )
 
     def _predict_from_training_examples(
