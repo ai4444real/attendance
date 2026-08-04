@@ -5,7 +5,7 @@ Single backend entry point for the Rebekko webapps workspace.
 At the moment it serves the Attendance module and its related APIs.
 """
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +28,7 @@ import httpx
 from dotenv import load_dotenv
 
 from backend.attendance_normalization.service import normalize_zoom_csv_file
+from backend.accounting_app.services import AccountingPredictionService, parse_accounting_amount
 from backend.attendance_app.models import ImportBatchCreate
 from backend.attendance_app.services import (
     AttendanceCourseConfigService,
@@ -49,6 +50,7 @@ from backend.db.attendance_instructor_repository import PostgresAttendanceInstru
 from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
+from backend.db.accounting_repository import PostgresAccountingRepository
 
 # Resolve workspace paths from the backend package location
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -210,6 +212,7 @@ UTILITIES_STATIC_DIR = os.path.join(WORKSPACE_DIR, "utilities")
 UTILITIES_CLASSROOM_MANAGER_FILE = os.path.join(UTILITIES_STATIC_DIR, "classroom-manager.html")
 UTILITIES_SMALLINVOICE_FILE = os.path.join(UTILITIES_STATIC_DIR, "smallinvoice.html")
 UTILITIES_PAYMENT_REMINDERS_FILE = os.path.join(UTILITIES_STATIC_DIR, "payment-reminders.html")
+UTILITIES_ACCOUNTING_CONSULTANT_FILE = os.path.join(UTILITIES_STATIC_DIR, "accounting-consultant.html")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
 SMALLINVOICE_API_BASE_URL = os.getenv("SMALLINVOICE_API_BASE_URL", "https://api.smallinvoice.com/v2").rstrip("/")
@@ -705,6 +708,89 @@ async def utilities_payment_reminders():
         UTILITIES_PAYMENT_REMINDERS_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
+
+
+@app.get("/utilities/accounting-consultant")
+@app.get("/utilities/accounting-consultant/")
+async def utilities_accounting_consultant():
+    return FileResponse(
+        UTILITIES_ACCOUNTING_CONSULTANT_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+def _accounting_service() -> AccountingPredictionService:
+    return AccountingPredictionService(PostgresAccountingRepository())
+
+
+def _accounting_prediction_to_json(transaction) -> dict:
+    prediction = transaction.prediction
+    return {
+        "row_index": transaction.row_index,
+        "date": transaction.date,
+        "description": transaction.description,
+        "amount": format(transaction.amount, "f"),
+        "prediction": {
+            "account_code": prediction.account_code,
+            "account_description": prediction.account_description,
+            "source": prediction.source,
+            "confidence": prediction.confidence,
+            "needs_review": prediction.needs_review,
+            "message": prediction.message,
+        },
+    }
+
+
+@app.get("/api/utilities/accounting/accounts")
+async def accounting_accounts():
+    accounts = _accounting_service().list_accounts()
+    return {
+        "count": len(accounts),
+        "accounts": [
+            {"code": account.code, "description": account.description, "active": account.active}
+            for account in accounts
+        ],
+    }
+
+
+@app.post("/api/utilities/accounting/bank/parse-predict")
+async def accounting_bank_parse_predict(
+    file: UploadFile = File(...),
+    bank: str = Form("postfinance"),
+):
+    try:
+        predictions = _accounting_service().parse_and_predict_bank_csv(await file.read(), bank)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    review_count = sum(1 for item in predictions if item.prediction.needs_review)
+    return {
+        "filename": file.filename,
+        "bank": bank,
+        "count": len(predictions),
+        "review_count": review_count,
+        "transactions": [_accounting_prediction_to_json(item) for item in predictions],
+    }
+
+
+@app.post("/api/utilities/accounting/feedback")
+async def accounting_feedback(payload: dict = Body(...)):
+    raw_text = str(payload.get("raw_text") or "").strip()
+    account_code = str(payload.get("account_code") or "").strip()
+    if not raw_text:
+        raise HTTPException(status_code=400, detail="raw_text mancante.")
+    if not account_code:
+        raise HTTPException(status_code=400, detail="account_code mancante.")
+    amount_value = payload.get("amount")
+    amount = parse_accounting_amount(amount_value) if amount_value not in (None, "") else None
+    feedback_id = _accounting_service().register_feedback(
+        raw_text=raw_text,
+        amount=amount,
+        account_code=account_code,
+        predicted_account_code=payload.get("predicted_account_code"),
+        prediction_source=payload.get("prediction_source"),
+        created_by="accounting-ui",
+    )
+    return {"status": "ok", "id": feedback_id}
 
 
 def _smallinvoice_is_configured() -> bool:
