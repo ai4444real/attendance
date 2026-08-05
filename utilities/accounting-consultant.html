@@ -251,7 +251,7 @@
             flex-wrap: wrap;
             margin-top: 8px;
         }
-        .feedback-row select { width: min(360px, 100%); }
+        .feedback-row select, .feedback-row .account-search { width: min(360px, 100%); }
         .management-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -415,6 +415,7 @@
                     </thead>
                     <tbody id="resultsBody"></tbody>
                 </table>
+                <datalist id="transactionAccountOptions"></datalist>
             </div>
         </section>
 
@@ -573,6 +574,7 @@
         const message = document.getElementById("message");
         const resultsPanel = document.getElementById("resultsPanel");
         const resultsBody = document.getElementById("resultsBody");
+        const transactionAccountOptions = document.getElementById("transactionAccountOptions");
         const stats = document.getElementById("stats");
         const sourceStats = document.getElementById("sourceStats");
         const bananaBankAccount = document.getElementById("bananaBankAccount");
@@ -641,6 +643,12 @@
             ].join("");
         }
 
+        function accountDatalistOptions() {
+            return accounts.map(account => `
+                <option value="${escapeHtml(account.code)}" label="${escapeHtml(account.description)}"></option>
+            `).join("");
+        }
+
         async function loadAccounts() {
             const response = await fetch("/api/utilities/accounting/accounts");
             const payload = await response.json();
@@ -648,6 +656,7 @@
             accounts = payload.accounts || [];
             codeHintAccount.innerHTML = accountOptions("");
             predictionRuleAccount.innerHTML = accountOptions("");
+            transactionAccountOptions.innerHTML = accountDatalistOptions();
             const preferredBananaAccount = bananaBankAccount.value || "1025";
             bananaBankAccount.innerHTML = accountOptions(preferredBananaAccount);
             if (feedbackRules.length) renderFeedbackRules();
@@ -931,7 +940,15 @@
                     <td>${renderPrediction(row)}</td>
                     <td>
                         <div class="feedback-row">
-                            <select data-index="${index}">${accountOptions(row.one_time_account_code ?? row.prediction?.account_code)}</select>
+                            <input
+                                class="account-search"
+                                type="text"
+                                list="transactionAccountOptions"
+                                data-index="${index}"
+                                value="${escapeHtml(row.one_time_account_code ?? row.prediction?.account_code ?? "")}"
+                                placeholder="Cerca per codice o descrizione..."
+                                autocomplete="off"
+                            >
                             <div class="muted">La selezione vale per questo export; i pulsanti sotto la salvano come feedback.</div>
                             <button class="secondary" type="button" data-feedback="${index}" data-amount="true">Salva con importo</button>
                             <button class="secondary" type="button" data-feedback="${index}" data-amount="false">Salva solo testo</button>
@@ -1087,8 +1104,8 @@
 
         async function saveFeedback(index, includeAmount) {
             const row = currentRows[index];
-            const select = document.querySelector(`select[data-index="${index}"]`);
-            const accountCode = select?.value || "";
+            const accountInput = document.querySelector(`input[data-index="${index}"]`);
+            const accountCode = accountInput?.value.trim() || "";
             if (!row || !accountCode) {
                 alert("Scegli un conto.");
                 return;
@@ -1369,13 +1386,19 @@
             renderResultTable();
         });
         resultsBody.addEventListener("change", event => {
-            const select = event.target.closest("select[data-index]");
-            if (!select) return;
-            const row = currentRows[Number(select.dataset.index)];
+            const accountInput = event.target.closest("input[data-index]");
+            if (!accountInput) return;
+            const row = currentRows[Number(accountInput.dataset.index)];
             if (!row) return;
+            const accountCode = accountInput.value.trim();
+            if (accountCode && !accounts.some(account => account.code === accountCode)) {
+                alert("Scegli un conto dall'elenco dei risultati.");
+                accountInput.value = row.one_time_account_code ?? row.prediction?.account_code ?? "";
+                return;
+            }
             const predictedAccount = row.prediction?.account_code || "";
-            row.one_time_account_code = select.value && select.value !== predictedAccount
-                ? select.value
+            row.one_time_account_code = accountCode && accountCode !== predictedAccount
+                ? accountCode
                 : null;
         });
         resultsBody.addEventListener("click", event => {
