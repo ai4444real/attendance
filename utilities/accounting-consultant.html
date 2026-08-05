@@ -415,9 +415,9 @@
                     </thead>
                     <tbody id="resultsBody"></tbody>
                 </table>
-                <datalist id="transactionAccountOptions"></datalist>
             </div>
         </section>
+        <datalist id="accountSearchOptions"></datalist>
 
         <dialog id="rulesDialog" class="rules-dialog">
         <section class="panel rules-dialog-panel">
@@ -435,7 +435,13 @@
                 </div>
                 <div>
                     <label for="predictionRuleAccount">Conto</label>
-                    <select id="predictionRuleAccount"></select>
+                    <input
+                        id="predictionRuleAccount"
+                        type="text"
+                        list="accountSearchOptions"
+                        placeholder="Cerca codice o descrizione..."
+                        autocomplete="off"
+                    >
                 </div>
                 <div>
                     <label for="predictionRulePriority">Priorita'</label>
@@ -574,7 +580,7 @@
         const message = document.getElementById("message");
         const resultsPanel = document.getElementById("resultsPanel");
         const resultsBody = document.getElementById("resultsBody");
-        const transactionAccountOptions = document.getElementById("transactionAccountOptions");
+        const accountSearchOptions = document.getElementById("accountSearchOptions");
         const stats = document.getElementById("stats");
         const sourceStats = document.getElementById("sourceStats");
         const bananaBankAccount = document.getElementById("bananaBankAccount");
@@ -655,8 +661,7 @@
             if (!response.ok) throw new Error(payload.detail || "Caricamento conti fallito.");
             accounts = payload.accounts || [];
             codeHintAccount.innerHTML = accountOptions("");
-            predictionRuleAccount.innerHTML = accountOptions("");
-            transactionAccountOptions.innerHTML = accountDatalistOptions();
+            accountSearchOptions.innerHTML = accountDatalistOptions();
             const preferredBananaAccount = bananaBankAccount.value || "1025";
             bananaBankAccount.innerHTML = accountOptions(preferredBananaAccount);
             if (feedbackRules.length) renderFeedbackRules();
@@ -943,7 +948,7 @@
                             <input
                                 class="account-search"
                                 type="text"
-                                list="transactionAccountOptions"
+                                list="accountSearchOptions"
                                 data-index="${index}"
                                 value="${escapeHtml(row.one_time_account_code ?? row.prediction?.account_code ?? "")}"
                                 placeholder="Cerca per codice o descrizione..."
@@ -1193,13 +1198,17 @@
             predictionRuleMessageBox.textContent = "";
             predictionRuleMessageBox.className = "message";
             try {
+                const ruleAccountCode = predictionRuleAccount.value.trim();
+                if (!accounts.some(account => account.code === ruleAccountCode)) {
+                    throw new Error("Scegli un conto dall'elenco dei risultati.");
+                }
                 const response = await fetch("/api/utilities/accounting/prediction-rules", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         id: predictionRuleId.value || null,
                         name: predictionRuleName.value,
-                        account_code: predictionRuleAccount.value,
+                        account_code: ruleAccountCode,
                         priority: predictionRulePriority.value || 100,
                         active: predictionRuleActive.checked,
                         amount_sign: predictionRuleSign.value,
