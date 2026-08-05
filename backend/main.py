@@ -683,6 +683,35 @@ async def utilities_home():
     )
 
 
+@app.get("/utilities/internal-tools", include_in_schema=False)
+@app.get("/utilities/internal-tools/", include_in_schema=False)
+async def utilities_internal_tools():
+    body_html = """
+        <section>
+            <div class="cards">
+                <a class="card" href="/utilities/accounting-consultant">
+                    <span class="card-label">Contabilita'</span>
+                    <h2>Consulente contabile</h2>
+                    <p>Predizione dei conti, revisione dei movimenti bancari ed export per Banana.</p>
+                </a>
+                <a class="card" href="/utilities/payment-reminders">
+                    <span class="card-label">Incassi</span>
+                    <h2>Controllo richiami</h2>
+                    <p>Verifica pagamenti e richiami incrociando i dati bancari con Smallinvoice.</p>
+                </a>
+            </div>
+        </section>
+    """
+    return HTMLResponse(
+        render_module_shell(
+            "Strumenti interni",
+            "Accesso rapido agli strumenti amministrativi interni.",
+            body_html,
+        ),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.get("/utilities/classroom-manager")
 @app.get("/utilities/classroom-manager/")
 async def utilities_classroom_manager():
