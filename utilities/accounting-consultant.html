@@ -118,6 +118,14 @@
         .message.ok { color: #087c3f; }
         .message.error { color: #b42318; }
         .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+        .banana-tools {
+            display: flex;
+            gap: 12px;
+            align-items: end;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .banana-tools > div { min-width: 280px; }
         .source-stats {
             display: flex;
             gap: 10px;
@@ -364,6 +372,13 @@
         </section>
 
         <section id="resultsPanel" class="panel" hidden>
+            <div class="banana-tools">
+                <div>
+                    <label for="bananaBankAccount">Conto banca Banana</label>
+                    <select id="bananaBankAccount"></select>
+                </div>
+                <button id="exportBananaButton" type="button">Export for Banana</button>
+            </div>
             <div id="stats" class="stats"></div>
             <div id="sourceStats" class="source-stats"></div>
             <div class="table-wrap">
@@ -533,6 +548,8 @@
         const resultsBody = document.getElementById("resultsBody");
         const stats = document.getElementById("stats");
         const sourceStats = document.getElementById("sourceStats");
+        const bananaBankAccount = document.getElementById("bananaBankAccount");
+        const exportBananaButton = document.getElementById("exportBananaButton");
         const codeHintFilter = document.getElementById("codeHintFilter");
         const codeHintCode = document.getElementById("codeHintCode");
         const codeHintAccount = document.getElementById("codeHintAccount");
@@ -600,6 +617,8 @@
             accounts = payload.accounts || [];
             codeHintAccount.innerHTML = accountOptions("");
             predictionRuleAccount.innerHTML = accountOptions("");
+            const preferredBananaAccount = bananaBankAccount.value || "1025";
+            bananaBankAccount.innerHTML = accountOptions(preferredBananaAccount);
             if (feedbackRules.length) renderFeedbackRules();
             if (predictionRules.length) renderPredictionRules();
         }
@@ -896,6 +915,22 @@
             return `"${text.replaceAll('"', '""')}"`;
         }
 
+        function effectiveAccountCode(row) {
+            return row.one_time_account_code || row.prediction?.account_code || "";
+        }
+
+        function downloadCsv(content, filename) {
+            const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
+
         function exportVisibleRows() {
             const rows = visibleRowsWithIndex();
             if (!rows.length) {
@@ -933,18 +968,51 @@
                     ].map(csvCell).join(";");
                 }),
             ];
-            const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
             const suffix = activeResultFilter === "review"
                 ? "da-revisionare"
                 : activeSourceFilter !== "all" ? activeSourceFilter : "tutte";
-            link.href = url;
-            link.download = `consulente-contabile-${suffix}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
+            downloadCsv(csvRows.join("\n"), `consulente-contabile-${suffix}.csv`);
+        }
+
+        function exportForBanana() {
+            const rows = visibleRowsWithIndex().map(item => item.row);
+            const bankAccount = bananaBankAccount.value;
+            if (!rows.length) {
+                alert("Nessuna riga da esportare.");
+                return;
+            }
+            if (!bankAccount) {
+                alert("Scegli il conto banca per Banana.");
+                return;
+            }
+            const missingAccounts = rows.filter(row => !effectiveAccountCode(row));
+            if (missingAccounts.length) {
+                alert(`${missingAccounts.length} transazioni non hanno un conto. Correggile o escludile con un filtro prima dell'export.`);
+                return;
+            }
+            const zeroAmounts = rows.filter(row => Number(row.amount) === 0);
+            if (zeroAmounts.length) {
+                alert(`${zeroAmounts.length} transazioni hanno importo zero e non possono essere messe in Dare/Avere.`);
+                return;
+            }
+            const bananaRows = rows.map(row => {
+                const transactionAccount = effectiveAccountCode(row);
+                const isCredit = Number(row.amount) > 0;
+                const debitAccount = isCredit ? bankAccount : transactionAccount;
+                const creditAccount = isCredit ? transactionAccount : bankAccount;
+                return [
+                    row.date,
+                    " ",
+                    csvCell(row.description),
+                    debitAccount,
+                    creditAccount,
+                    row.amount,
+                ].join(";");
+            });
+            const suffix = activeResultFilter === "review"
+                ? "da-revisionare"
+                : activeSourceFilter !== "all" ? activeSourceFilter : "tutte";
+            downloadCsv(bananaRows.join("\n"), `banana-${suffix}.csv`);
         }
 
         async function parseAndPredict() {
@@ -1212,6 +1280,7 @@
         }
 
         parseButton.addEventListener("click", parseAndPredict);
+        exportBananaButton.addEventListener("click", exportForBanana);
         saveAccountButton.addEventListener("click", saveAccount);
         saveCodeHintButton.addEventListener("click", saveCodeHint);
         savePredictionRuleButton.addEventListener("click", savePredictionRule);
