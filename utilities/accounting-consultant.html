@@ -134,6 +134,10 @@
             box-shadow: 0 8px 20px rgba(16, 42, 67, 0.10);
         }
         .banana-tools > div { min-width: 280px; }
+        .draft-tools, .ledger-tools { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-top: 18px; }
+        .draft-tools > div { min-width: 360px; flex: 1; }
+        .ledger-tools > div { min-width: 190px; }
+        input[type="date"] { width: 100%; border: 1px solid var(--brand-border); border-radius: 15px; padding: 13px 14px; background: #f8fbfd; color: var(--brand-ink); font: inherit; }
         dialog.rules-dialog {
             width: min(1400px, calc(100% - 32px));
             max-height: calc(100vh - 32px);
@@ -388,6 +392,10 @@
                 <button id="parseButton" type="button">Leggi e predici</button>
             </div>
             <div id="message" class="message"></div>
+            <div class="draft-tools">
+                <div><label for="draftBatchSelect">Import persistenti</label><select id="draftBatchSelect"><option value="">Nessun import</option></select></div>
+                <button id="loadDraftButton" class="secondary" type="button">Apri bozza</button>
+            </div>
         </section>
 
         <section id="resultsPanel" class="panel" hidden>
@@ -399,6 +407,7 @@
                 <button id="exportBananaButton" type="button">Export for Banana</button>
                 <button id="openRulesButton" class="secondary" type="button">Gestisci regole</button>
                 <button id="repeatPredictionButton" class="secondary" type="button">Ripeti predizione</button>
+                <button id="confirmBatchButton" type="button">Conferma in contabilità</button>
             </div>
             <div id="stats" class="stats"></div>
             <div id="sourceStats" class="source-stats"></div>
@@ -418,6 +427,18 @@
             </div>
         </section>
         <datalist id="accountSearchOptions"></datalist>
+
+        <section class="panel">
+            <h2>Archivio contabile confermato</h2>
+            <p class="muted">Esporta le transazioni confermate, ordinate e separate per conto bancario e carta.</p>
+            <div class="ledger-tools">
+                <div><label for="ledgerDateFrom">Dal</label><input id="ledgerDateFrom" type="date"></div>
+                <div><label for="ledgerDateTo">Al</label><input id="ledgerDateTo" type="date"></div>
+                <button id="exportLedgerButton" type="button">Export archivio</button>
+                <button id="exportLedgerBananaButton" class="secondary" type="button">Export Banana ZIP</button>
+            </div>
+            <div id="ledgerMessage" class="message"></div>
+        </section>
 
         <dialog id="rulesDialog" class="rules-dialog">
         <section class="panel rules-dialog-panel">
@@ -576,6 +597,8 @@
         const bank = document.getElementById("bank");
         const fileInput = document.getElementById("fileInput");
         const fileInputLabel = document.getElementById("fileInputLabel");
+        const draftBatchSelect = document.getElementById("draftBatchSelect");
+        const loadDraftButton = document.getElementById("loadDraftButton");
         const parseButton = document.getElementById("parseButton");
         const message = document.getElementById("message");
         const resultsPanel = document.getElementById("resultsPanel");
@@ -589,6 +612,12 @@
         const openRulesButton = document.getElementById("openRulesButton");
         const closeRulesButton = document.getElementById("closeRulesButton");
         const repeatPredictionButton = document.getElementById("repeatPredictionButton");
+        const confirmBatchButton = document.getElementById("confirmBatchButton");
+        const ledgerDateFrom = document.getElementById("ledgerDateFrom");
+        const ledgerDateTo = document.getElementById("ledgerDateTo");
+        const exportLedgerButton = document.getElementById("exportLedgerButton");
+        const exportLedgerBananaButton = document.getElementById("exportLedgerBananaButton");
+        const ledgerMessage = document.getElementById("ledgerMessage");
         const codeHintFilter = document.getElementById("codeHintFilter");
         const codeHintCode = document.getElementById("codeHintCode");
         const codeHintAccount = document.getElementById("codeHintAccount");
@@ -628,6 +657,7 @@
         let currentRows = [];
         let activeResultFilter = "all";
         let activeSourceFilter = "all";
+        let currentBatchId = null;
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -666,6 +696,26 @@
             bananaBankAccount.innerHTML = accountOptions(preferredBananaAccount);
             if (feedbackRules.length) renderFeedbackRules();
             if (predictionRules.length) renderPredictionRules();
+        }
+
+        async function loadDraftBatches() {
+            const response = await fetch("/api/utilities/accounting/import-batches");
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || "Caricamento bozze fallito.");
+            const batches = payload.batches || [];
+            draftBatchSelect.innerHTML = ['<option value="">Scegli una bozza...</option>', ...batches.map(batch =>
+                `<option value="${escapeHtml(batch.id)}">${escapeHtml(batch.filename)} · ${batch.new_count} righe · ${escapeHtml(batch.status)}</option>`
+            )].join("");
+        }
+
+        async function loadDraftBatch() {
+            if (!draftBatchSelect.value) return;
+            const response = await fetch(`/api/utilities/accounting/import-batches/${encodeURIComponent(draftBatchSelect.value)}`);
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || "Caricamento bozza fallito.");
+            renderRows(payload);
+            message.textContent = "Bozza persistente caricata.";
+            message.className = "message ok";
         }
 
         async function loadAllAccounts() {
@@ -929,6 +979,11 @@
 
         function renderRows(payload) {
             currentRows = payload.transactions || [];
+            currentBatchId = payload.batch_id || null;
+            const counterAccount = currentRows[0]?.counter_account_code;
+            if (counterAccount && accounts.some(account => account.code === counterAccount)) {
+                bananaBankAccount.value = counterAccount;
+            }
             activeResultFilter = "all";
             activeSourceFilter = "all";
             renderStats(payload);
@@ -1097,14 +1152,77 @@
                 const payload = await response.json();
                 if (!response.ok) throw new Error(payload.detail || "Elaborazione fallita.");
                 renderRows(payload);
-                message.textContent = "Elaborazione completata.";
+                message.textContent = `Elaborazione completata: ${payload.new_count ?? payload.count} nuove, ${payload.duplicate_count ?? 0} duplicate.`;
                 message.classList.add("ok");
+                await loadDraftBatches();
             } catch (error) {
                 message.textContent = error.message || String(error);
                 message.classList.add("error");
             } finally {
                 parseButton.disabled = false;
             }
+        }
+
+        async function confirmCurrentBatch() {
+            if (!currentBatchId) return alert("Nessuna bozza attiva.");
+            const assignments = {};
+            for (let index = 0; index < currentRows.length; index += 1) {
+                const row = currentRows[index];
+                const accountCode = document.querySelector(`input[data-index="${index}"]`)?.value.trim() || effectiveAccountCode(row);
+                if (!row.ledger_id || !accounts.some(account => account.code === accountCode)) {
+                    return alert("Ogni transazione deve avere un conto valido prima della conferma.");
+                }
+                assignments[row.ledger_id] = accountCode;
+            }
+            if (!confirm(`Confermare ${currentRows.length} transazioni in contabilità?`)) return;
+            const response = await fetch(`/api/utilities/accounting/import-batches/${encodeURIComponent(currentBatchId)}/confirm`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assignments }),
+            });
+            const payload = await response.json();
+            if (!response.ok) return alert(payload.detail || "Conferma fallita.");
+            message.textContent = "Transazioni confermate nell'archivio contabile.";
+            message.className = "message ok";
+            currentBatchId = null;
+            await loadDraftBatches();
+        }
+
+        async function exportConfirmedLedger() {
+            ledgerMessage.textContent = "";
+            ledgerMessage.className = "message";
+            if (!ledgerDateFrom.value || !ledgerDateTo.value) {
+                ledgerMessage.textContent = "Scegli entrambe le date.";
+                return ledgerMessage.classList.add("error");
+            }
+            const response = await fetch(`/api/utilities/accounting/ledger?date_from=${encodeURIComponent(ledgerDateFrom.value)}&date_to=${encodeURIComponent(ledgerDateTo.value)}`);
+            const payload = await response.json();
+            if (!response.ok) {
+                ledgerMessage.textContent = payload.detail || "Export fallito.";
+                return ledgerMessage.classList.add("error");
+            }
+            const header = ["gruppo", "sorgente", "data", "descrizione", "conto", "contropartita", "importo"];
+            const lines = [header.map(csvCell).join(";"), ...(payload.transactions || []).map(row => [
+                row.group_name, row.display_name, row.date, row.description,
+                row.account_code, row.counter_account_code, row.amount,
+            ].map(csvCell).join(";"))];
+            downloadCsv(lines.join("\r\n"), `contabilita-${ledgerDateFrom.value}-${ledgerDateTo.value}.csv`, true);
+            ledgerMessage.textContent = `${payload.count} transazioni esportate.`;
+            ledgerMessage.classList.add("ok");
+        }
+
+        async function exportConfirmedLedgerBanana() {
+            if (!ledgerDateFrom.value || !ledgerDateTo.value) return alert("Scegli entrambe le date.");
+            const url = `/api/utilities/accounting/ledger/banana.zip?date_from=${encodeURIComponent(ledgerDateFrom.value)}&date_to=${encodeURIComponent(ledgerDateTo.value)}`;
+            const response = await fetch(url);
+            if (!response.ok) return alert("Export Banana fallito.");
+            const blobUrl = URL.createObjectURL(await response.blob());
+            const link = document.createElement("a");
+            link.href = blobUrl;
+            link.download = `banana-${ledgerDateFrom.value}-${ledgerDateTo.value}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(blobUrl);
         }
 
         async function saveFeedback(index, includeAmount) {
@@ -1351,8 +1469,13 @@
             fileInput.value = "";
             message.textContent = "";
             message.className = "message";
+            bananaBankAccount.value = isCreditCardPdf ? "2070" : "1025";
         });
         exportBananaButton.addEventListener("click", exportForBanana);
+        loadDraftButton.addEventListener("click", () => loadDraftBatch().catch(error => alert(error.message || String(error))));
+        confirmBatchButton.addEventListener("click", confirmCurrentBatch);
+        exportLedgerButton.addEventListener("click", exportConfirmedLedger);
+        exportLedgerBananaButton.addEventListener("click", exportConfirmedLedgerBanana);
         repeatPredictionButton.addEventListener("click", parseAndPredict);
         openRulesButton.addEventListener("click", () => rulesDialog.showModal());
         closeRulesButton.addEventListener("click", () => rulesDialog.close());
@@ -1476,7 +1599,10 @@
         async function initializeManagement() {
             await loadAccounts();
             clearPredictionRuleForm();
-            await Promise.all([loadAllAccounts(), loadCodeHints(), loadPredictionRules(), loadFeedbackRules()]);
+            await Promise.all([loadAllAccounts(), loadCodeHints(), loadPredictionRules(), loadFeedbackRules(), loadDraftBatches()]);
+            const year = new Date().getFullYear();
+            ledgerDateFrom.value = `${year}-01-01`;
+            ledgerDateTo.value = `${year}-12-31`;
         }
 
         initializeManagement().catch(error => {

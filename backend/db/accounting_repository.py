@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from backend.accounting_app.models import (
     AccountingAccount,
@@ -16,6 +17,285 @@ from .connection import get_db_connection
 
 
 class PostgresAccountingRepository:
+    def list_persisted_source_transactions(self, source_type: str, source_key: str) -> list[dict[str, Any]]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT t.identity_key, t.transaction_date, t.description, t.amount,
+                           t.statement_balance
+                    FROM accounting_ledger_transactions t
+                    JOIN accounting_sources s ON s.id = t.source_id
+                    WHERE s.source_type = %s AND s.source_key = %s
+                    """,
+                    (source_type, source_key),
+                )
+                rows = cursor.fetchall()
+        return [
+            {
+                "identity_key": str(row[0]),
+                "date": row[1].strftime("%d.%m.%Y"),
+                "description": str(row[2]),
+                "amount": row[3],
+                "balance": row[4],
+            }
+            for row in rows
+        ]
+
+    def persist_prediction_batch(
+        self,
+        *,
+        filename: str,
+        file_sha256: str,
+        records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, status FROM accounting_import_batches WHERE file_sha256 = %s",
+                    (file_sha256,),
+                )
+                existing_batch = cursor.fetchone()
+                if existing_batch is not None:
+                    if str(existing_batch[1]) == "draft":
+                        for record in records:
+                            cursor.execute(
+                                """
+                                UPDATE accounting_ledger_transactions t
+                                SET account_code = %s,
+                                    prediction_source = %s,
+                                    updated_at = now()
+                                FROM accounting_sources s
+                                WHERE t.source_id = s.id
+                                  AND s.source_type = %s
+                                  AND s.source_key = %s
+                                  AND t.identity_key = %s
+                                  AND t.status = 'draft'
+                                """,
+                                (
+                                    record["account_code"], record["prediction_source"],
+                                    record["source_type"], record["source_key"],
+                                    record["identity_key"],
+                                ),
+                            )
+                        connection.commit()
+                    cursor.execute(
+                        """
+                        SELECT COUNT(*) FILTER (WHERE bt.was_new),
+                               COUNT(*) FILTER (WHERE NOT bt.was_new)
+                        FROM accounting_batch_transactions bt
+                        WHERE bt.batch_id = %s
+                        """,
+                        (existing_batch[0],),
+                    )
+                    counts = cursor.fetchone() or (0, 0)
+                    return {
+                        "batch_id": int(existing_batch[0]),
+                        "status": str(existing_batch[1]),
+                        "new_count": int(counts[0] or 0),
+                        "duplicate_count": int(counts[1] or 0),
+                        "existing_file": True,
+                    }
+                cursor.execute(
+                    """
+                    INSERT INTO accounting_import_batches (filename, file_sha256)
+                    VALUES (%s, %s)
+                    RETURNING id
+                    """,
+                    (filename, file_sha256),
+                )
+                batch_id = int(cursor.fetchone()[0])
+                new_count = 0
+                duplicate_count = 0
+                for record in records:
+                    cursor.execute(
+                        """
+                        INSERT INTO accounting_sources (
+                            source_type, source_key, group_name, display_name,
+                            currency, counter_account_code
+                        )
+                        VALUES (%s, %s, %s, %s, 'CHF', %s)
+                        ON CONFLICT (source_type, source_key) DO UPDATE
+                        SET display_name = EXCLUDED.display_name,
+                            group_name = EXCLUDED.group_name,
+                            counter_account_code = EXCLUDED.counter_account_code
+                        RETURNING id
+                        """,
+                        (
+                            record["source_type"], record["source_key"],
+                            record["group_name"], record["display_name"],
+                            record["counter_account_code"],
+                        ),
+                    )
+                    source_id = int(cursor.fetchone()[0])
+                    cursor.execute(
+                        """
+                        SELECT id, transaction_date, description, amount, statement_balance
+                        FROM accounting_ledger_transactions
+                        WHERE source_id = %s AND identity_key = %s
+                        """,
+                        (source_id, record["identity_key"]),
+                    )
+                    existing = cursor.fetchone()
+                    was_new = existing is None
+                    if existing is not None:
+                        existing_values = (
+                            existing[1].strftime("%d.%m.%Y"), str(existing[2]),
+                            existing[3], existing[4],
+                        )
+                        incoming_values = (
+                            record["date"], record["description"],
+                            record["amount"], record["balance"],
+                        )
+                        if existing_values != incoming_values:
+                            raise RuntimeError(
+                                "Conflitto su una transazione gia' importata: "
+                                f"{record['date']} / {record['identity_key']}."
+                            )
+                        transaction_id = int(existing[0])
+                        duplicate_count += 1
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO accounting_ledger_transactions (
+                                source_id, identity_key, transaction_date, description,
+                                amount, statement_balance, account_code, prediction_source,
+                                first_batch_id
+                            )
+                            VALUES (%s, %s, to_date(%s, 'DD.MM.YYYY'), %s, %s, %s, %s, %s, %s)
+                            RETURNING id
+                            """,
+                            (
+                                source_id, record["identity_key"], record["date"],
+                                record["description"], record["amount"], record["balance"],
+                                record["account_code"], record["prediction_source"], batch_id,
+                            ),
+                        )
+                        transaction_id = int(cursor.fetchone()[0])
+                        new_count += 1
+                    cursor.execute(
+                        """
+                        INSERT INTO accounting_batch_transactions (batch_id, transaction_id, was_new)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (batch_id, transaction_id, was_new),
+                    )
+            connection.commit()
+        return {
+            "batch_id": batch_id,
+            "status": "draft",
+            "new_count": new_count,
+            "duplicate_count": duplicate_count,
+            "existing_file": False,
+        }
+
+    def list_import_batches(self, *, status: str = "draft") -> list[dict[str, Any]]:
+        where_clause = "" if status == "all" else "WHERE b.status = %s"
+        parameters = () if status == "all" else (status,)
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT b.id, b.filename, b.status, b.created_at, b.confirmed_at,
+                           COUNT(*) FILTER (WHERE bt.was_new)
+                    FROM accounting_import_batches b
+                    LEFT JOIN accounting_batch_transactions bt ON bt.batch_id = b.id
+                    {where_clause}
+                    GROUP BY b.id
+                    ORDER BY b.created_at DESC
+                    """,
+                    parameters,
+                )
+                rows = cursor.fetchall()
+        return [
+            {"id": int(r[0]), "filename": str(r[1]), "status": str(r[2]),
+             "created_at": r[3].isoformat(), "confirmed_at": r[4].isoformat() if r[4] else None,
+             "new_count": int(r[5] or 0)}
+            for r in rows
+        ]
+
+    def get_import_batch_transactions(self, batch_id: int) -> list[dict[str, Any]]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT t.id, to_char(t.transaction_date, 'DD.MM.YYYY'), t.description,
+                           t.amount, t.statement_balance, t.account_code, t.prediction_source,
+                           t.status, s.source_type, s.source_key, s.group_name,
+                           s.display_name, s.counter_account_code
+                    FROM accounting_batch_transactions bt
+                    JOIN accounting_ledger_transactions t ON t.id = bt.transaction_id
+                    JOIN accounting_sources s ON s.id = t.source_id
+                    WHERE bt.batch_id = %s AND bt.was_new = TRUE
+                    ORDER BY s.id, t.transaction_date, t.id
+                    """,
+                    (batch_id,),
+                )
+                rows = cursor.fetchall()
+        return [
+            {"id": int(r[0]), "date": str(r[1]), "description": str(r[2]), "amount": r[3],
+             "balance": r[4], "account_code": str(r[5]) if r[5] else None,
+             "prediction_source": r[6], "status": str(r[7]), "source_type": str(r[8]),
+             "source_key": str(r[9]), "group_name": str(r[10]), "display_name": str(r[11]),
+             "counter_account_code": str(r[12])}
+            for r in rows
+        ]
+
+    def confirm_import_batch(self, batch_id: int, assignments: dict[int, str]) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT status FROM accounting_import_batches WHERE id = %s FOR UPDATE", (batch_id,))
+                batch = cursor.fetchone()
+                if batch is None:
+                    raise ValueError("Import non trovato.")
+                cursor.execute(
+                    """SELECT t.id FROM accounting_batch_transactions bt
+                       JOIN accounting_ledger_transactions t ON t.id = bt.transaction_id
+                       WHERE bt.batch_id = %s AND bt.was_new = TRUE""",
+                    (batch_id,),
+                )
+                transaction_ids = {int(r[0]) for r in cursor.fetchall()}
+                if transaction_ids != set(assignments):
+                    raise ValueError("Ogni nuova transazione deve avere un conto prima della conferma.")
+                for transaction_id, account_code in assignments.items():
+                    cursor.execute(
+                        """UPDATE accounting_ledger_transactions
+                           SET account_code = %s, status = 'confirmed', updated_at = now()
+                           WHERE id = %s""",
+                        (account_code, transaction_id),
+                    )
+                cursor.execute(
+                    """UPDATE accounting_import_batches
+                       SET status = 'confirmed', confirmed_at = COALESCE(confirmed_at, now()) WHERE id = %s""",
+                    (batch_id,),
+                )
+            connection.commit()
+
+    def list_confirmed_transactions(self, date_from: str, date_to: str) -> list[dict[str, Any]]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT to_char(t.transaction_date, 'DD.MM.YYYY'), t.description, t.amount,
+                           t.account_code, s.source_type, s.source_key, s.group_name,
+                           s.display_name, s.counter_account_code
+                    FROM accounting_ledger_transactions t
+                    JOIN accounting_sources s ON s.id = t.source_id
+                    WHERE t.status = 'confirmed'
+                      AND t.transaction_date BETWEEN %s::date AND %s::date
+                    ORDER BY s.group_name, s.display_name, t.transaction_date, t.id
+                    """,
+                    (date_from, date_to),
+                )
+                rows = cursor.fetchall()
+        return [
+            {"date": str(r[0]), "description": str(r[1]), "amount": r[2],
+             "account_code": str(r[3]), "source_type": str(r[4]), "source_key": str(r[5]),
+             "group_name": str(r[6]), "display_name": str(r[7]),
+             "counter_account_code": str(r[8])}
+            for r in rows
+        ]
+
     def list_accounts(self) -> list[AccountingAccount]:
         with get_db_connection() as connection:
             with connection.cursor() as cursor:

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import re
 import unicodedata
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
+from collections import Counter
 
 import pdfplumber
 
@@ -54,6 +56,12 @@ class AccountingRepository(Protocol):
         message: str | None,
     ) -> AccountingPredictionRule: ...
     def delete_prediction_rule(self, rule_id: int) -> None: ...
+    def list_persisted_source_transactions(self, source_type: str, source_key: str): ...
+    def persist_prediction_batch(self, *, filename: str, file_sha256: str, records: list[dict]): ...
+    def get_import_batch_transactions(self, batch_id: int): ...
+    def list_import_batches(self, *, status: str = "draft"): ...
+    def confirm_import_batch(self, batch_id: int, assignments: dict[int, str]) -> None: ...
+    def list_confirmed_transactions(self, date_from: str, date_to: str): ...
     def create_feedback(
         self,
         *,
@@ -72,7 +80,7 @@ BANK_PRESETS = {
         "delimiter": ";",
         "skip_start": 8,
         "skip_end": 3,
-        "mask": ["D:dd.mm.yyyy", "T", "A", "A", "X", "X"],
+        "mask": ["D:dd.mm.yyyy", "T", "A", "A", "X", "B"],
     },
 }
 
@@ -168,6 +176,11 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
         raise ValueError(f"Unsupported bank preset: {bank}")
 
     rows = list(csv.reader(io.StringIO(text), delimiter=preset["delimiter"], quotechar='"'))
+    source_key = ""
+    for row in rows[:8]:
+        if len(row) >= 2 and row[0].strip().casefold() == "account:":
+            source_key = row[1].strip().strip('"').strip("=").strip('"')
+            break
     skip_start = int(preset["skip_start"])
     skip_end = int(preset["skip_end"])
     data_rows = rows[skip_start : len(rows) - skip_end if skip_end else None]
@@ -179,6 +192,7 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
         date = ""
         description = ""
         amount = Decimal("0.00")
+        balance: Decimal | None = None
         for index, mask in enumerate(preset["mask"]):
             if index >= len(row):
                 continue
@@ -191,6 +205,8 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
                 amount += parse_accounting_amount(value)
             elif mask == "A-":
                 amount -= parse_accounting_amount(value)
+            elif mask == "B":
+                balance = parse_accounting_amount(value)
         if not date and not description:
             continue
         transactions.append(
@@ -199,6 +215,8 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
                 date=date,
                 description=description,
                 amount=amount.quantize(Decimal("0.01")),
+                source_key=source_key or bank,
+                balance=balance,
             )
         )
 
@@ -217,6 +235,7 @@ def parse_postfinance_credit_card_text(
     text: str,
     *,
     starting_row_index: int = 1,
+    source_key: str | None = None,
 ) -> list[ParsedBankTransaction]:
     """Parse transaction rows from extracted PostFinance credit-card text."""
     transactions: list[ParsedBankTransaction] = []
@@ -237,6 +256,7 @@ def parse_postfinance_credit_card_text(
                 # Card charges are printed positive; credits carry a minus sign.
                 # Invert them to preserve the bank CSV accounting convention.
                 amount=-statement_amount,
+                source_key=source_key,
             )
         )
     return transactions
@@ -253,10 +273,16 @@ def parse_postfinance_credit_card_pdf(content: bytes) -> list[ParsedBankTransact
             for page_number, page in enumerate(document.pages, start=1):
                 text = page.extract_text(x_tolerance=2, y_tolerance=3) or ""
                 page_texts.append(text)
+                card_match = re.search(
+                    r"(?:Transazioni|Totale) PostFinance Visa Business Card,.*?XXXX\s+(\d{4})",
+                    text,
+                )
+                source_key = card_match.group(1) if card_match else None
                 transactions.extend(
                     parse_postfinance_credit_card_text(
                         text,
                         starting_row_index=page_number * 10_000,
+                        source_key=source_key,
                     )
                 )
     except Exception as exc:
@@ -401,6 +427,136 @@ class AccountingPredictionService:
     def parse_and_predict_credit_card_pdf(self, content: bytes) -> list[PredictedBankTransaction]:
         transactions = parse_postfinance_credit_card_pdf(content)
         return self._predict_transactions(transactions)
+
+    def import_and_predict_bank_csv(self, content: bytes, bank: str, filename: str) -> dict:
+        predictions = self.parse_and_predict_bank_csv(content, bank)
+        return self._persist_predictions(filename, content, "bank", predictions)
+
+    def import_and_predict_credit_card_pdf(self, content: bytes, filename: str) -> dict:
+        predictions = self.parse_and_predict_credit_card_pdf(content)
+        return self._persist_predictions(filename, content, "credit_card", predictions)
+
+    def _persist_predictions(
+        self,
+        filename: str,
+        content: bytes,
+        source_type: str,
+        predictions: list[PredictedBankTransaction],
+    ) -> dict:
+        by_source: dict[str, list[PredictedBankTransaction]] = {}
+        for item in predictions:
+            source_key = item.source_key or ("postfinance" if source_type == "bank" else "unknown")
+            if source_type == "credit_card" and source_key == "unknown":
+                raise ValueError("Impossibile identificare la carta di credito di una transazione.")
+            by_source.setdefault(source_key, []).append(item)
+
+        identities: dict[int, str] = {}
+        occurrence_counts: Counter[tuple[str, str, str, str]] = Counter()
+        for source_key, items in by_source.items():
+            if source_type == "bank":
+                self._validate_bank_continuity(source_key, items)
+            for item in items:
+                if source_type == "bank":
+                    if item.balance is None:
+                        raise ValueError("Saldo PostFinance mancante su una transazione.")
+                    identity_raw = f"{source_key}|{item.date}|{item.balance:.2f}"
+                else:
+                    base = (source_key, item.date, item.description, f"{item.amount:.2f}")
+                    occurrence_counts[base] += 1
+                    identity_raw = "|".join(base) + f"|{occurrence_counts[base]}"
+                identities[id(item)] = hashlib.sha256(identity_raw.encode("utf-8")).hexdigest()
+
+        records = []
+        for item in predictions:
+            source_key = item.source_key or "postfinance"
+            is_card = source_type == "credit_card"
+            records.append({
+                "source_type": source_type,
+                "source_key": source_key,
+                "group_name": "Carte di credito" if is_card else "Conti bancari",
+                "display_name": f"Carta PostFinance {source_key}" if is_card else f"PostFinance {source_key}",
+                "counter_account_code": "2070" if is_card else "1025",
+                "identity_key": identities[id(item)],
+                "date": item.date,
+                "description": item.description,
+                "amount": item.amount,
+                "balance": item.balance,
+                "account_code": item.prediction.account_code,
+                "prediction_source": item.prediction.source,
+            })
+        metadata = self._repository.persist_prediction_batch(
+            filename=filename or "import",
+            file_sha256=hashlib.sha256(content).hexdigest(),
+            records=records,
+        )
+        metadata["transactions"] = self.load_import_batch(int(metadata["batch_id"]))
+        return metadata
+
+    def _validate_bank_continuity(
+        self,
+        source_key: str,
+        items: list[PredictedBankTransaction],
+    ) -> None:
+        for current, older in zip(items, items[1:]):
+            if current.balance is None or older.balance is None:
+                raise ValueError("Saldo PostFinance mancante: impossibile riconciliare il file.")
+            expected_older_balance = current.balance - current.amount
+            if expected_older_balance != older.balance:
+                raise ValueError(
+                    "Saldo PostFinance non riconciliato: dopo la transazione del "
+                    f"{current.date} atteso {expected_older_balance:.2f}, trovato {older.balance:.2f}."
+                )
+        existing = self._repository.list_persisted_source_transactions("bank", source_key)
+        if not existing:
+            return
+        existing_keys = {str(row["identity_key"]) for row in existing}
+        incoming_keys = {
+            hashlib.sha256(f"{source_key}|{item.date}|{item.balance:.2f}".encode("utf-8")).hexdigest()
+            for item in items if item.balance is not None
+        }
+        if existing_keys.isdisjoint(incoming_keys):
+            raise ValueError(
+                "Nessuna continuita' con i movimenti PostFinance gia' salvati: "
+                "l'importazione e' stata fermata. Includi almeno una transazione sovrapposta."
+            )
+
+    def list_import_batches(self) -> list[dict]:
+        return self._repository.list_import_batches(status="all")
+
+    def load_import_batch(self, batch_id: int) -> list[PredictedBankTransaction]:
+        accounts = {account.code: account for account in self._repository.list_all_accounts()}
+        rows = self._repository.get_import_batch_transactions(batch_id)
+        result = []
+        for row in rows:
+            account_code = row["account_code"]
+            account = accounts.get(account_code) if account_code else None
+            result.append(PredictedBankTransaction(
+                row_index=int(row["id"]),
+                date=row["date"],
+                description=row["description"],
+                amount=row["amount"],
+                prediction=AccountingPrediction(
+                    account_code=account_code,
+                    account_description=account.description if account else None,
+                    source=str(row["prediction_source"] or "review"),
+                    needs_review=not bool(account_code),
+                    message="Bozza persistente",
+                ),
+                source_key=str(row["source_key"]),
+                balance=row["balance"],
+                ledger_id=int(row["id"]),
+                counter_account_code=str(row["counter_account_code"]),
+            ))
+        return result
+
+    def confirm_import_batch(self, batch_id: int, assignments: dict[int, str]) -> None:
+        valid_accounts = {account.code for account in self._repository.list_accounts()}
+        if not assignments or any(code not in valid_accounts for code in assignments.values()):
+            raise ValueError("Ogni transazione deve avere un conto contabile valido.")
+        self._repository.confirm_import_batch(batch_id, assignments)
+
+    def list_confirmed_transactions(self, date_from: str, date_to: str):
+        return self._repository.list_confirmed_transactions(date_from, date_to)
 
     def _predict_transactions(
         self,
@@ -778,4 +934,6 @@ class AccountingPredictionService:
             description=transaction.description,
             amount=transaction.amount,
             prediction=prediction,
+            source_key=transaction.source_key,
+            balance=transaction.balance,
         )

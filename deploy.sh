@@ -18,6 +18,14 @@ git pull --ff-only origin main
 echo "[deploy] install/update dependencies in venv"
 "$VENV_DIR/bin/pip" install -r requirements.txt
 
+echo "[deploy] apply persistent accounting ledger schema"
+DATABASE_URL_VALUE="$(grep -E '^DATABASE_URL=' .env | cut -d= -f2-)"
+if [[ -z "$DATABASE_URL_VALUE" ]]; then
+    echo "[deploy] DATABASE_URL missing in .env"
+    exit 1
+fi
+psql "$DATABASE_URL_VALUE" -v ON_ERROR_STOP=1 -f sql/schema/014_accounting_persistent_ledger.sql
+
 echo "[deploy] restart service: $SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 

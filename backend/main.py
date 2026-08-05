@@ -7,7 +7,7 @@ At the moment it serves the Attendance module and its related APIs.
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import base64
 import csv
@@ -21,6 +21,7 @@ import secrets
 import tempfile
 import time
 import unicodedata
+import zipfile
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -759,6 +760,10 @@ def _accounting_prediction_to_json(transaction) -> dict:
         "date": transaction.date,
         "description": transaction.description,
         "amount": format(transaction.amount, "f"),
+        "ledger_id": transaction.ledger_id,
+        "source_key": transaction.source_key,
+        "balance": format(transaction.balance, "f") if transaction.balance is not None else None,
+        "counter_account_code": transaction.counter_account_code,
         "prediction": {
             "account_code": prediction.account_code,
             "account_description": prediction.account_description,
@@ -984,13 +989,17 @@ async def accounting_bank_parse_predict(
     bank: str = Form("postfinance"),
 ):
     try:
-        predictions = _accounting_service().parse_and_predict_bank_csv(await file.read(), bank)
+        result = _accounting_service().import_and_predict_bank_csv(
+            await file.read(), bank, file.filename or "postfinance.csv"
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    predictions = result.pop("transactions")
     review_count = sum(1 for item in predictions if item.prediction.needs_review)
     return {
+        **result,
         "filename": file.filename,
         "bank": bank,
         "count": len(predictions),
@@ -1002,19 +1011,94 @@ async def accounting_bank_parse_predict(
 @app.post("/api/utilities/accounting/credit-card/parse-predict")
 async def accounting_credit_card_parse_predict(file: UploadFile = File(...)):
     try:
-        predictions = _accounting_service().parse_and_predict_credit_card_pdf(await file.read())
+        result = _accounting_service().import_and_predict_credit_card_pdf(
+            await file.read(), file.filename or "carte-postfinance.pdf"
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    predictions = result.pop("transactions")
     review_count = sum(1 for item in predictions if item.prediction.needs_review)
     return {
+        **result,
         "filename": file.filename,
         "bank": "postfinance_credit_card",
         "count": len(predictions),
         "review_count": review_count,
         "transactions": [_accounting_prediction_to_json(item) for item in predictions],
     }
+
+
+@app.get("/api/utilities/accounting/import-batches")
+async def accounting_import_batches():
+    return {"batches": _accounting_service().list_import_batches()}
+
+
+@app.get("/api/utilities/accounting/import-batches/{batch_id}")
+async def accounting_import_batch(batch_id: int):
+    transactions = _accounting_service().load_import_batch(batch_id)
+    return {
+        "batch_id": batch_id,
+        "count": len(transactions),
+        "review_count": sum(1 for item in transactions if item.prediction.needs_review),
+        "transactions": [_accounting_prediction_to_json(item) for item in transactions],
+    }
+
+
+@app.post("/api/utilities/accounting/import-batches/{batch_id}/confirm")
+async def accounting_confirm_import_batch(batch_id: int, payload: dict = Body(...)):
+    raw_assignments = payload.get("assignments") or {}
+    try:
+        assignments = {int(key): str(value).strip() for key, value in raw_assignments.items()}
+        _accounting_service().confirm_import_batch(batch_id, assignments)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "batch_id": batch_id}
+
+
+@app.get("/api/utilities/accounting/ledger")
+async def accounting_ledger(date_from: str, date_to: str):
+    try:
+        rows = _accounting_service().list_confirmed_transactions(date_from, date_to)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Intervallo date non valido.") from exc
+    return {
+        "count": len(rows),
+        "transactions": [
+            {**row, "amount": format(row["amount"], "f")}
+            for row in rows
+        ],
+    }
+
+
+@app.get("/api/utilities/accounting/ledger/banana.zip")
+async def accounting_ledger_banana_zip(date_from: str, date_to: str):
+    rows = _accounting_service().list_confirmed_transactions(date_from, date_to)
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        grouped.setdefault((row["group_name"], row["display_name"]), []).append(row)
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for (_, display_name), source_rows in grouped.items():
+            lines = []
+            for row in source_rows:
+                description = str(row["description"]).replace('"', '""')
+                amount = row["amount"]
+                transaction_account = row["account_code"]
+                counter_account = row["counter_account_code"]
+                debit_account = counter_account if amount > 0 else transaction_account
+                credit_account = transaction_account if amount > 0 else counter_account
+                lines.append(
+                    f'{row["date"]}; ;"{description}";{debit_account};{credit_account};{amount:.2f}'
+                )
+            safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "-", display_name).strip("-").casefold()
+            archive.writestr(f"{safe_name or 'sorgente'}.csv", "\ufeff" + "\r\n".join(lines))
+    return Response(
+        content=archive_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="banana-{date_from}-{date_to}.zip"'},
+    )
 
 
 @app.post("/api/utilities/accounting/feedback")
