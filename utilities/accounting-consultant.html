@@ -137,6 +137,13 @@
             border: 1px solid var(--brand-border);
             font-size: 13px;
             font-weight: 800;
+            color: var(--brand-ink);
+        }
+        button.source-stat { cursor: pointer; }
+        button.source-stat.active {
+            border-color: var(--brand-pnl-blue);
+            background: #eaf4fb;
+            color: var(--brand-pnl-blue);
         }
         .stat {
             border: 1px solid var(--brand-border);
@@ -564,6 +571,7 @@
         let predictionRules = [];
         let currentRows = [];
         let activeResultFilter = "all";
+        let activeSourceFilter = "all";
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -771,7 +779,7 @@
 
         function renderStats(payload) {
             stats.innerHTML = `
-                <button class="stat ${activeResultFilter === "all" ? "active" : ""}" type="button" data-result-filter="all">Righe ${payload.count}</button>
+                <button class="stat ${activeResultFilter === "all" && activeSourceFilter === "all" ? "active" : ""}" type="button" data-result-filter="all">Righe ${payload.count}</button>
                 <button class="stat ${activeResultFilter === "review" ? "active" : ""}" type="button" data-result-filter="review">Da revisionare ${payload.review_count}</button>
                 <span class="stat">Conti caricati ${accounts.length}</span>
                 <button class="stat" type="button" data-export-results>Export CSV</button>
@@ -781,27 +789,29 @@
 
         function predictionSourceGroup(source) {
             const groups = {
-                code_hint: "Code hint",
-                code_hint_unknown: "Code hint sconosciuto",
-                feedback_override: "Feedback",
-                feedback_override_amount: "Feedback",
-                configured_rule: "Regola deterministica",
-                historical_example: "Training",
-                historical_ambiguous: "Training ambiguo",
-                review: "Review",
+                code_hint: { key: "code_hint", label: "Code hint" },
+                code_hint_unknown: { key: "code_hint_unknown", label: "Code hint sconosciuto" },
+                feedback_override: { key: "feedback", label: "Feedback" },
+                feedback_override_amount: { key: "feedback", label: "Feedback" },
+                configured_rule: { key: "configured_rule", label: "Regola deterministica" },
+                historical_example: { key: "training", label: "Training" },
+                historical_ambiguous: { key: "training_ambiguous", label: "Training ambiguo" },
+                review: { key: "review", label: "Review" },
             };
-            return groups[source] || source || "Review";
+            return groups[source] || { key: source || "review", label: source || "Review" };
         }
 
         function renderSourceStats() {
             const counts = new Map();
             currentRows.forEach(row => {
-                const label = predictionSourceGroup(row.prediction?.source);
-                counts.set(label, (counts.get(label) || 0) + 1);
+                const group = predictionSourceGroup(row.prediction?.source);
+                const current = counts.get(group.key) || { label: group.label, count: 0 };
+                current.count += 1;
+                counts.set(group.key, current);
             });
             const items = [...counts.entries()]
-                .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-                .map(([label, count]) => `<span class="source-stat">${escapeHtml(label)}: ${count}</span>`)
+                .sort((left, right) => right[1].count - left[1].count || left[1].label.localeCompare(right[1].label))
+                .map(([key, item]) => `<button class="source-stat ${activeSourceFilter === key ? "active" : ""}" type="button" data-source-filter="${escapeHtml(key)}">${escapeHtml(item.label)}: ${item.count}</button>`)
                 .join("");
             sourceStats.innerHTML = `<span class="source-stats-title">Risposte per tipo</span>${items || '<span class="muted">Nessuna predizione</span>'}`;
         }
@@ -812,6 +822,9 @@
                 .filter(item => {
                     if (activeResultFilter === "review") {
                         return Boolean(item.row.prediction?.needs_review);
+                    }
+                    if (activeSourceFilter !== "all") {
+                        return predictionSourceGroup(item.row.prediction?.source).key === activeSourceFilter;
                     }
                     return true;
                 });
@@ -853,6 +866,7 @@
         function renderRows(payload) {
             currentRows = payload.transactions || [];
             activeResultFilter = "all";
+            activeSourceFilter = "all";
             renderStats(payload);
             renderResultTable();
             resultsPanel.hidden = false;
@@ -867,7 +881,8 @@
                     <td>${renderPrediction(row)}</td>
                     <td>
                         <div class="feedback-row">
-                            <select data-index="${index}">${accountOptions(row.prediction?.account_code)}</select>
+                            <select data-index="${index}">${accountOptions(row.one_time_account_code ?? row.prediction?.account_code)}</select>
+                            <div class="muted">La selezione vale per questo export; i pulsanti sotto la salvano come feedback.</div>
                             <button class="secondary" type="button" data-feedback="${index}" data-amount="true">Salva con importo</button>
                             <button class="secondary" type="button" data-feedback="${index}" data-amount="false">Salva solo testo</button>
                         </div>
@@ -882,7 +897,7 @@
         }
 
         function exportVisibleRows() {
-            const rows = visibleRowsWithIndex().map(item => item.row);
+            const rows = visibleRowsWithIndex();
             if (!rows.length) {
                 alert("Nessuna riga da esportare.");
                 return;
@@ -900,25 +915,30 @@
             ];
             const csvRows = [
                 header.map(csvCell).join(";"),
-                ...rows.map(row => {
+                ...rows.map(({ row }) => {
                     const prediction = row.prediction || {};
+                    const oneTimeAccount = row.one_time_account_code
+                        ? accounts.find(account => account.code === row.one_time_account_code)
+                        : null;
                     return [
                         row.date,
                         row.description,
                         row.amount,
-                        prediction.account_code || "",
-                        prediction.account_description || "",
-                        prediction.source || "",
+                        oneTimeAccount?.code || prediction.account_code || "",
+                        oneTimeAccount?.description || prediction.account_description || "",
+                        oneTimeAccount ? "manual_one_time" : prediction.source || "",
                         prediction.confidence || "",
-                        prediction.needs_review ? "si" : "no",
-                        prediction.message || "",
+                        oneTimeAccount ? "no" : prediction.needs_review ? "si" : "no",
+                        oneTimeAccount ? "Correzione una tantum non salvata come feedback." : prediction.message || "",
                     ].map(csvCell).join(";");
                 }),
             ];
             const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            const suffix = activeResultFilter === "review" ? "da-revisionare" : "tutte";
+            const suffix = activeResultFilter === "review"
+                ? "da-revisionare"
+                : activeSourceFilter !== "all" ? activeSourceFilter : "tutte";
             link.href = url;
             link.download = `consulente-contabile-${suffix}.csv`;
             document.body.appendChild(link);
@@ -1204,6 +1224,7 @@
             const filterButton = event.target.closest("button[data-result-filter]");
             if (filterButton) {
                 activeResultFilter = filterButton.dataset.resultFilter;
+                activeSourceFilter = "all";
                 renderStats({
                     count: currentRows.length,
                     review_count: currentRows.filter(row => row.prediction?.needs_review).length,
@@ -1214,6 +1235,27 @@
             if (event.target.closest("button[data-export-results]")) {
                 exportVisibleRows();
             }
+        });
+        sourceStats.addEventListener("click", event => {
+            const filterButton = event.target.closest("button[data-source-filter]");
+            if (!filterButton) return;
+            activeSourceFilter = filterButton.dataset.sourceFilter;
+            activeResultFilter = "all";
+            renderStats({
+                count: currentRows.length,
+                review_count: currentRows.filter(row => row.prediction?.needs_review).length,
+            });
+            renderResultTable();
+        });
+        resultsBody.addEventListener("change", event => {
+            const select = event.target.closest("select[data-index]");
+            if (!select) return;
+            const row = currentRows[Number(select.dataset.index)];
+            if (!row) return;
+            const predictedAccount = row.prediction?.account_code || "";
+            row.one_time_account_code = select.value && select.value !== predictedAccount
+                ? select.value
+                : null;
         });
         resultsBody.addEventListener("click", event => {
             const button = event.target.closest("button[data-feedback]");
