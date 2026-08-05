@@ -369,20 +369,20 @@
     <main class="container">
         <section class="hero">
             <h1>Consulente contabile</h1>
-            <p>MVP isolato: legge un CSV bancario, applica code hint, feedback persistiti ed esempi storici simili. I casi incerti restano da revisionare.</p>
+            <p>Legge CSV bancari e resoconti PDF delle carte PostFinance, applica code hint, feedback persistiti, regole ed esempi storici. I casi incerti restano da revisionare.</p>
         </section>
 
         <section class="panel">
             <div class="form-grid">
                 <div>
-                    <label for="bank">Banca</label>
+                    <label for="bank">Sorgente</label>
                     <select id="bank">
-                        <option value="postfinance">PostFinance</option>
-                        <option value="raiffeisen">Raiffeisen</option>
+                        <option value="postfinance">PostFinance conto (CSV)</option>
+                        <option value="postfinance_credit_card">PostFinance carte di credito (PDF)</option>
                     </select>
                 </div>
                 <div>
-                    <label for="fileInput">CSV bancario</label>
+                    <label id="fileInputLabel" for="fileInput">CSV bancario</label>
                     <input id="fileInput" type="file" accept=".csv,text/csv">
                 </div>
                 <button id="parseButton" type="button">Leggi e predici</button>
@@ -568,6 +568,7 @@
     <script>
         const bank = document.getElementById("bank");
         const fileInput = document.getElementById("fileInput");
+        const fileInputLabel = document.getElementById("fileInputLabel");
         const parseButton = document.getElementById("parseButton");
         const message = document.getElementById("message");
         const resultsPanel = document.getElementById("resultsPanel");
@@ -1052,7 +1053,7 @@
             message.textContent = "";
             message.className = "message";
             if (!fileInput.files[0]) {
-                message.textContent = "Carica un CSV.";
+                message.textContent = bank.value === "postfinance_credit_card" ? "Carica un PDF." : "Carica un CSV.";
                 message.classList.add("error");
                 return;
             }
@@ -1062,8 +1063,12 @@
                 if (!accounts.length) await loadAccounts();
                 const formData = new FormData();
                 formData.append("file", fileInput.files[0]);
-                formData.append("bank", bank.value);
-                const response = await fetch("/api/utilities/accounting/bank/parse-predict", {
+                const isCreditCardPdf = bank.value === "postfinance_credit_card";
+                if (!isCreditCardPdf) formData.append("bank", bank.value);
+                const endpoint = isCreditCardPdf
+                    ? "/api/utilities/accounting/credit-card/parse-predict"
+                    : "/api/utilities/accounting/bank/parse-predict";
+                const response = await fetch(endpoint, {
                     method: "POST",
                     body: formData,
                 });
@@ -1313,6 +1318,14 @@
         }
 
         parseButton.addEventListener("click", parseAndPredict);
+        bank.addEventListener("change", () => {
+            const isCreditCardPdf = bank.value === "postfinance_credit_card";
+            fileInputLabel.textContent = isCreditCardPdf ? "Resoconto carta PDF" : "CSV bancario";
+            fileInput.accept = isCreditCardPdf ? ".pdf,application/pdf" : ".csv,text/csv";
+            fileInput.value = "";
+            message.textContent = "";
+            message.className = "message";
+        });
         exportBananaButton.addEventListener("click", exportForBanana);
         repeatPredictionButton.addEventListener("click", parseAndPredict);
         openRulesButton.addEventListener("click", () => rulesDialog.showModal());

@@ -74,12 +74,6 @@ BANK_PRESETS = {
         "skip_end": 3,
         "mask": ["D:dd.mm.yyyy", "T", "A", "A", "X", "X"],
     },
-    "raiffeisen": {
-        "delimiter": ";",
-        "skip_start": 1,
-        "skip_end": 0,
-        "mask": ["X", "D:yyyy-mm-dd", "T", "A", "X", "X"],
-    },
 }
 
 _GENERIC_TOKENS = {
@@ -402,6 +396,16 @@ class AccountingPredictionService:
     def parse_and_predict_bank_csv(self, content: bytes, bank: str) -> list[PredictedBankTransaction]:
         text = decode_upload(content)
         transactions = parse_bank_csv(text, bank)
+        return self._predict_transactions(transactions)
+
+    def parse_and_predict_credit_card_pdf(self, content: bytes) -> list[PredictedBankTransaction]:
+        transactions = parse_postfinance_credit_card_pdf(content)
+        return self._predict_transactions(transactions)
+
+    def _predict_transactions(
+        self,
+        transactions: list[ParsedBankTransaction],
+    ) -> list[PredictedBankTransaction]:
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
         prediction_rules = self._list_active_prediction_rules()

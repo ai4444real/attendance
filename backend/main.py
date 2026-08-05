@@ -999,6 +999,24 @@ async def accounting_bank_parse_predict(
     }
 
 
+@app.post("/api/utilities/accounting/credit-card/parse-predict")
+async def accounting_credit_card_parse_predict(file: UploadFile = File(...)):
+    try:
+        predictions = _accounting_service().parse_and_predict_credit_card_pdf(await file.read())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    review_count = sum(1 for item in predictions if item.prediction.needs_review)
+    return {
+        "filename": file.filename,
+        "bank": "postfinance_credit_card",
+        "count": len(predictions),
+        "review_count": review_count,
+        "transactions": [_accounting_prediction_to_json(item) for item in predictions],
+    }
+
+
 @app.post("/api/utilities/accounting/feedback")
 async def accounting_feedback(payload: dict = Body(...)):
     raw_text = str(payload.get("raw_text") or "").strip()
