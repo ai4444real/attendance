@@ -224,6 +224,56 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
     return transactions
 
 
+_PAYROLL_ACCOUNT_MAP = {
+    "10220": ("2062", "Stipendio netto"),
+    "22700": ("5720", "LPP"),
+    "22710": ("5700", "AVS/AD"),
+    "22730": ("5730", "LAINF"),
+    "22790": ("5790", "Imposte alla fonte"),
+    "50000": ("5000", "Stipendio lordo"),
+}
+
+
+def parse_fibu_payroll_csv(text: str) -> list[ParsedBankTransaction]:
+    reader = csv.DictReader(io.StringIO(text), delimiter=";", quotechar='"')
+    required = {"Datum", "Konto", "Soll", "Haben"}
+    if not reader.fieldnames or not required.issubset(reader.fieldnames):
+        raise ValueError("Formato FIBU stipendi non riconosciuto.")
+    transactions: list[ParsedBankTransaction] = []
+    for row_index, row in enumerate(reader, start=2):
+        source_account = str(row.get("Konto") or "").strip()
+        mapping = _PAYROLL_ACCOUNT_MAP.get(source_account)
+        if mapping is None:
+            raise ValueError(f"Conto FIBU stipendi non mappato: {source_account or '-'}.")
+        debit = parse_accounting_amount(row.get("Soll")) if row.get("Soll") else Decimal("0.00")
+        credit = parse_accounting_amount(row.get("Haben")) if row.get("Haben") else Decimal("0.00")
+        if (debit > 0) == (credit > 0):
+            raise ValueError(f"Riga FIBU {row_index}: valorizzare esattamente uno tra Soll e Haben.")
+        try:
+            date = datetime.strptime(str(row.get("Datum") or ""), "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError as exc:
+            raise ValueError(f"Data FIBU non valida alla riga {row_index}.") from exc
+        target_account, description = mapping
+        transactions.append(ParsedBankTransaction(
+            row_index=row_index,
+            date=date,
+            description=description,
+            amount=debit if debit > 0 else credit,
+            source_key="payroll",
+            translated_account_code=target_account,
+            entry_side="debit" if debit > 0 else "credit",
+        ))
+    if not transactions:
+        raise ValueError("Nessuna registrazione trovata nel file FIBU stipendi.")
+    debit_total = sum((item.amount for item in transactions if item.entry_side == "debit"), Decimal("0"))
+    credit_total = sum((item.amount for item in transactions if item.entry_side == "credit"), Decimal("0"))
+    if debit_total != credit_total:
+        raise ValueError(
+            f"Scrittura stipendi non bilanciata: Dare {debit_total:.2f}, Avere {credit_total:.2f}."
+        )
+    return transactions
+
+
 _CREDIT_CARD_TRANSACTION_RE = re.compile(
     r"^(?P<booking_date>\d{2}\.\d{2}\.\d{2})\s+"
     r"(?P<purchase_date>\d{2}\.\d{2}\.\d{2})\s+"
@@ -429,6 +479,25 @@ class AccountingPredictionService:
         transactions = parse_postfinance_credit_card_pdf(content)
         return self._predict_transactions(transactions)
 
+    def parse_payroll_csv(self, content: bytes) -> list[PredictedBankTransaction]:
+        transactions = parse_fibu_payroll_csv(decode_upload(content))
+        accounts = {account.code: account for account in self._repository.list_accounts()}
+        result = []
+        for transaction in transactions:
+            account_code = transaction.translated_account_code or ""
+            account = accounts.get(account_code)
+            if account is None:
+                raise ValueError(f"Conto contabile stipendi inesistente o disattivato: {account_code}.")
+            result.append(self._with_prediction(transaction, AccountingPrediction(
+                account_code=account_code,
+                account_description=account.description,
+                source="fibu_translation",
+                confidence="alta",
+                needs_review=False,
+                message="Traduzione deterministica FIBU stipendi.",
+            )))
+        return result
+
     def import_and_predict_bank_csv(self, content: bytes, bank: str, filename: str) -> dict:
         predictions = self.parse_and_predict_bank_csv(content, bank)
         return self._persist_predictions(filename, content, "bank", predictions)
@@ -436,6 +505,9 @@ class AccountingPredictionService:
     def import_and_predict_credit_card_pdf(self, content: bytes, filename: str) -> dict:
         predictions = self.parse_and_predict_credit_card_pdf(content)
         return self._persist_predictions(filename, content, "credit_card", predictions)
+
+    def import_payroll_csv(self, content: bytes, filename: str) -> dict:
+        return self._persist_predictions(filename, content, "payroll", self.parse_payroll_csv(content))
 
     def _persist_predictions(
         self,
@@ -461,6 +533,10 @@ class AccountingPredictionService:
                     if item.balance is None:
                         raise ValueError("Saldo PostFinance mancante su una transazione.")
                     identity_raw = f"{source_key}|{item.date}|{item.balance:.2f}"
+                elif source_type == "payroll":
+                    identity_raw = (
+                        f"{source_key}|{item.date}|{item.prediction.account_code}|{item.entry_side}"
+                    )
                 else:
                     base = (source_key, item.date, item.description, f"{item.amount:.2f}")
                     occurrence_counts[base] += 1
@@ -471,12 +547,13 @@ class AccountingPredictionService:
         for item in predictions:
             source_key = item.source_key or "postfinance"
             is_card = source_type == "credit_card"
+            is_payroll = source_type == "payroll"
             records.append({
                 "source_type": source_type,
                 "source_key": source_key,
-                "group_name": "Carte di credito" if is_card else "Conti bancari",
-                "display_name": f"Carta PostFinance {source_key}" if is_card else f"PostFinance {source_key}",
-                "counter_account_code": "2070" if is_card else "1025",
+                "group_name": "Stipendi" if is_payroll else "Carte di credito" if is_card else "Conti bancari",
+                "display_name": "Stipendi FIBU" if is_payroll else f"Carta PostFinance {source_key}" if is_card else f"PostFinance {source_key}",
+                "counter_account_code": None if is_payroll else "2070" if is_card else "1025",
                 "identity_key": identities[id(item)],
                 "date": item.date,
                 "description": item.description,
@@ -484,6 +561,7 @@ class AccountingPredictionService:
                 "balance": item.balance,
                 "account_code": item.prediction.account_code,
                 "prediction_source": item.prediction.source,
+                "entry_side": item.entry_side,
             })
         metadata = self._repository.persist_prediction_batch(
             filename=filename or "import",
@@ -546,7 +624,12 @@ class AccountingPredictionService:
                 source_key=str(row["source_key"]),
                 balance=row["balance"],
                 ledger_id=int(row["id"]),
-                counter_account_code=str(row["counter_account_code"]),
+                counter_account_code=(
+                    str(row["counter_account_code"])
+                    if row["counter_account_code"] is not None
+                    else None
+                ),
+                entry_side=row["entry_side"],
             ))
         return result
 
@@ -942,4 +1025,5 @@ class AccountingPredictionService:
             prediction=prediction,
             source_key=transaction.source_key,
             balance=transaction.balance,
+            entry_side=transaction.entry_side,
         )

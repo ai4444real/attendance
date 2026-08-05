@@ -383,6 +383,7 @@
                     <select id="bank">
                         <option value="postfinance">PostFinance conto (CSV)</option>
                         <option value="postfinance_credit_card">PostFinance carte di credito (PDF)</option>
+                        <option value="payroll">Stipendi FIBU (CSV)</option>
                     </select>
                 </div>
                 <div>
@@ -929,6 +930,7 @@
                 feedback_override: { key: "feedback", label: "Feedback" },
                 feedback_override_amount: { key: "feedback", label: "Feedback" },
                 configured_rule: { key: "configured_rule", label: "Regola deterministica" },
+                fibu_translation: { key: "payroll", label: "Traduzione stipendi" },
                 historical_example: { key: "training", label: "Training" },
                 historical_ambiguous: { key: "training_ambiguous", label: "Training ambiguo" },
                 review: { key: "review", label: "Review" },
@@ -1113,7 +1115,7 @@
                 alert("Nessuna riga da esportare.");
                 return;
             }
-            if (!bankAccount) {
+            if (!bankAccount && rows.some(row => !row.entry_side)) {
                 alert("Scegli il conto banca per Banana.");
                 return;
             }
@@ -1131,8 +1133,12 @@
                 const transactionAccount = effectiveAccountCode(row);
                 const numericAmount = Number(row.amount);
                 const isCredit = numericAmount > 0;
-                const debitAccount = isCredit ? bankAccount : transactionAccount;
-                const creditAccount = isCredit ? transactionAccount : bankAccount;
+                const debitAccount = row.entry_side
+                    ? (row.entry_side === "debit" ? transactionAccount : "")
+                    : (isCredit ? bankAccount : transactionAccount);
+                const creditAccount = row.entry_side
+                    ? (row.entry_side === "credit" ? transactionAccount : "")
+                    : (isCredit ? transactionAccount : bankAccount);
                 return [
                     row.date,
                     " ",
@@ -1163,9 +1169,11 @@
                 const formData = new FormData();
                 formData.append("file", fileInput.files[0]);
                 const isCreditCardPdf = bank.value === "postfinance_credit_card";
-                if (!isCreditCardPdf) formData.append("bank", bank.value);
+                const isPayroll = bank.value === "payroll";
+                if (!isCreditCardPdf && !isPayroll) formData.append("bank", bank.value);
                 const endpoint = isCreditCardPdf
                     ? "/api/utilities/accounting/credit-card/parse-predict"
+                    : isPayroll ? "/api/utilities/accounting/payroll/import"
                     : "/api/utilities/accounting/bank/parse-predict";
                 const response = await fetch(endpoint, {
                     method: "POST",
@@ -1486,12 +1494,13 @@
         parseButton.addEventListener("click", parseAndPredict);
         bank.addEventListener("change", () => {
             const isCreditCardPdf = bank.value === "postfinance_credit_card";
-            fileInputLabel.textContent = isCreditCardPdf ? "Resoconto carta PDF" : "CSV bancario";
+            const isPayroll = bank.value === "payroll";
+            fileInputLabel.textContent = isCreditCardPdf ? "Resoconto carta PDF" : isPayroll ? "Export stipendi FIBU" : "CSV bancario";
             fileInput.accept = isCreditCardPdf ? ".pdf,application/pdf" : ".csv,text/csv";
             fileInput.value = "";
             message.textContent = "";
             message.className = "message";
-            bananaBankAccount.value = isCreditCardPdf ? "2070" : "1025";
+            bananaBankAccount.value = isCreditCardPdf ? "2070" : isPayroll ? "" : "1025";
         });
         exportBananaButton.addEventListener("click", exportForBanana);
         loadDraftButton.addEventListener("click", () => loadDraftBatch().catch(error => alert(error.message || String(error))));

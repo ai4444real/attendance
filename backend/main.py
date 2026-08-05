@@ -764,6 +764,7 @@ def _accounting_prediction_to_json(transaction) -> dict:
         "source_key": transaction.source_key,
         "balance": format(transaction.balance, "f") if transaction.balance is not None else None,
         "counter_account_code": transaction.counter_account_code,
+        "entry_side": transaction.entry_side,
         "prediction": {
             "account_code": prediction.account_code,
             "account_description": prediction.account_description,
@@ -1030,6 +1031,25 @@ async def accounting_credit_card_parse_predict(file: UploadFile = File(...)):
     }
 
 
+@app.post("/api/utilities/accounting/payroll/import")
+async def accounting_payroll_import(file: UploadFile = File(...)):
+    try:
+        result = _accounting_service().import_payroll_csv(
+            await file.read(), file.filename or "stipendi-fibu.csv"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    predictions = result.pop("transactions")
+    return {
+        **result,
+        "filename": file.filename,
+        "bank": "payroll",
+        "count": len(predictions),
+        "review_count": 0,
+        "transactions": [_accounting_prediction_to_json(item) for item in predictions],
+    }
+
+
 @app.get("/api/utilities/accounting/import-batches")
 async def accounting_import_batches():
     return {"batches": _accounting_service().list_import_batches()}
@@ -1097,8 +1117,12 @@ async def accounting_ledger_banana_zip(date_from: str, date_to: str):
                 banana_amount = abs(amount)
                 transaction_account = row["account_code"]
                 counter_account = row["counter_account_code"]
-                debit_account = counter_account if amount > 0 else transaction_account
-                credit_account = transaction_account if amount > 0 else counter_account
+                if row.get("entry_side"):
+                    debit_account = transaction_account if row["entry_side"] == "debit" else ""
+                    credit_account = transaction_account if row["entry_side"] == "credit" else ""
+                else:
+                    debit_account = counter_account if amount > 0 else transaction_account
+                    credit_account = transaction_account if amount > 0 else counter_account
                 lines.append(
                     f'{row["date"]}; ;"{description}";{debit_account};{credit_account};{banana_amount:.2f}'
                 )

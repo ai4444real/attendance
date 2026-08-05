@@ -66,6 +66,8 @@ class ParsedBankTransaction:
     amount: Decimal
     source_key: str | None = None
     balance: Decimal | None = None
+    translated_account_code: str | None = None
+    entry_side: str | None = None
 
 
 @dataclass(frozen=True)
@@ -91,3 +93,4 @@ class PredictedBankTransaction:
     balance: Decimal | None = None
     ledger_id: int | None = None
     counter_account_code: str | None = None
+    entry_side: str | None = None

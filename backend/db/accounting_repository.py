@@ -160,15 +160,16 @@ class PostgresAccountingRepository:
                             INSERT INTO accounting_ledger_transactions (
                                 source_id, identity_key, transaction_date, description,
                                 amount, statement_balance, account_code, prediction_source,
-                                first_batch_id
+                                first_batch_id, entry_side
                             )
-                            VALUES (%s, %s, to_date(%s, 'DD.MM.YYYY'), %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, to_date(%s, 'DD.MM.YYYY'), %s, %s, %s, %s, %s, %s, %s)
                             RETURNING id
                             """,
                             (
                                 source_id, record["identity_key"], record["date"],
                                 record["description"], record["amount"], record["balance"],
                                 record["account_code"], record["prediction_source"], batch_id,
+                                record.get("entry_side"),
                             ),
                         )
                         transaction_id = int(cursor.fetchone()[0])
@@ -222,7 +223,7 @@ class PostgresAccountingRepository:
                     SELECT t.id, to_char(t.transaction_date, 'DD.MM.YYYY'), t.description,
                            t.amount, t.statement_balance, t.account_code, t.prediction_source,
                            t.status, s.source_type, s.source_key, s.group_name,
-                           s.display_name, s.counter_account_code
+                           s.display_name, s.counter_account_code, t.entry_side
                     FROM accounting_batch_transactions bt
                     JOIN accounting_ledger_transactions t ON t.id = bt.transaction_id
                     JOIN accounting_sources s ON s.id = t.source_id
@@ -237,7 +238,7 @@ class PostgresAccountingRepository:
              "balance": r[4], "account_code": str(r[5]) if r[5] else None,
              "prediction_source": r[6], "status": str(r[7]), "source_type": str(r[8]),
              "source_key": str(r[9]), "group_name": str(r[10]), "display_name": str(r[11]),
-             "counter_account_code": str(r[12])}
+             "counter_account_code": str(r[12]) if r[12] else None, "entry_side": r[13]}
             for r in rows
         ]
 
@@ -308,7 +309,7 @@ class PostgresAccountingRepository:
                     """
                     SELECT to_char(t.transaction_date, 'DD.MM.YYYY'), t.description, t.amount,
                            t.account_code, s.source_type, s.source_key, s.group_name,
-                           s.display_name, s.counter_account_code
+                           s.display_name, s.counter_account_code, t.entry_side
                     FROM accounting_ledger_transactions t
                     JOIN accounting_sources s ON s.id = t.source_id
                     WHERE t.status = 'confirmed'
@@ -322,7 +323,7 @@ class PostgresAccountingRepository:
             {"date": str(r[0]), "description": str(r[1]), "amount": r[2],
              "account_code": str(r[3]), "source_type": str(r[4]), "source_key": str(r[5]),
              "group_name": str(r[6]), "display_name": str(r[7]),
-             "counter_account_code": str(r[8])}
+             "counter_account_code": str(r[8]) if r[8] else None, "entry_side": r[9]}
             for r in rows
         ]
 
