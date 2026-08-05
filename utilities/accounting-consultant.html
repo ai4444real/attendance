@@ -1129,7 +1129,8 @@
             }
             const bananaRows = rows.map(row => {
                 const transactionAccount = effectiveAccountCode(row);
-                const isCredit = Number(row.amount) > 0;
+                const numericAmount = Number(row.amount);
+                const isCredit = numericAmount > 0;
                 const debitAccount = isCredit ? bankAccount : transactionAccount;
                 const creditAccount = isCredit ? transactionAccount : bankAccount;
                 return [
@@ -1138,7 +1139,7 @@
                     csvCell(row.description),
                     debitAccount,
                     creditAccount,
-                    row.amount,
+                    Math.abs(numericAmount).toFixed(2),
                 ].join(";");
             });
             const suffix = activeResultFilter === "review"

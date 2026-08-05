@@ -1094,12 +1094,13 @@ async def accounting_ledger_banana_zip(date_from: str, date_to: str):
             for row in source_rows:
                 description = str(row["description"]).replace('"', '""')
                 amount = row["amount"]
+                banana_amount = abs(amount)
                 transaction_account = row["account_code"]
                 counter_account = row["counter_account_code"]
                 debit_account = counter_account if amount > 0 else transaction_account
                 credit_account = transaction_account if amount > 0 else counter_account
                 lines.append(
-                    f'{row["date"]}; ;"{description}";{debit_account};{credit_account};{amount:.2f}'
+                    f'{row["date"]}; ;"{description}";{debit_account};{credit_account};{banana_amount:.2f}'
                 )
             safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "-", display_name).strip("-").casefold()
             archive.writestr(f"{safe_name or 'sorgente'}.csv", "\ufeff" + "\r\n".join(lines))
