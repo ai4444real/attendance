@@ -124,8 +124,27 @@
             align-items: end;
             flex-wrap: wrap;
             margin-bottom: 18px;
+            position: sticky;
+            top: 76px;
+            z-index: 15;
+            padding: 12px;
+            border: 1px solid var(--brand-border);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.97);
+            box-shadow: 0 8px 20px rgba(16, 42, 67, 0.10);
         }
         .banana-tools > div { min-width: 280px; }
+        dialog.rules-dialog {
+            width: min(1400px, calc(100% - 32px));
+            max-height: calc(100vh - 32px);
+            padding: 0;
+            border: 0;
+            border-radius: 18px;
+            background: transparent;
+        }
+        dialog.rules-dialog::backdrop { background: rgba(16, 42, 67, 0.58); }
+        .rules-dialog-panel { margin: 0; max-height: calc(100vh - 32px); overflow: auto; }
+        .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
         .source-stats {
             display: flex;
             gap: 10px;
@@ -378,6 +397,8 @@
                     <select id="bananaBankAccount"></select>
                 </div>
                 <button id="exportBananaButton" type="button">Export for Banana</button>
+                <button id="openRulesButton" class="secondary" type="button">Gestisci regole</button>
+                <button id="repeatPredictionButton" class="secondary" type="button">Ripeti predizione</button>
             </div>
             <div id="stats" class="stats"></div>
             <div id="sourceStats" class="source-stats"></div>
@@ -397,8 +418,12 @@
             </div>
         </section>
 
-        <section class="panel">
-            <h2>Regole deterministiche</h2>
+        <dialog id="rulesDialog" class="rules-dialog">
+        <section class="panel rules-dialog-panel">
+            <div class="dialog-heading">
+                <h2>Regole deterministiche</h2>
+                <button id="closeRulesButton" class="secondary" type="button">Chiudi</button>
+            </div>
             <p class="muted">Il motore le usa dopo code hint e feedback, prima degli esempi storici.</p>
             <input id="predictionRuleFilter" class="filter-input" type="text" placeholder="Filtra regole...">
             <input id="predictionRuleId" type="hidden">
@@ -472,6 +497,7 @@
                 </table>
             </div>
         </section>
+        </dialog>
 
         <section class="panel">
             <h2>Feedback</h2>
@@ -550,6 +576,10 @@
         const sourceStats = document.getElementById("sourceStats");
         const bananaBankAccount = document.getElementById("bananaBankAccount");
         const exportBananaButton = document.getElementById("exportBananaButton");
+        const rulesDialog = document.getElementById("rulesDialog");
+        const openRulesButton = document.getElementById("openRulesButton");
+        const closeRulesButton = document.getElementById("closeRulesButton");
+        const repeatPredictionButton = document.getElementById("repeatPredictionButton");
         const codeHintFilter = document.getElementById("codeHintFilter");
         const codeHintCode = document.getElementById("codeHintCode");
         const codeHintAccount = document.getElementById("codeHintAccount");
@@ -919,8 +949,11 @@
             return row.one_time_account_code || row.prediction?.account_code || "";
         }
 
-        function downloadCsv(content, filename) {
-            const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+        function downloadCsv(content, filename, includeUtf8Bom = false) {
+            const blob = new Blob(
+                [includeUtf8Bom ? "\ufeff" : "", content],
+                { type: "text/csv;charset=utf-8" },
+            );
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -1012,7 +1045,7 @@
             const suffix = activeResultFilter === "review"
                 ? "da-revisionare"
                 : activeSourceFilter !== "all" ? activeSourceFilter : "tutte";
-            downloadCsv(bananaRows.join("\n"), `banana-${suffix}.csv`);
+            downloadCsv(bananaRows.join("\r\n"), `banana-${suffix}.csv`, true);
         }
 
         async function parseAndPredict() {
@@ -1281,6 +1314,12 @@
 
         parseButton.addEventListener("click", parseAndPredict);
         exportBananaButton.addEventListener("click", exportForBanana);
+        repeatPredictionButton.addEventListener("click", parseAndPredict);
+        openRulesButton.addEventListener("click", () => rulesDialog.showModal());
+        closeRulesButton.addEventListener("click", () => rulesDialog.close());
+        rulesDialog.addEventListener("click", event => {
+            if (event.target === rulesDialog) rulesDialog.close();
+        });
         saveAccountButton.addEventListener("click", saveAccount);
         saveCodeHintButton.addEventListener("click", saveCodeHint);
         savePredictionRuleButton.addEventListener("click", savePredictionRule);
