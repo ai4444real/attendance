@@ -1046,6 +1046,15 @@ async def accounting_import_batch(batch_id: int):
     }
 
 
+@app.delete("/api/utilities/accounting/import-batches/{batch_id}")
+async def accounting_delete_import_batch(batch_id: int):
+    try:
+        _accounting_service().delete_import_batch(batch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "batch_id": batch_id}
+
+
 @app.post("/api/utilities/accounting/import-batches/{batch_id}/confirm")
 async def accounting_confirm_import_batch(batch_id: int, payload: dict = Body(...)):
     raw_assignments = payload.get("assignments") or {}

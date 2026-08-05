@@ -394,7 +394,8 @@
             <div id="message" class="message"></div>
             <div class="draft-tools">
                 <div><label for="draftBatchSelect">Import persistenti</label><select id="draftBatchSelect"><option value="">Nessun import</option></select></div>
-                <button id="loadDraftButton" class="secondary" type="button">Apri bozza</button>
+                <button id="loadDraftButton" class="secondary" type="button">Apri import</button>
+                <button id="deleteDraftButton" class="danger" type="button" disabled>Cancella bozza</button>
             </div>
         </section>
 
@@ -599,6 +600,7 @@
         const fileInputLabel = document.getElementById("fileInputLabel");
         const draftBatchSelect = document.getElementById("draftBatchSelect");
         const loadDraftButton = document.getElementById("loadDraftButton");
+        const deleteDraftButton = document.getElementById("deleteDraftButton");
         const parseButton = document.getElementById("parseButton");
         const message = document.getElementById("message");
         const resultsPanel = document.getElementById("resultsPanel");
@@ -658,6 +660,7 @@
         let activeResultFilter = "all";
         let activeSourceFilter = "all";
         let currentBatchId = null;
+        let importBatches = [];
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -702,10 +705,11 @@
             const response = await fetch("/api/utilities/accounting/import-batches");
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || "Caricamento bozze fallito.");
-            const batches = payload.batches || [];
-            draftBatchSelect.innerHTML = ['<option value="">Scegli una bozza...</option>', ...batches.map(batch =>
+            importBatches = payload.batches || [];
+            draftBatchSelect.innerHTML = ['<option value="">Scegli un import...</option>', ...importBatches.map(batch =>
                 `<option value="${escapeHtml(batch.id)}">${escapeHtml(batch.filename)} · ${batch.new_count} righe · ${escapeHtml(batch.status)}</option>`
             )].join("");
+            deleteDraftButton.disabled = true;
         }
 
         async function loadDraftBatch() {
@@ -716,6 +720,23 @@
             renderRows(payload);
             message.textContent = "Bozza persistente caricata.";
             message.className = "message ok";
+        }
+
+        async function deleteSelectedDraft() {
+            const batch = importBatches.find(item => String(item.id) === draftBatchSelect.value);
+            if (!batch || batch.status !== "draft") return alert("Scegli una bozza da cancellare.");
+            if (!confirm(`Cancellare la bozza ${batch.filename} e le sue ${batch.new_count} transazioni nuove?`)) return;
+            const response = await fetch(`/api/utilities/accounting/import-batches/${encodeURIComponent(batch.id)}`, { method: "DELETE" });
+            const payload = await response.json();
+            if (!response.ok) return alert(payload.detail || "Cancellazione bozza fallita.");
+            if (String(currentBatchId) === String(batch.id)) {
+                currentBatchId = null;
+                currentRows = [];
+                resultsPanel.hidden = true;
+            }
+            message.textContent = "Bozza cancellata.";
+            message.className = "message ok";
+            await loadDraftBatches();
         }
 
         async function loadAllAccounts() {
@@ -1473,6 +1494,11 @@
         });
         exportBananaButton.addEventListener("click", exportForBanana);
         loadDraftButton.addEventListener("click", () => loadDraftBatch().catch(error => alert(error.message || String(error))));
+        deleteDraftButton.addEventListener("click", deleteSelectedDraft);
+        draftBatchSelect.addEventListener("change", () => {
+            const batch = importBatches.find(item => String(item.id) === draftBatchSelect.value);
+            deleteDraftButton.disabled = !batch || batch.status !== "draft";
+        });
         confirmBatchButton.addEventListener("click", confirmCurrentBatch);
         exportLedgerButton.addEventListener("click", exportConfirmedLedger);
         exportLedgerBananaButton.addEventListener("click", exportConfirmedLedgerBanana);

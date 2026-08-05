@@ -61,6 +61,7 @@ class AccountingRepository(Protocol):
     def get_import_batch_transactions(self, batch_id: int): ...
     def list_import_batches(self, *, status: str = "draft"): ...
     def confirm_import_batch(self, batch_id: int, assignments: dict[int, str]) -> None: ...
+    def delete_import_batch(self, batch_id: int) -> None: ...
     def list_confirmed_transactions(self, date_from: str, date_to: str): ...
     def create_feedback(
         self,
@@ -554,6 +555,11 @@ class AccountingPredictionService:
         if not assignments or any(code not in valid_accounts for code in assignments.values()):
             raise ValueError("Ogni transazione deve avere un conto contabile valido.")
         self._repository.confirm_import_batch(batch_id, assignments)
+
+    def delete_import_batch(self, batch_id: int) -> None:
+        if batch_id <= 0:
+            raise ValueError("Import non valido.")
+        self._repository.delete_import_batch(batch_id)
 
     def list_confirmed_transactions(self, date_from: str, date_to: str):
         return self._repository.list_confirmed_transactions(date_from, date_to)

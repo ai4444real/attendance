@@ -271,6 +271,36 @@ class PostgresAccountingRepository:
                 )
             connection.commit()
 
+    def delete_import_batch(self, batch_id: int) -> None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status FROM accounting_import_batches WHERE id = %s FOR UPDATE",
+                    (batch_id,),
+                )
+                batch = cursor.fetchone()
+                if batch is None:
+                    raise ValueError("Import non trovato.")
+                if str(batch[0]) != "draft":
+                    raise ValueError("Solo una bozza puo' essere cancellata.")
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM accounting_ledger_transactions t
+                    JOIN accounting_batch_transactions bt ON bt.transaction_id = t.id
+                    WHERE t.first_batch_id = %s AND bt.batch_id <> %s
+                    """,
+                    (batch_id, batch_id),
+                )
+                if int(cursor.fetchone()[0]) > 0:
+                    raise ValueError(
+                        "La bozza e' collegata a import successivi e non puo' essere cancellata."
+                    )
+                cursor.execute("DELETE FROM accounting_batch_transactions WHERE batch_id = %s", (batch_id,))
+                cursor.execute("DELETE FROM accounting_ledger_transactions WHERE first_batch_id = %s", (batch_id,))
+                cursor.execute("DELETE FROM accounting_import_batches WHERE id = %s", (batch_id,))
+            connection.commit()
+
     def list_confirmed_transactions(self, date_from: str, date_to: str) -> list[dict[str, Any]]:
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
