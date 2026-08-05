@@ -6,8 +6,11 @@ import csv
 import io
 import re
 import unicodedata
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
+
+import pdfplumber
 
 from .models import (
     AccountingAccount,
@@ -205,6 +208,70 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
             )
         )
 
+    return transactions
+
+
+_CREDIT_CARD_TRANSACTION_RE = re.compile(
+    r"^(?P<booking_date>\d{2}\.\d{2}\.\d{2})\s+"
+    r"(?P<purchase_date>\d{2}\.\d{2}\.\d{2})\s+"
+    r"(?P<description>.+?)\s+"
+    r"(?P<chf_amount>-?[\d'’]+\.\d{2})$"
+)
+
+
+def parse_postfinance_credit_card_text(
+    text: str,
+    *,
+    starting_row_index: int = 1,
+) -> list[ParsedBankTransaction]:
+    """Parse transaction rows from extracted PostFinance credit-card text."""
+    transactions: list[ParsedBankTransaction] = []
+    for line_offset, raw_line in enumerate(text.splitlines()):
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        match = _CREDIT_CARD_TRANSACTION_RE.match(line)
+        if match is None:
+            continue
+        booking_date = datetime.strptime(match.group("booking_date"), "%d.%m.%y")
+        statement_amount = parse_accounting_amount(
+            match.group("chf_amount").replace("’", "'")
+        )
+        transactions.append(
+            ParsedBankTransaction(
+                row_index=starting_row_index + line_offset,
+                date=booking_date.strftime("%d.%m.%Y"),
+                description=match.group("description").strip(),
+                # Card charges are printed positive; credits carry a minus sign.
+                # Invert them to preserve the bank CSV accounting convention.
+                amount=-statement_amount,
+            )
+        )
+    return transactions
+
+
+def parse_postfinance_credit_card_pdf(content: bytes) -> list[ParsedBankTransaction]:
+    """Extract normalized transactions from a PostFinance credit-card PDF."""
+    if not content:
+        raise ValueError("PDF carta di credito vuoto.")
+    transactions: list[ParsedBankTransaction] = []
+    page_texts: list[str] = []
+    try:
+        with pdfplumber.open(io.BytesIO(content)) as document:
+            for page_number, page in enumerate(document.pages, start=1):
+                text = page.extract_text(x_tolerance=2, y_tolerance=3) or ""
+                page_texts.append(text)
+                transactions.extend(
+                    parse_postfinance_credit_card_text(
+                        text,
+                        starting_row_index=page_number * 10_000,
+                    )
+                )
+    except Exception as exc:
+        raise ValueError("Impossibile leggere il PDF della carta di credito PostFinance.") from exc
+    document_text = "\n".join(page_texts)
+    if "PostFinance" not in document_text or "carta di credito" not in document_text.casefold():
+        raise ValueError("Il PDF non e' un resoconto carta di credito PostFinance riconosciuto.")
+    if not transactions:
+        raise ValueError("Nessuna transazione trovata nel PDF della carta di credito PostFinance.")
     return transactions
 
 
