@@ -118,6 +118,26 @@
         .message.ok { color: #087c3f; }
         .message.error { color: #b42318; }
         .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+        .source-stats {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin: -4px 0 18px;
+            padding: 14px;
+            border: 1px solid var(--brand-border);
+            border-radius: 14px;
+            background: #f8fbfd;
+        }
+        .source-stats-title { font-weight: 900; margin-right: 4px; }
+        .source-stat {
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: #fff;
+            border: 1px solid var(--brand-border);
+            font-size: 13px;
+            font-weight: 800;
+        }
         .stat {
             border: 1px solid var(--brand-border);
             border-radius: 999px;
@@ -166,7 +186,7 @@
             font-size: 12px;
             white-space: nowrap;
         }
-        .badge-code_hint, .badge-feedback_override, .badge-feedback_override_amount, .badge-historical_example, .badge-targeted_rule, .badge-configured_rule {
+        .badge-code_hint, .badge-feedback_override, .badge-feedback_override_amount, .badge-historical_example, .badge-configured_rule {
             background: #e3f6ea;
             color: #087c3f;
         }
@@ -273,6 +293,18 @@
             color: #b42318;
             border: 1px solid #ffc9c9;
         }
+        details.accounts-panel > summary {
+            cursor: pointer;
+            display: inline-flex;
+            list-style: none;
+            border-radius: 16px;
+            background: var(--brand-pnl-blue);
+            color: #fff;
+            font-weight: 900;
+            padding: 14px 22px;
+        }
+        details.accounts-panel > summary::-webkit-details-marker { display: none; }
+        details.accounts-panel[open] > summary { margin-bottom: 18px; }
         @media (max-width: 900px) {
             .container { width: min(100% - 24px, 1480px); }
             .topbar { align-items: flex-start; flex-direction: column; }
@@ -326,6 +358,7 @@
 
         <section id="resultsPanel" class="panel" hidden>
             <div id="stats" class="stats"></div>
+            <div id="sourceStats" class="source-stats"></div>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -342,73 +375,9 @@
             </div>
         </section>
 
-        <section class="management-grid">
-            <section class="panel">
-                <h2>Code hints</h2>
-                <p class="muted">Scrivi nel testo bancario <strong>c:codice</strong> per forzare un conto.</p>
-                <input id="codeHintFilter" class="filter-input" type="text" placeholder="Filtra code hints...">
-                <div class="mini-form code-hint-form">
-                    <div>
-                        <label for="codeHintCode">Hint</label>
-                        <input id="codeHintCode" type="text" placeholder="es. affitto">
-                    </div>
-                    <div>
-                        <label for="codeHintAccount">Conto</label>
-                        <select id="codeHintAccount"></select>
-                    </div>
-                    <button id="saveCodeHintButton" type="button">Salva</button>
-                </div>
-                <div id="codeHintMessage" class="message"></div>
-                <div class="table-wrap">
-                    <table class="mini-table">
-                        <thead>
-                            <tr>
-                                <th>Hint</th>
-                                <th>Conto</th>
-                                <th>Stato</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="codeHintsBody"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section class="panel">
-                <h2>Conti</h2>
-                <p class="muted">I conti disattivati restano nello storico, ma non vengono proposti dal motore.</p>
-                <input id="accountFilter" class="filter-input" type="text" placeholder="Filtra conti...">
-                <div class="mini-form">
-                    <div>
-                        <label for="accountCode">Codice</label>
-                        <input id="accountCode" type="text" placeholder="1025">
-                    </div>
-                    <div>
-                        <label for="accountDescription">Descrizione</label>
-                        <input id="accountDescription" type="text" placeholder="Banca PostFinance">
-                    </div>
-                    <button id="saveAccountButton" type="button">Salva</button>
-                </div>
-                <div id="accountMessage" class="message"></div>
-                <div class="table-wrap">
-                    <table class="mini-table">
-                        <thead>
-                            <tr>
-                                <th>Codice</th>
-                                <th>Descrizione</th>
-                                <th>Stato</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="accountsBody"></tbody>
-                    </table>
-                </div>
-            </section>
-        </section>
-
         <section class="panel">
             <h2>Regole deterministiche</h2>
-            <p class="muted">Il motore le usa dopo code hint e match salvati, prima delle regole legacy e degli esempi storici.</p>
+            <p class="muted">Il motore le usa dopo code hint e feedback, prima degli esempi storici.</p>
             <input id="predictionRuleFilter" class="filter-input" type="text" placeholder="Filtra regole...">
             <input id="predictionRuleId" type="hidden">
             <div class="rule-form">
@@ -483,9 +452,9 @@
         </section>
 
         <section class="panel">
-            <h2>Match account salvati</h2>
+            <h2>Feedback</h2>
             <p class="muted">Sono le correzioni create con “Salva con importo” o “Salva solo testo”. Il motore le usa prima degli esempi storici.</p>
-            <input id="feedbackFilter" class="filter-input" type="text" placeholder="Filtra match salvati...">
+            <input id="feedbackFilter" class="filter-input" type="text" placeholder="Filtra feedback...">
             <div id="feedbackMessage" class="message"></div>
             <div class="table-wrap">
                 <table class="mini-table rules-table">
@@ -503,6 +472,49 @@
                 </table>
             </div>
         </section>
+
+        <section class="panel">
+            <h2>Code hints</h2>
+            <p class="muted">Scrivi nel testo bancario <strong>c:codice</strong> per forzare un conto.</p>
+            <input id="codeHintFilter" class="filter-input" type="text" placeholder="Filtra code hints...">
+            <div class="mini-form code-hint-form">
+                <div>
+                    <label for="codeHintCode">Hint</label>
+                    <input id="codeHintCode" type="text" placeholder="es. affitto">
+                </div>
+                <div>
+                    <label for="codeHintAccount">Conto</label>
+                    <select id="codeHintAccount"></select>
+                </div>
+                <button id="saveCodeHintButton" type="button">Salva</button>
+            </div>
+            <div id="codeHintMessage" class="message"></div>
+            <div class="table-wrap">
+                <table class="mini-table">
+                    <thead><tr><th>Hint</th><th>Conto</th><th>Stato</th><th></th></tr></thead>
+                    <tbody id="codeHintsBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <details class="panel accounts-panel">
+            <summary>Apri gestione conti</summary>
+            <h2>Conti</h2>
+            <p class="muted">I conti disattivati restano nello storico, ma non vengono proposti dal motore.</p>
+            <input id="accountFilter" class="filter-input" type="text" placeholder="Filtra conti...">
+            <div class="mini-form">
+                <div><label for="accountCode">Codice</label><input id="accountCode" type="text" placeholder="1025"></div>
+                <div><label for="accountDescription">Descrizione</label><input id="accountDescription" type="text" placeholder="Banca PostFinance"></div>
+                <button id="saveAccountButton" type="button">Salva</button>
+            </div>
+            <div id="accountMessage" class="message"></div>
+            <div class="table-wrap">
+                <table class="mini-table">
+                    <thead><tr><th>Codice</th><th>Descrizione</th><th>Stato</th><th></th></tr></thead>
+                    <tbody id="accountsBody"></tbody>
+                </table>
+            </div>
+        </details>
     </main>
 
     <script>
@@ -513,6 +525,7 @@
         const resultsPanel = document.getElementById("resultsPanel");
         const resultsBody = document.getElementById("resultsBody");
         const stats = document.getElementById("stats");
+        const sourceStats = document.getElementById("sourceStats");
         const codeHintFilter = document.getElementById("codeHintFilter");
         const codeHintCode = document.getElementById("codeHintCode");
         const codeHintAccount = document.getElementById("codeHintAccount");
@@ -602,7 +615,7 @@
         async function loadFeedbackRules() {
             const response = await fetch("/api/utilities/accounting/feedback?limit=200");
             const payload = await response.json();
-            if (!response.ok) throw new Error(payload.detail || "Caricamento match salvati fallito.");
+            if (!response.ok) throw new Error(payload.detail || "Caricamento feedback fallito.");
             feedbackRules = payload.feedback || [];
             renderFeedbackRules();
         }
@@ -763,6 +776,34 @@
                 <span class="stat">Conti caricati ${accounts.length}</span>
                 <button class="stat" type="button" data-export-results>Export CSV</button>
             `;
+            renderSourceStats();
+        }
+
+        function predictionSourceGroup(source) {
+            const groups = {
+                code_hint: "Code hint",
+                code_hint_unknown: "Code hint sconosciuto",
+                feedback_override: "Feedback",
+                feedback_override_amount: "Feedback",
+                configured_rule: "Regola deterministica",
+                historical_example: "Training",
+                historical_ambiguous: "Training ambiguo",
+                review: "Review",
+            };
+            return groups[source] || source || "Review";
+        }
+
+        function renderSourceStats() {
+            const counts = new Map();
+            currentRows.forEach(row => {
+                const label = predictionSourceGroup(row.prediction?.source);
+                counts.set(label, (counts.get(label) || 0) + 1);
+            });
+            const items = [...counts.entries()]
+                .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+                .map(([label, count]) => `<span class="source-stat">${escapeHtml(label)}: ${count}</span>`)
+                .join("");
+            sourceStats.innerHTML = `<span class="source-stats-title">Risposte per tipo</span>${items || '<span class="muted">Nessuna predizione</span>'}`;
         }
 
         function visibleRowsWithIndex() {

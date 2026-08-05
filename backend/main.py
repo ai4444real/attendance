@@ -958,6 +958,8 @@ async def accounting_bank_parse_predict(
         predictions = _accounting_service().parse_and_predict_bank_csv(await file.read(), bank)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     review_count = sum(1 for item in predictions if item.prediction.needs_review)
     return {
         "filename": file.filename,

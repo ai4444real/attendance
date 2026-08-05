@@ -337,14 +337,13 @@ class AccountingPredictionService:
         transactions = parse_bank_csv(text, bank)
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
-        prediction_rules_available, prediction_rules = self._safe_list_active_prediction_rules()
+        prediction_rules = self._list_active_prediction_rules()
         training_examples = self._repository.list_training_examples()
         return [
             self._predict_transaction_with_context(
                 transaction,
                 accounts,
                 code_hints,
-                prediction_rules_available,
                 prediction_rules,
                 training_examples,
             )
@@ -354,13 +353,12 @@ class AccountingPredictionService:
     def predict_transaction(self, transaction: ParsedBankTransaction) -> PredictedBankTransaction:
         accounts = {account.code: account for account in self._repository.list_accounts()}
         code_hints = self._repository.list_code_hints()
-        prediction_rules_available, prediction_rules = self._safe_list_active_prediction_rules()
+        prediction_rules = self._list_active_prediction_rules()
         training_examples = self._repository.list_training_examples()
         return self._predict_transaction_with_context(
             transaction,
             accounts,
             code_hints,
-            prediction_rules_available,
             prediction_rules,
             training_examples,
         )
@@ -370,7 +368,6 @@ class AccountingPredictionService:
         transaction: ParsedBankTransaction,
         accounts: dict[str, AccountingAccount],
         code_hints: dict[str, str],
-        prediction_rules_available: bool,
         prediction_rules: list[AccountingPredictionRule],
         training_examples: list[AccountingTrainingExample],
     ) -> PredictedBankTransaction:
@@ -403,23 +400,6 @@ class AccountingPredictionService:
         if configured_rule_prediction is not None:
             return self._with_prediction(transaction, configured_rule_prediction)
 
-        if not prediction_rules_available:
-            customer_invoice_prediction = self._predict_customer_invoice_payment(
-                normalized_text,
-                transaction.amount,
-                accounts,
-            )
-            if customer_invoice_prediction is not None:
-                return self._with_prediction(transaction, customer_invoice_prediction)
-
-            targeted_rule_prediction = self._predict_from_targeted_rules(
-                normalized_text,
-                transaction.amount,
-                accounts,
-            )
-            if targeted_rule_prediction is not None:
-                return self._with_prediction(transaction, targeted_rule_prediction)
-
         historical_prediction = self._predict_from_training_examples(
             normalized_text,
             transaction.amount,
@@ -437,7 +417,7 @@ class AccountingPredictionService:
                 source="review",
                 confidence=None,
                 needs_review=True,
-                message="Nessun code hint o feedback trovato.",
+                message="Nessuna regola, feedback, code hint o corrispondenza training applicabile.",
             ),
         )
 
@@ -471,11 +451,13 @@ class AccountingPredictionService:
                 tokens.append(token)
         return tokens
 
-    def _safe_list_active_prediction_rules(self) -> tuple[bool, list[AccountingPredictionRule]]:
+    def _list_active_prediction_rules(self) -> list[AccountingPredictionRule]:
         try:
-            return True, self._repository.list_prediction_rules(active_only=True)
-        except Exception:
-            return False, []
+            return self._repository.list_prediction_rules(active_only=True)
+        except Exception as exc:
+            raise RuntimeError(
+                "Nessuna regola di predizione disponibile: impossibile leggere accounting_prediction_rules."
+            ) from exc
 
     def _predict_from_code_hint(
         self,
@@ -504,68 +486,6 @@ class AccountingPredictionService:
             source="code_hint",
             confidence="alta",
             needs_review=False,
-        )
-
-    @staticmethod
-    def _predict_customer_invoice_payment(
-        normalized_text: str,
-        amount: Decimal,
-        accounts: dict[str, AccountingAccount],
-    ) -> AccountingPrediction | None:
-        account_code = "3400"
-        account = accounts.get(account_code)
-        if account is None:
-            return None
-        if amount <= 0:
-            return None
-        if "accredito" not in normalized_text:
-            return None
-        if "mittente" not in normalized_text and "comunicazioni" not in normalized_text:
-            return None
-
-        is_invoice_payment = "fattura" in normalized_text and "riferimenti" in normalized_text
-        is_course_payment = "corso" in normalized_text and (
-            "rata" in normalized_text
-            or "pnl" in normalized_text
-            or "formazione" in normalized_text
-        )
-        is_customer_credit = "riferimenti" in normalized_text and "notprovided" in normalized_text
-        is_generic_customer_credit = "mittente" in normalized_text or "comunicazioni" in normalized_text
-        if (
-            not is_invoice_payment
-            and not is_course_payment
-            and not is_customer_credit
-            and not is_generic_customer_credit
-        ):
-            return None
-
-        matched_tokens = ["accredito"]
-        if is_invoice_payment:
-            matched_tokens.extend(["fattura", "riferimenti"])
-        if is_course_payment:
-            matched_tokens.extend(["corso", "rata"])
-        if is_customer_credit:
-            matched_tokens.extend(["mittente", "riferimenti"])
-        if is_generic_customer_credit:
-            matched_tokens.extend(["mittente", "comunicazioni"])
-
-        return AccountingPrediction(
-            account_code=account_code,
-            account_description=account.description,
-            source="customer_invoice_payment",
-            confidence="alta",
-            needs_review=False,
-            message="Accredito cliente/corso; importo ignorato per questa regola.",
-            score=1.0,
-            evidence=[
-                {
-                    "account_code": account_code,
-                    "source": "rule",
-                    "score": 1.0,
-                    "amount": format(amount, "f"),
-                    "common_tokens": list(dict.fromkeys(matched_tokens)),
-                }
-            ],
         )
 
     def _predict_from_configured_rules(
@@ -640,47 +560,6 @@ class AccountingPredictionService:
                 }
             ],
         )
-
-    def _predict_from_targeted_rules(
-        self,
-        normalized_text: str,
-        amount: Decimal,
-        accounts: dict[str, AccountingAccount],
-    ) -> AccountingPrediction | None:
-        if amount < 0 and "ordine collettivo opae" in normalized_text and abs(amount) <= Decimal("200.00"):
-            return self._rule_prediction(
-                account_code="6660",
-                source="targeted_rule",
-                message="Ordine collettivo OPAE piccolo; classificato come spesa paghe/strumento.",
-                amount=amount,
-                accounts=accounts,
-                tokens=["ordine", "collettivo", "opae"],
-            )
-
-        if amount < 0 and "wise payments" in normalized_text and (
-            "panoramen" in normalized_text
-            or "eood" in normalized_text
-        ):
-            return self._rule_prediction(
-                account_code="4401",
-                source="targeted_rule",
-                message="Pagamento Wise verso Panoramen/EOOD.",
-                amount=amount,
-                accounts=accounts,
-                tokens=["wise", "payments", "panoramen", "eood"],
-            )
-
-        if amount < 0 and "posta ch sa" in normalized_text:
-            return self._rule_prediction(
-                account_code="6552",
-                source="targeted_rule",
-                message="Movimento carta/servizio POSTA CH SA.",
-                amount=amount,
-                accounts=accounts,
-                tokens=["posta", "ch", "sa"],
-            )
-
-        return None
 
     def _predict_from_training_examples(
         self,
