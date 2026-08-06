@@ -307,6 +307,10 @@ class LessonPlanManager {
         this.segmentManager.removeSegment(segmentId);
     }
 
+    moveSegment(segmentId, direction) {
+        this.segmentManager.moveSegment(segmentId, direction);
+    }
+
     updateSegmentTimes() {
         this.segmentManager.updateSegmentTimes();
     }

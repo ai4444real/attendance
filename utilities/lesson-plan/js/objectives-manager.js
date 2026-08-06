@@ -36,6 +36,15 @@ class ObjectivesManager {
         this.renderObjectives();
     }
 
+    moveObjective(index, direction) {
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= this.objectives.length) return;
+
+        [this.objectives[index], this.objectives[targetIndex]] =
+            [this.objectives[targetIndex], this.objectives[index]];
+        this.renderObjectives();
+    }
+
     renderObjectives() {
         const list = document.getElementById('objectivesList');
         list.innerHTML = '';
@@ -47,7 +56,14 @@ class ObjectivesManager {
 
             li.innerHTML = `
                 <span class="objective-text">${objective}</span>
-                <button type="button" class="objective-remove" onclick="objectivesManager.removeObjective(${index})">×</button>
+                <span class="reorder-controls" aria-label="Riordina obiettivo">
+                    <button type="button" class="reorder-btn" title="Sposta su" aria-label="Sposta obiettivo su"
+                            onclick="objectivesManager.moveObjective(${index}, -1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+                    <button type="button" class="reorder-btn" title="Sposta giù" aria-label="Sposta obiettivo giù"
+                            onclick="objectivesManager.moveObjective(${index}, 1)" ${index === this.objectives.length - 1 ? 'disabled' : ''}>↓</button>
+                </span>
+                <button type="button" class="objective-remove" title="Rimuovi obiettivo" aria-label="Rimuovi obiettivo"
+                        onclick="objectivesManager.removeObjective(${index})">×</button>
             `;
 
             list.appendChild(li);

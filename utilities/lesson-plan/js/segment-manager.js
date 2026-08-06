@@ -25,6 +25,15 @@ class SegmentManager {
             const endTimeSpan = segment.querySelector('.end-time');
             if (startTimeSpan) startTimeSpan.id = `startTime_${segmentNumber}`;
             if (endTimeSpan) endTimeSpan.id = `endTime_${segmentNumber}`;
+
+            const moveUpButton = segment.querySelector('.segment-move-up');
+            const moveDownButton = segment.querySelector('.segment-move-down');
+            const removeButton = segment.querySelector('.segment-remove');
+            moveUpButton.disabled = index === 0;
+            moveDownButton.disabled = index === segments.length - 1;
+            moveUpButton.onclick = () => lessonPlanManager.moveSegment(segmentNumber, -1);
+            moveDownButton.onclick = () => lessonPlanManager.moveSegment(segmentNumber, 1);
+            removeButton.onclick = () => lessonPlanManager.removeSegment(segmentNumber);
         });
     }
 
@@ -83,6 +92,25 @@ class SegmentManager {
         this.updateSegmentTimes();
     }
 
+    moveSegment(segmentId, direction) {
+        const segment = document.querySelector(`[data-segment-id="${segmentId}"]`);
+        if (!segment) return;
+
+        const sibling = direction < 0
+            ? segment.previousElementSibling
+            : segment.nextElementSibling;
+        if (!sibling) return;
+
+        if (direction < 0) {
+            segment.parentElement.insertBefore(segment, sibling);
+        } else {
+            segment.parentElement.insertBefore(sibling, segment);
+        }
+
+        this.renumberSegments();
+        this.updateSegmentTimes();
+    }
+
     addInitialSegment() {
         this.addSegment();
     }
@@ -114,9 +142,13 @@ class SegmentManager {
         segmentDiv.innerHTML = `
             <div class="segment-header">
                 <span class="segment-number">Segmento ${this.segmentCounter}</span>
-                <button type="button" class="segment-remove" onclick="lessonPlanManager.removeSegment(${this.segmentCounter})">
-                    Rimuovi
-                </button>
+                <div class="segment-actions">
+                    <span class="reorder-controls" aria-label="Riordina segmento">
+                        <button type="button" class="reorder-btn segment-move-up" title="Sposta su" aria-label="Sposta segmento su">↑</button>
+                        <button type="button" class="reorder-btn segment-move-down" title="Sposta giù" aria-label="Sposta segmento giù">↓</button>
+                    </span>
+                    <button type="button" class="segment-remove">Rimuovi</button>
+                </div>
             </div>
 
             <div class="segment-form-row">
@@ -149,6 +181,7 @@ class SegmentManager {
         `;
 
         container.appendChild(segmentDiv);
+        this.renumberSegments();
 
         // Initialize pulldown components
         const methodContainer = segmentDiv.querySelector('.method-pulldown-container');

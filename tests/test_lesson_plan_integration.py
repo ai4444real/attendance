@@ -65,6 +65,20 @@ class LessonPlanIntegrationTests(unittest.TestCase):
             self.assertNotIn("dragover", source)
             self.assertNotIn("draggable", source)
 
+    def test_discrete_reorder_controls_replace_drag_and_drop(self):
+        objectives = (MODULE / "js" / "objectives-manager.js").read_text(
+            encoding="utf-8"
+        )
+        segments = (MODULE / "js" / "segment-manager.js").read_text(
+            encoding="utf-8"
+        )
+        styles = (MODULE / "css" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("moveObjective(index, direction)", objectives)
+        self.assertIn("moveSegment(segmentId, direction)", segments)
+        self.assertIn("segment-move-up", segments)
+        self.assertIn("segment-move-down", segments)
+        self.assertIn(".reorder-btn", styles)
+
 
 if __name__ == "__main__":
     unittest.main()
