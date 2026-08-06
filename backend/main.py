@@ -214,6 +214,7 @@ UTILITIES_CLASSROOM_MANAGER_FILE = os.path.join(UTILITIES_STATIC_DIR, "classroom
 UTILITIES_SMALLINVOICE_FILE = os.path.join(UTILITIES_STATIC_DIR, "smallinvoice.html")
 UTILITIES_PAYMENT_REMINDERS_FILE = os.path.join(UTILITIES_STATIC_DIR, "payment-reminders.html")
 UTILITIES_ACCOUNTING_CONSULTANT_FILE = os.path.join(UTILITIES_STATIC_DIR, "accounting-consultant.html")
+UTILITIES_LESSON_PLAN_FILE = os.path.join(UTILITIES_STATIC_DIR, "lesson-plan", "index.html")
 GLOBAL_ASSETS_DIR = os.path.join(WORKSPACE_DIR, "assets")
 
 SMALLINVOICE_API_BASE_URL = os.getenv("SMALLINVOICE_API_BASE_URL", "https://api.smallinvoice.com/v2").rstrip("/")
@@ -671,6 +672,11 @@ async def utilities_home():
                     <h2>Smallinvoice</h2>
                     <p>Ricerca rapida clienti Smallinvoice per nome, senza esporre credenziali API nel browser.</p>
                 </a>
+                <a class="card" href="/utilities/lesson-plan">
+                    <span class="card-label">Didattica</span>
+                    <h2>Lesson Plan</h2>
+                    <p>Creazione, organizzazione, salvataggio e stampa dei piani di lezione.</p>
+                </a>
             </div>
         </section>
     """
@@ -727,6 +733,15 @@ async def utilities_classroom_manager():
 async def utilities_smallinvoice():
     return FileResponse(
         UTILITIES_SMALLINVOICE_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/utilities/lesson-plan")
+@app.get("/utilities/lesson-plan/")
+async def utilities_lesson_plan():
+    return FileResponse(
+        UTILITIES_LESSON_PLAN_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 

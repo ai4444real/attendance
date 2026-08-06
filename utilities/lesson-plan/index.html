@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lesson Plan - Rebekko</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <link rel="stylesheet" href="/utilities/static/lesson-plan/css/styles.css">
+</head>
+<body>
+    <div class="topbar">
+        <a class="brand" href="/utilities">
+            <img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+            <span>
+                <span class="brand-title">Rebekko Webapps</span>
+                <span class="brand-subtitle">Lesson Plan</span>
+            </span>
+        </a>
+        <nav class="nav" aria-label="Navigazione principale">
+            <a href="/">Home</a>
+            <a href="/utilities">Utilities</a>
+            <a class="active" href="/utilities/lesson-plan">Lesson Plan</a>
+        </nav>
+    </div>
+
+    <!-- Core utilities - must load first -->
+    <script src="/utilities/static/lesson-plan/js/time-utils.js"></script>
+    <script src="/utilities/static/lesson-plan/js/config.js"></script>
+
+    <!-- Persistence Layer -->
+    <script src="/utilities/static/lesson-plan/js/persistence/repository.js"></script>
+    <script src="/utilities/static/lesson-plan/js/persistence/filesystem-repository.js"></script>
+    <script src="/utilities/static/lesson-plan/js/persistence/persistence-factory.js"></script>
+
+    <!-- Components - base UI elements -->
+    <script src="/utilities/static/lesson-plan/js/pulldown-component.js"></script>
+    <script src="/utilities/static/lesson-plan/js/segment-manager.js"></script>
+    <script src="/utilities/static/lesson-plan/js/objectives-manager.js"></script>
+
+    <!-- Rendering engine -->
+    <script src="/utilities/static/lesson-plan/js/lesson-plan-renderer.js"></script>
+
+    <div class="container">
+        <header class="header">
+            <div class="course-info">
+                <h1 id="courseTitle">Nuovo Corso</h1>
+                <div class="course-actions">
+                    <button id="editCourseBtn" class="btn-link">✏️ Modifica corso</button>
+                    <button id="configBtn" class="btn-link">⚙️ Configurazione</button>
+                </div>
+            </div>
+            <div class="actions">
+                <button id="loadBtn" class="btn btn-secondary">Carica Corso</button>
+                <button id="previewBtn" class="btn btn-secondary">Anteprima Corso</button>
+                <button id="saveBtn" class="btn btn-primary">Salva Corso</button>
+            </div>
+        </header>
+
+        <!-- Course Editor Modal (hidden by default) -->
+        <div id="courseModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h3>Modifica Corso</h3>
+                <div class="form-group">
+                    <label for="courseName">Nome Corso *</label>
+                    <input type="text" id="courseName" placeholder="Nome del corso">
+                </div>
+                <div class="modal-actions">
+                    <button id="saveCourseBtn" class="btn btn-primary">Salva</button>
+                    <button id="cancelCourseBtn" class="btn btn-secondary">Annulla</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Modal (hidden by default) -->
+        <div id="configModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h3>⚙️ Configurazione Metodi e Strumenti</h3>
+
+                <div class="form-group">
+                    <label>Opzioni Correnti</label>
+                    <p style="font-size: 12px; color: #666;">
+                        Esporta la configurazione, modifica il file JSON, e importalo di nuovo.
+                    </p>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="exportConfigBtn" class="btn btn-secondary">📥 Esporta Configurazione</button>
+                    <button id="importConfigBtn" class="btn btn-secondary">📤 Importa Configurazione</button>
+                    <button id="resetConfigBtn" class="btn btn-secondary">🔄 Ripristina Default</button>
+                    <button id="closeConfigBtn" class="btn btn-primary">Chiudi</button>
+                </div>
+
+                <input type="file" id="configFileInput" accept=".json" style="display: none;">
+            </div>
+        </div>
+
+        <!-- Lesson Plans Navigation -->
+        <nav class="lesson-plans-nav">
+            <div class="nav-header">
+                <h3>Piani di lezione</h3>
+                <button id="addLessonPlanBtn" class="btn btn-small">+ Nuovo Piano</button>
+            </div>
+            <ul id="lessonPlansList" class="lesson-plans-list">
+                <!-- Lesson plans will be populated here -->
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <form id="lessonPlanForm" class="lesson-form">
+                <!-- Informazioni Base -->
+                <section class="form-section">
+                    <div class="section-header">
+                        <h2>Informazioni Generali</h2>
+                        <button type="button" id="previewPlanBtn" class="btn btn-outline">Anteprima Piano</button>
+                    </div>
+
+                    <!-- Hidden fields -->
+                    <input type="hidden" id="courseId" name="course_id">
+                    <input type="hidden" id="planId" name="id" required>
+
+                    <div class="form-group">
+                        <label for="module">Modulo</label>
+                        <input type="text" id="module" name="module" placeholder="es. Modulo 1 - Comunicazione Base">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="title">Titolo *</label>
+                        <input type="text" id="title" name="title" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="generalGoal">Obiettivo Generale *</label>
+                        <textarea id="generalGoal" name="general_goal" rows="3" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="learningObjectives">Obiettivi Didattici *</label>
+                        <div class="objectives-container">
+                            <ul id="objectivesList" class="objectives-list">
+                                <!-- Objectives will be added dynamically -->
+                            </ul>
+                            <div class="add-objective">
+                                <input type="text" id="newObjective" placeholder="Aggiungi obiettivo didattico..." class="objective-input">
+                                <button type="button" id="addObjectiveBtn" class="btn-add-objective">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Simulation Information -->
+                <section class="form-section">
+                    <h2>Simulazione</h2>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="hasSimulation"> Configura simulazione per anteprima/stampa
+                        </label>
+                    </div>
+
+                    <div id="simulationSection" class="simulation-section" style="display: none;">
+                        <h3>Dati per PDF</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="simDate">Data</label>
+                                <input type="date" id="simDate" name="sim_date">
+                            </div>
+                            <div class="form-group">
+                                <label for="simTeacher">Docente</label>
+                                <input type="text" id="simTeacher" name="sim_teacher">
+                            </div>
+                            <div class="form-group">
+                                <label for="simRoom">Aula</label>
+                                <input type="text" id="simRoom" name="sim_room">
+                            </div>
+                        </div>
+                        <div class="simulation-actions">
+                            <button type="button" id="resetSimulation" class="btn btn-danger">🗑️ Reset Dati PDF</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Segments -->
+                <section class="form-section">
+                    <h2>Segmenti della Lezione</h2>
+
+                    <div class="form-group">
+                        <label for="startTime">Simulazione Ora di Partenza</label>
+                        <div class="input-with-reset">
+                            <input type="time" id="startTime" name="start_time" placeholder="HH:MM">
+                            <button type="button" id="resetStartTime" class="btn-reset" title="Cancella orario">✕</button>
+                        </div>
+                        <small class="help-text">Opzionale: mostra orari di fine per ogni segmento</small>
+                    </div>
+
+                    <div id="segmentsContainer" class="segments-container">
+                        <!-- I segmenti saranno aggiunti dinamicamente -->
+                    </div>
+
+                    <div class="segments-footer">
+                        <button type="button" id="addSegmentBtn" class="btn btn-secondary">+ Aggiungi Segmento</button>
+                    </div>
+                </section>
+            </form>
+        </main>
+
+        <!-- File Input Hidden -->
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+
+    <!-- Main application controller - depends on all above -->
+    <script src="/utilities/static/lesson-plan/js/lesson-plan-manager.js"></script>
+</body>
+</html>
