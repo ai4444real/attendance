@@ -1598,6 +1598,15 @@ def _transaction_has_other_reference(invoice: dict, transaction: dict) -> bool:
     return bool(references and esr_number not in references)
 
 
+def _transaction_has_invoice_number(invoice_number: str, transaction: dict) -> bool:
+    if not invoice_number:
+        return False
+    text_key = transaction.get("text_key") or ""
+    # Match explicit invoice mentions only. Searching in all concatenated digits
+    # creates false positives such as P4692824X370XXXX -> 4692824370.
+    return bool(re.search(rf"\bfattura\s+{re.escape(invoice_number)}\b", text_key))
+
+
 def _best_name_matches(
     invoice: dict,
     transactions: list[dict],
@@ -1628,11 +1637,15 @@ def _match_payment_reminder(invoice: dict, transactions: list[dict], used_transa
     reference_candidates = []
     if esr_number:
         reference_candidates = [
-            transaction for transaction in transactions if esr_number in transaction["text_digits"]
+            transaction
+            for transaction in transactions
+            if esr_number in (transaction.get("long_references") or [])
         ]
     if not reference_candidates and invoice_number:
         reference_candidates = [
-            transaction for transaction in transactions if invoice_number in transaction["text_digits"]
+            transaction
+            for transaction in transactions
+            if _transaction_has_invoice_number(invoice_number, transaction)
         ]
 
     for transaction in reference_candidates:
