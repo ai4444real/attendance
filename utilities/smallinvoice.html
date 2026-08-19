@@ -443,6 +443,8 @@
                 'total_paid',
                 'currency',
                 'isr_reference_number',
+                'client_name',
+                'client_number',
                 'id',
                 'contact_id',
             ];
@@ -456,6 +458,8 @@
                 invoice.total_paid ?? '',
                 invoice.currency || '',
                 invoiceReference(invoice),
+                invoiceClientName(invoice),
+                invoiceClientNumber(invoice),
                 invoice.id || '',
                 invoice.contact_id || '',
             ]);
@@ -481,6 +485,38 @@
                 || '';
         }
 
+        function invoiceContact(invoice) {
+            return invoice.contact && typeof invoice.contact === 'object' ? invoice.contact : {};
+        }
+
+        function invoiceClientName(invoice) {
+            const contact = invoiceContact(invoice);
+            return invoice.contact_name
+                || invoice.client_name
+                || contact.display_name
+                || contact.company_name
+                || contact.company
+                || [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+                || contact.name
+                || '';
+        }
+
+        function invoiceClientNumber(invoice) {
+            const contact = invoiceContact(invoice);
+            return invoice.client_number
+                || invoice.contact_number
+                || contact.number
+                || contact.client_number
+                || '';
+        }
+
+        function invoiceClientLabel(invoice) {
+            const name = invoiceClientName(invoice);
+            const number = invoiceClientNumber(invoice);
+            if (name && number) return `${name} (${number})`;
+            return name || number || '-';
+        }
+
         function renderInvoices(target, invoices) {
             if (!invoices.length) {
                 target.innerHTML = '<div class="status">Nessuna fattura trovata per questo cliente.</div>';
@@ -489,6 +525,7 @@
             const rows = invoices.map((invoice, index) => `
                 <tr class="${isInformativeInvoice(invoice) ? 'informative-invoice' : ''}">
                     <td>${escapeHtml(invoice.number || invoice.id || '-')}</td>
+                    <td>${escapeHtml(invoiceClientLabel(invoice))}</td>
                     <td>${escapeHtml(formatDate(invoiceDateValue(invoice)))}</td>
                     <td>${escapeHtml(formatDate(invoice.due))}</td>
                     <td>${escapeHtml(formatDate(invoice.paid_date))}</td>
@@ -510,6 +547,7 @@
                         <thead>
                             <tr>
                                 <th>Numero</th>
+                                <th>Cliente</th>
                                 <th>Data</th>
                                 <th>Due date</th>
                                 <th>Pagamento</th>

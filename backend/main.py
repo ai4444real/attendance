@@ -1365,7 +1365,7 @@ async def smallinvoice_invoices_by_reference(request: Request):
                     headers=headers,
                     params={
                         "q": search_value,
-                        "with": "positions",
+                        "with": "positions,contact",
                         "sort": "-date",
                         "limit": limit,
                         "offset": page * limit,
