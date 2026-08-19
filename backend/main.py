@@ -1222,6 +1222,20 @@ def _smallinvoice_invoice_sort_key(invoice: dict) -> str:
     return ""
 
 
+def _smallinvoice_normalize_reference(value: object) -> str:
+    digits = _extract_digits(value)
+    return digits.lstrip("0") or digits
+
+
+def _smallinvoice_invoice_references(invoice: dict) -> set[str]:
+    references = set()
+    for key in ("isr_reference_number", "esr_number", "reference_number", "reference"):
+        value = invoice.get(key)
+        if value:
+            references.add(_smallinvoice_normalize_reference(value))
+    return {reference for reference in references if reference}
+
+
 async def _smallinvoice_access_token(client: httpx.AsyncClient) -> str:
     if not _smallinvoice_is_configured():
         raise HTTPException(
@@ -1327,6 +1341,63 @@ async def smallinvoice_contact_invoices(contact_id: str):
 
     invoices.sort(key=_smallinvoice_invoice_sort_key, reverse=True)
     return {"contact_id": contact_id, "count": len(invoices), "invoices": invoices}
+
+
+@app.get("/api/utilities/smallinvoice/invoices/by-reference")
+async def smallinvoice_invoices_by_reference(request: Request):
+    reference = (request.query_params.get("reference") or "").strip()
+    normalized_reference = _smallinvoice_normalize_reference(reference)
+    if len(normalized_reference) < 3:
+        raise HTTPException(status_code=400, detail="Inserisci almeno 3 cifre del riferimento.")
+
+    invoices: list[dict] = []
+    limit = 200
+    max_pages = 5
+    search_values = list(dict.fromkeys([normalized_reference, normalized_reference.zfill(27)]))
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        token = await _smallinvoice_access_token(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        for search_value in search_values:
+            for page in range(max_pages):
+                response = await client.get(
+                    f"{SMALLINVOICE_API_BASE_URL}/receivables/invoices",
+                    headers=headers,
+                    params={
+                        "q": search_value,
+                        "with": "positions",
+                        "sort": "-date",
+                        "limit": limit,
+                        "offset": page * limit,
+                    },
+                )
+                if response.status_code >= 400:
+                    raise HTTPException(status_code=502, detail="Ricerca fatture Smallinvoice fallita.")
+                try:
+                    payload = response.json()
+                except ValueError as exc:
+                    raise HTTPException(status_code=502, detail="Risposta fatture Smallinvoice non valida.") from exc
+                page_invoices = _smallinvoice_extract_items(payload)
+                for invoice in page_invoices:
+                    if normalized_reference in _smallinvoice_invoice_references(invoice):
+                        invoices.append(invoice)
+                pagination = payload.get("pagination") if isinstance(payload, dict) else None
+                has_next = bool(pagination and pagination.get("next"))
+                if len(page_invoices) < limit or not has_next:
+                    break
+
+    unique_invoices: dict[str, dict] = {}
+    for invoice in invoices:
+        key = str(invoice.get("id") or invoice.get("number") or json.dumps(invoice, sort_keys=True))
+        unique_invoices[key] = invoice
+    results = list(unique_invoices.values())
+    results.sort(key=_smallinvoice_invoice_sort_key, reverse=True)
+    return {
+        "reference": reference,
+        "normalized_reference": normalized_reference,
+        "count": len(results),
+        "invoices": results,
+    }
 
 
 def _smallinvoice_api_invoice_to_reminder(invoice: dict) -> dict:

@@ -327,6 +327,18 @@
         </section>
 
         <section class="panel">
+            <form id="reference-form" class="search-row">
+                <div>
+                    <label for="reference-query">Reference fattura</label>
+                    <input id="reference-query" name="reference-query" autocomplete="off" placeholder="Es. 13550, senza zeri iniziali" minlength="3" required>
+                </div>
+                <button id="reference-button" type="submit">Cerca reference</button>
+            </form>
+            <div id="reference-status" class="status">Inserisci almeno 3 cifre del riferimento.</div>
+            <div id="reference-results" class="invoice-area"></div>
+        </section>
+
+        <section class="panel">
             <div id="results" class="results"></div>
         </section>
     </main>
@@ -337,6 +349,11 @@
         const button = document.getElementById('search-button');
         const statusEl = document.getElementById('status');
         const resultsEl = document.getElementById('results');
+        const referenceForm = document.getElementById('reference-form');
+        const referenceInput = document.getElementById('reference-query');
+        const referenceButton = document.getElementById('reference-button');
+        const referenceStatusEl = document.getElementById('reference-status');
+        const referenceResultsEl = document.getElementById('reference-results');
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -438,7 +455,7 @@
                 invoice.total ?? '',
                 invoice.total_paid ?? '',
                 invoice.currency || '',
-                invoice.isr_reference_number || invoice.reference || '',
+                invoiceReference(invoice),
                 invoice.id || '',
                 invoice.contact_id || '',
             ]);
@@ -456,6 +473,14 @@
             URL.revokeObjectURL(url);
         }
 
+        function invoiceReference(invoice) {
+            return invoice.isr_reference_number
+                || invoice.esr_number
+                || invoice.reference_number
+                || invoice.reference
+                || '';
+        }
+
         function renderInvoices(target, invoices) {
             if (!invoices.length) {
                 target.innerHTML = '<div class="status">Nessuna fattura trovata per questo cliente.</div>';
@@ -470,7 +495,7 @@
                     <td><span class="pill ${invoiceStatusClass(invoice)}">${escapeHtml(invoiceStatus(invoice))}</span></td>
                     <td class="money">${escapeHtml(formatMoney(invoice.total, invoice.currency))}</td>
                     <td class="money">${escapeHtml(formatMoney(invoice.total_paid, invoice.currency))}</td>
-                    <td>${escapeHtml(invoice.isr_reference_number || invoice.reference || '-')}</td>
+                    <td>${escapeHtml(invoiceReference(invoice) || '-')}</td>
                     <td>
                         <details>
                             <summary class="raw-toggle">JSON</summary>
@@ -594,6 +619,52 @@
                 statusEl.classList.add('error');
             } finally {
                 button.disabled = false;
+            }
+        });
+
+        referenceForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const reference = referenceInput.value.trim();
+            if (reference.replace(/\D/g, '').length < 3) {
+                referenceStatusEl.textContent = 'Inserisci almeno 3 cifre del riferimento.';
+                referenceStatusEl.classList.add('error');
+                return;
+            }
+
+            referenceButton.disabled = true;
+            referenceStatusEl.classList.remove('error');
+            referenceStatusEl.textContent = 'Ricerca reference in corso...';
+            referenceResultsEl.innerHTML = '';
+
+            try {
+                const response = await fetch(`/api/utilities/smallinvoice/invoices/by-reference?reference=${encodeURIComponent(reference)}`);
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.detail || 'Ricerca reference fallita.');
+                }
+                const invoices = payload.invoices || [];
+                referenceStatusEl.textContent = `${payload.count} fatture trovate per riferimento ${payload.normalized_reference}.`;
+                if (invoices.length) {
+                    referenceResultsEl.innerHTML = `
+                        <div class="invoice-toolbar">
+                            <div class="status">${payload.count} fatture trovate.</div>
+                            <button class="download-button" type="button">Scarica CSV</button>
+                        </div>
+                    `;
+                    referenceResultsEl.querySelector('.download-button').addEventListener('click', () => {
+                        downloadCsv(`smallinvoice-reference-${payload.normalized_reference}.csv`, invoices);
+                    });
+                    const tableHost = document.createElement('div');
+                    referenceResultsEl.appendChild(tableHost);
+                    renderInvoices(tableHost, invoices);
+                } else {
+                    referenceResultsEl.innerHTML = '<div class="status">Nessuna fattura trovata per questo riferimento.</div>';
+                }
+            } catch (error) {
+                referenceStatusEl.textContent = error.message || 'Ricerca reference fallita.';
+                referenceStatusEl.classList.add('error');
+            } finally {
+                referenceButton.disabled = false;
             }
         });
     </script>
