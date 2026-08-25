@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import patch
+
+from fastapi import HTTPException
 
 from backend.attendance_app.course_catalog import (
     AttendanceCourseCatalogImportService,
@@ -83,6 +86,55 @@ class CourseCatalogImportServiceTests(unittest.TestCase):
         self.assertEqual(repository.rows, [source_row])
         self.assertEqual(result.created, 1)
         self.assertEqual(result.warnings, ["avviso lettura", "avviso repository"])
+
+
+class CourseCatalogRouteTests(unittest.TestCase):
+    def test_assigns_existing_or_new_logical_course(self):
+        import asyncio
+        import json
+
+        from backend.main import attendance_assign_catalog_logical_course
+
+        class Repository:
+            def assign_logical_course(self, edition_id, course_code):
+                self.received = (edition_id, course_code)
+                return {"id": 7, "code": "FSEA", "display_name": "FSEA"}
+
+        repository = Repository()
+        with patch("backend.main.PostgresAttendanceCourseCatalogRepository", return_value=repository):
+            response = asyncio.run(attendance_assign_catalog_logical_course(12, {"course_code": "  FSEA  "}))
+
+        self.assertEqual(repository.received, (12, "FSEA"))
+        self.assertEqual(json.loads(response.body)["logical_course"]["code"], "FSEA")
+
+    def test_deletes_catalog_edition(self):
+        import asyncio
+
+        from backend.main import attendance_delete_catalog_edition
+
+        class Repository:
+            def delete_edition(self, edition_id):
+                return edition_id == 12
+
+        with patch("backend.main.PostgresAttendanceCourseCatalogRepository", return_value=Repository()):
+            response = asyncio.run(attendance_delete_catalog_edition(12))
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_delete_unknown_edition_returns_not_found(self):
+        import asyncio
+
+        from backend.main import attendance_delete_catalog_edition
+
+        class Repository:
+            def delete_edition(self, edition_id):
+                return False
+
+        with patch("backend.main.PostgresAttendanceCourseCatalogRepository", return_value=Repository()):
+            with self.assertRaises(HTTPException) as context:
+                asyncio.run(attendance_delete_catalog_edition(99))
+
+        self.assertEqual(context.exception.status_code, 404)
 
 
 if __name__ == "__main__":

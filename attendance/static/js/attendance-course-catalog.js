@@ -7,6 +7,7 @@ const AttendanceCourseCatalogApp = {
             catalog: document.getElementById('catalogContainer'),
             importButton: document.getElementById('importGoogleButton'),
             importStatus: document.getElementById('importStatus'),
+            logicalCourseOptions: document.getElementById('logicalCourseOptions'),
         };
         this._els.importButton.addEventListener('click', () => this._importFromGoogle());
         await this._load();
@@ -17,8 +18,11 @@ const AttendanceCourseCatalogApp = {
             const response = await fetch('/api/attendance/course-catalog', { cache: 'no-store' });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'Impossibile leggere il catalogo.');
+            this._logicalCourses = payload.logical_courses || [];
+            this._renderLogicalCourseOptions();
             this._renderSummary(payload.summary || {});
             this._renderCatalog(payload.editions || []);
+            this._bindCatalogActions();
         } catch (error) {
             console.error(error);
             this._els.catalog.innerHTML = `<div class="empty">${this._escapeHtml(error.message)}</div>`;
@@ -63,7 +67,7 @@ const AttendanceCourseCatalogApp = {
         this._els.catalog.innerHTML = `
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>ID</th><th>Chiave edizione</th><th>Descrizione</th><th>Corso logico</th><th>Classroom</th><th>Calendar</th><th>Link predefinito</th><th>Ultimo import</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Chiave edizione</th><th>Descrizione</th><th>Corso logico</th><th>Classroom</th><th>Calendar</th><th>Link predefinito</th><th>Ultimo import</th><th></th></tr></thead>
                     <tbody>${editions.map((edition) => this._renderRow(edition)).join('')}</tbody>
                 </table>
             </div>
@@ -72,21 +76,83 @@ const AttendanceCourseCatalogApp = {
 
     _renderRow(edition) {
         const identifiers = edition.identifiers || {};
-        const logicalCourse = edition.logical_course
-            ? `<span class="badge assigned">${this._escapeHtml(edition.logical_course.display_name)}</span>`
-            : '<span class="badge unassigned">Da definire</span>';
+        const courseCode = edition.logical_course ? edition.logical_course.code : '';
         return `
             <tr>
                 <td>${edition.id}</td>
                 <td class="key">${this._escapeHtml(edition.edition_key)}</td>
                 <td>${this._escapeHtml(edition.display_name)}</td>
-                <td>${logicalCourse}</td>
+                <td>
+                    <form class="logical-course-form" data-edition-id="${edition.id}">
+                        <input class="logical-course-input" name="course_code" list="logicalCourseOptions" value="${this._escapeAttr(courseCode)}" placeholder="es. FSEA" aria-label="Corso logico per ${this._escapeAttr(edition.edition_key)}">
+                        <button class="logical-course-save" type="submit" title="Salva corso logico">✓</button>
+                    </form>
+                    <div class="logical-course-status" data-status-for="${edition.id}">${courseCode ? '<span class="badge assigned">Assegnato</span>' : '<span class="badge unassigned">Da definire</span>'}</div>
+                </td>
                 <td>${this._renderIdentifiers(identifiers.classroom_course_id)}</td>
                 <td>${this._renderIdentifiers(identifiers.calendar_id)}</td>
                 <td>${this._renderIdentifiers(identifiers.default_link, true)}</td>
                 <td class="muted">${this._formatDateTime(edition.last_imported_at)}</td>
+                <td><button class="delete-edition" type="button" data-edition-id="${edition.id}" data-edition-key="${this._escapeAttr(edition.edition_key)}" title="Elimina dal catalogo" aria-label="Elimina ${this._escapeAttr(edition.edition_key)}">×</button></td>
             </tr>
         `;
+    },
+
+    _renderLogicalCourseOptions() {
+        this._els.logicalCourseOptions.innerHTML = (this._logicalCourses || [])
+            .map((course) => `<option value="${this._escapeAttr(course.code)}">${this._escapeHtml(course.display_name)}</option>`)
+            .join('');
+    },
+
+    _bindCatalogActions() {
+        this._els.catalog.querySelectorAll('.logical-course-form').forEach((form) => {
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                this._saveLogicalCourse(form);
+            });
+        });
+        this._els.catalog.querySelectorAll('.delete-edition').forEach((button) => {
+            button.addEventListener('click', () => this._deleteEdition(button));
+        });
+    },
+
+    async _saveLogicalCourse(form) {
+        const editionId = form.dataset.editionId;
+        const input = form.querySelector('input[name="course_code"]');
+        const status = this._els.catalog.querySelector(`[data-status-for="${editionId}"]`);
+        if (status) status.textContent = 'Salvataggio...';
+        try {
+            const response = await fetch(`/api/attendance/course-catalog/editions/${editionId}/logical-course`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ course_code: input ? input.value.trim() : '' }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'Salvataggio non riuscito.');
+            await this._load();
+        } catch (error) {
+            console.error(error);
+            if (status) status.textContent = error.message;
+        }
+    },
+
+    async _deleteEdition(button) {
+        const editionId = button.dataset.editionId;
+        const editionKey = button.dataset.editionKey || 'questa edizione';
+        if (!window.confirm(`Eliminare ${editionKey} dal catalogo? Le presenze non verranno toccate.`)) return;
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/attendance/course-catalog/editions/${editionId}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const payload = await response.json();
+                throw new Error(payload.detail || 'Eliminazione non riuscita.');
+            }
+            await this._load();
+        } catch (error) {
+            console.error(error);
+            this._els.importStatus.textContent = error.message;
+            button.disabled = false;
+        }
     },
 
     _renderIdentifiers(values, links = false) {

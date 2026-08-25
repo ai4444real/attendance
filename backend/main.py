@@ -2841,15 +2841,11 @@ async def attendance_school_record_source(lesson_id: int, canonical_full_name: s
 async def attendance_course_catalog():
     repository = PostgresAttendanceCourseCatalogRepository()
     editions = repository.list_catalog()
-    logical_course_ids = {
-        edition["logical_course"]["id"]
-        for edition in editions
-        if edition["logical_course"] is not None
-    }
+    logical_courses = repository.list_logical_courses()
     return JSONResponse(
         {
             "summary": {
-                "logical_courses": len(logical_course_ids),
+                "logical_courses": len(logical_courses),
                 "editions": len(editions),
                 "unassigned_editions": sum(edition["logical_course"] is None for edition in editions),
                 "identifiers": sum(
@@ -2858,10 +2854,39 @@ async def attendance_course_catalog():
                     for values in edition["identifiers"].values()
                 ),
             },
+            "logical_courses": logical_courses,
             "editions": editions,
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
+
+
+@app.put("/api/attendance/course-catalog/editions/{edition_id}/logical-course")
+async def attendance_assign_catalog_logical_course(edition_id: int, payload: dict):
+    course_code = " ".join(str(payload.get("course_code") or "").strip().split())
+    if len(course_code) > 120:
+        raise HTTPException(status_code=400, detail="course_code must be at most 120 characters.")
+
+    repository = PostgresAttendanceCourseCatalogRepository()
+    logical_course = repository.assign_logical_course(edition_id, course_code or None)
+    if course_code and logical_course is None:
+        raise HTTPException(status_code=404, detail="Catalog edition not found.")
+    if not course_code and logical_course is None:
+        editions = repository.list_catalog()
+        if not any(edition["id"] == edition_id for edition in editions):
+            raise HTTPException(status_code=404, detail="Catalog edition not found.")
+    return JSONResponse(
+        {"edition_id": edition_id, "logical_course": logical_course},
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.delete("/api/attendance/course-catalog/editions/{edition_id}")
+async def attendance_delete_catalog_edition(edition_id: int):
+    repository = PostgresAttendanceCourseCatalogRepository()
+    if not repository.delete_edition(edition_id):
+        raise HTTPException(status_code=404, detail="Catalog edition not found.")
+    return Response(status_code=204)
 
 
 @app.post("/api/attendance/course-catalog/import-google")

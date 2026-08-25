@@ -6,6 +6,27 @@ from .connection import get_db_connection
 
 
 class PostgresAttendanceCourseCatalogRepository:
+    def list_logical_courses(self) -> list[dict]:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, code, display_name, description
+                    FROM attendance_catalog_courses
+                    ORDER BY lower(display_name), lower(code)
+                    """
+                )
+                rows = cursor.fetchall()
+        return [
+            {
+                "id": int(row[0]),
+                "code": str(row[1]),
+                "display_name": str(row[2]),
+                "description": row[3],
+            }
+            for row in rows
+        ]
+
     def list_catalog(self) -> list[dict]:
         with get_db_connection() as connection:
             with connection.cursor() as cursor:
@@ -53,6 +74,61 @@ class PostgresAttendanceCourseCatalogRepository:
             if row[9] is not None:
                 edition["identifiers"].setdefault(str(row[9]), []).append(str(row[10]))
         return list(editions.values())
+
+    def assign_logical_course(self, edition_id: int, course_code: str | None) -> dict | None:
+        normalized_code = " ".join((course_code or "").strip().split())
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                if normalized_code:
+                    cursor.execute(
+                        """
+                        INSERT INTO attendance_catalog_courses (code, display_name)
+                        VALUES (%s, %s)
+                        ON CONFLICT (lower(code))
+                        DO UPDATE SET updated_at = attendance_catalog_courses.updated_at
+                        RETURNING id, code, display_name
+                        """,
+                        (normalized_code, normalized_code),
+                    )
+                    course_row = cursor.fetchone()
+                    course_id = int(course_row[0])
+                    logical_course = {
+                        "id": course_id,
+                        "code": str(course_row[1]),
+                        "display_name": str(course_row[2]),
+                    }
+                else:
+                    course_id = None
+                    logical_course = None
+
+                cursor.execute(
+                    """
+                    UPDATE attendance_catalog_course_editions
+                    SET course_id = %s, updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id
+                    """,
+                    (course_id, edition_id),
+                )
+                if cursor.fetchone() is None:
+                    connection.rollback()
+                    return None
+            connection.commit()
+        return logical_course
+
+    def delete_edition(self, edition_id: int) -> bool:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM attendance_catalog_course_editions
+                    WHERE id = %s
+                    """,
+                    (edition_id,),
+                )
+                deleted = cursor.rowcount > 0
+            connection.commit()
+        return deleted
 
     def import_google_rows(self, rows: list[CourseCatalogSourceRow]) -> CourseCatalogImportResult:
         created = 0
