@@ -60,16 +60,73 @@ const AttendanceCourseCatalogApp = {
     },
 
     _renderCatalog(editions) {
-        if (!editions.length) {
+        if (!editions.length && !this._logicalCourses.length) {
             this._els.catalog.innerHTML = '<div class="empty">Il catalogo è vuoto. Usa “Importa da Google” per caricare il foglio Corsi.</div>';
             return;
         }
-        this._els.catalog.innerHTML = `
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>ID</th><th>Chiave edizione</th><th>Descrizione</th><th>Corso logico</th><th>Classroom</th><th>Calendar</th><th>Link predefinito</th><th>Ultimo import</th><th></th></tr></thead>
-                    <tbody>${editions.map((edition) => this._renderRow(edition)).join('')}</tbody>
-                </table>
+        const assignedByCourse = new Map(this._logicalCourses.map((course) => [course.id, []]));
+        const unassigned = [];
+        for (const edition of editions) {
+            const courseId = edition.logical_course ? edition.logical_course.id : null;
+            if (courseId !== null && assignedByCourse.has(courseId)) assignedByCourse.get(courseId).push(edition);
+            else unassigned.push(edition);
+        }
+        const groups = this._logicalCourses.map((course) => this._renderCourseGroup(course, assignedByCourse.get(course.id) || []));
+        if (unassigned.length) groups.push(this._renderCourseGroup(null, unassigned));
+        this._els.catalog.innerHTML = `<div class="course-groups">${groups.join('')}</div>`;
+    },
+
+    _renderCourseGroup(course, editions) {
+        const isUnassigned = course === null;
+        const title = isUnassigned ? 'N/A · corso logico non assegnato' : course.display_name;
+        const code = isUnassigned ? `${editions.length} edizioni da assegnare` : `${course.code} · ${editions.length} edizioni`;
+        const identifiers = isUnassigned ? '' : this._renderLogicalIdentifiers(course);
+        return `
+            <article class="logical-course-card ${isUnassigned ? 'na-card' : ''}">
+                <header class="logical-course-header">
+                    <div class="logical-course-title-row">
+                        <h3 class="logical-course-title">${this._escapeHtml(title)}</h3>
+                        <span class="logical-course-code">${this._escapeHtml(code)}</span>
+                    </div>
+                    ${identifiers}
+                </header>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>ID</th><th>Chiave edizione</th><th>Descrizione</th><th>Corso logico</th><th>Classroom</th><th>Calendar</th><th>Link predefinito</th><th>Ultimo import</th><th></th></tr></thead>
+                        <tbody>${editions.length ? editions.map((edition) => this._renderRow(edition)).join('') : '<tr><td colspan="9" class="muted">Nessuna edizione associata.</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </article>
+        `;
+    },
+
+    _renderLogicalIdentifiers(course) {
+        return `
+            <div class="logical-identifiers">
+                ${this._renderLogicalIdentifierBox(course, 'attendance_course_name', 'Nomi Attendance', 'es. DIRETTORE VENDITE')}
+                ${this._renderLogicalIdentifierBox(course, 'zoom_meeting_id', 'Zoom ID comuni', 'es. 871 2736 6049')}
+            </div>
+        `;
+    },
+
+    _renderLogicalIdentifierBox(course, type, label, placeholder) {
+        const identifiers = (course.identifiers || []).filter((identifier) => identifier.type === type);
+        const chips = identifiers.length
+            ? identifiers.map((identifier) => `
+                <span class="logical-identifier-chip">
+                    ${this._escapeHtml(identifier.value)}
+                    ${identifier.source_system === 'manual' ? `<button class="logical-identifier-delete" type="button" data-course-id="${course.id}" data-identifier-id="${identifier.id}" title="Rimuovi">×</button>` : ''}
+                </span>
+            `).join('')
+            : '<span class="muted">Nessuno</span>';
+        return `
+            <div class="logical-identifier-box">
+                <span class="logical-identifier-label">${this._escapeHtml(label)}</span>
+                <div class="logical-identifier-chips">${chips}</div>
+                <form class="logical-identifier-form" data-course-id="${course.id}" data-identifier-type="${this._escapeAttr(type)}">
+                    <input class="logical-identifier-input" name="identifier_value" placeholder="${this._escapeAttr(placeholder)}" aria-label="Aggiungi ${this._escapeAttr(label)}">
+                    <button class="logical-identifier-add" type="submit">+</button>
+                </form>
             </div>
         `;
     },
@@ -114,6 +171,15 @@ const AttendanceCourseCatalogApp = {
         this._els.catalog.querySelectorAll('.delete-edition').forEach((button) => {
             button.addEventListener('click', () => this._deleteEdition(button));
         });
+        this._els.catalog.querySelectorAll('.logical-identifier-form').forEach((form) => {
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                this._addLogicalIdentifier(form);
+            });
+        });
+        this._els.catalog.querySelectorAll('.logical-identifier-delete').forEach((button) => {
+            button.addEventListener('click', () => this._deleteLogicalIdentifier(button));
+        });
     },
 
     async _saveLogicalCourse(form) {
@@ -146,6 +212,48 @@ const AttendanceCourseCatalogApp = {
             if (!response.ok) {
                 const payload = await response.json();
                 throw new Error(payload.detail || 'Eliminazione non riuscita.');
+            }
+            await this._load();
+        } catch (error) {
+            console.error(error);
+            this._els.importStatus.textContent = error.message;
+            button.disabled = false;
+        }
+    },
+
+    async _addLogicalIdentifier(form) {
+        const courseId = form.dataset.courseId;
+        const identifierType = form.dataset.identifierType;
+        const input = form.querySelector('input[name="identifier_value"]');
+        const value = input ? input.value.trim() : '';
+        if (!value) return;
+        const button = form.querySelector('button');
+        if (button) button.disabled = true;
+        try {
+            const response = await fetch(`/api/attendance/course-catalog/logical-courses/${courseId}/identifiers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier_type: identifierType, identifier_value: value }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'Identificatore non salvato.');
+            await this._load();
+        } catch (error) {
+            console.error(error);
+            this._els.importStatus.textContent = error.message;
+            if (button) button.disabled = false;
+        }
+    },
+
+    async _deleteLogicalIdentifier(button) {
+        const courseId = button.dataset.courseId;
+        const identifierId = button.dataset.identifierId;
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/attendance/course-catalog/logical-courses/${courseId}/identifiers/${identifierId}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const payload = await response.json();
+                throw new Error(payload.detail || 'Identificatore non rimosso.');
             }
             await this._load();
         } catch (error) {

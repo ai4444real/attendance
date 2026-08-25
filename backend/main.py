@@ -2852,7 +2852,7 @@ async def attendance_course_catalog():
                     len(values)
                     for edition in editions
                     for values in edition["identifiers"].values()
-                ),
+                ) + sum(len(course["identifiers"]) for course in logical_courses),
             },
             "logical_courses": logical_courses,
             "editions": editions,
@@ -2886,6 +2886,36 @@ async def attendance_delete_catalog_edition(edition_id: int):
     repository = PostgresAttendanceCourseCatalogRepository()
     if not repository.delete_edition(edition_id):
         raise HTTPException(status_code=404, detail="Catalog edition not found.")
+    return Response(status_code=204)
+
+
+@app.post("/api/attendance/course-catalog/logical-courses/{course_id}/identifiers")
+async def attendance_add_logical_course_identifier(course_id: int, payload: dict):
+    identifier_type = str(payload.get("identifier_type") or "").strip()
+    identifier_value = " ".join(str(payload.get("identifier_value") or "").strip().split())
+    allowed_types = {"attendance_course_name", "zoom_meeting_id"}
+    if identifier_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Unsupported logical course identifier type.")
+    if not identifier_value:
+        raise HTTPException(status_code=400, detail="identifier_value is required.")
+    if len(identifier_value) > 500:
+        raise HTTPException(status_code=400, detail="identifier_value must be at most 500 characters.")
+
+    repository = PostgresAttendanceCourseCatalogRepository()
+    identifier = repository.add_logical_course_identifier(course_id, identifier_type, identifier_value)
+    if identifier is None:
+        raise HTTPException(status_code=404, detail="Logical course not found.")
+    return JSONResponse(
+        {"course_id": course_id, "identifier": identifier},
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.delete("/api/attendance/course-catalog/logical-courses/{course_id}/identifiers/{identifier_id}")
+async def attendance_delete_logical_course_identifier(course_id: int, identifier_id: int):
+    repository = PostgresAttendanceCourseCatalogRepository()
+    if not repository.delete_logical_course_identifier(course_id, identifier_id):
+        raise HTTPException(status_code=404, detail="Manual logical course identifier not found.")
     return Response(status_code=204)
 
 

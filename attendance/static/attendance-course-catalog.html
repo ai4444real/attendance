@@ -34,6 +34,22 @@
         .panel { background: white; border: 1px solid var(--brand-border); border-radius: 18px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); padding: 20px; }
         .panel-title { font-size: 18px; font-weight: 800; color: var(--brand-ink); margin: 0 0 6px; }
         .hint { color: var(--brand-muted); font-size: 14px; line-height: 1.6; margin: 0 0 16px; }
+        .course-groups { display: grid; gap: 18px; }
+        .logical-course-card { border: 1px solid var(--brand-border); border-radius: 16px; overflow: hidden; background: #fff; }
+        .logical-course-header { padding: 16px; background: linear-gradient(180deg, #f8fbfd 0%, #fff 100%); border-bottom: 1px solid var(--brand-border); }
+        .logical-course-title-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+        .logical-course-title { margin: 0; color: var(--brand-ink); font-size: 22px; }
+        .logical-course-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--brand-muted); font-size: 13px; }
+        .logical-identifiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
+        .logical-identifier-box { border: 1px solid var(--brand-border); border-radius: 12px; padding: 10px; background: white; }
+        .logical-identifier-label { display: block; margin-bottom: 8px; color: var(--brand-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+        .logical-identifier-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; }
+        .logical-identifier-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 999px; background: #edf6fa; color: #155e75; font-size: 12px; font-weight: 700; }
+        .logical-identifier-delete { border: 0; padding: 0; background: transparent; color: #a61b1b; font-size: 15px; cursor: pointer; line-height: 1; }
+        .logical-identifier-form { display: flex; gap: 6px; margin-top: 8px; }
+        .logical-identifier-input { flex: 1; min-width: 0; border: 1px solid var(--brand-border); border-radius: 9px; padding: 7px 8px; font-size: 13px; }
+        .logical-identifier-add { border: 1px solid #b9d7e8; background: #f4fbff; color: #075985; border-radius: 9px; padding: 7px 10px; font-weight: 800; cursor: pointer; }
+        .na-card .logical-course-header { background: #fff8e8; }
         .table-wrap { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 980px; }
         th, td { padding: 12px 10px; border-bottom: 1px solid var(--brand-border); text-align: left; vertical-align: top; }
@@ -88,8 +104,8 @@
         <section id="summary" class="summary-grid"></section>
 
         <section class="panel">
-            <h2 class="panel-title">Edizioni e chiavi operative</h2>
-            <p class="hint">Il foglio Corsi fornisce le chiavi operative, ma non sempre il corso logico. Scrivi lo stesso codice, per esempio FSEA, sulle edizioni da raggruppare. Una voce eliminata ricomparirà al prossimo import se rimane nel foglio Google.</p>
+            <h2 class="panel-title">Corsi logici ed edizioni</h2>
+            <p class="hint">Ogni corso logico raccoglie i suoi nomi Attendance e gli eventuali Zoom ID comuni; sotto compaiono le edizioni importate da Google. Le nuove chiavi entrano in N/A finché non vengono assegnate.</p>
             <div id="catalogContainer"></div>
             <datalist id="logicalCourseOptions"></datalist>
         </section>

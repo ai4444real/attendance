@@ -11,21 +11,92 @@ class PostgresAttendanceCourseCatalogRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, code, display_name, description
-                    FROM attendance_catalog_courses
-                    ORDER BY lower(display_name), lower(code)
+                    SELECT
+                        c.id,
+                        c.code,
+                        c.display_name,
+                        c.description,
+                        i.id,
+                        i.identifier_type,
+                        i.identifier_value,
+                        i.source_system
+                    FROM attendance_catalog_courses AS c
+                    LEFT JOIN attendance_catalog_logical_course_identifiers AS i
+                        ON i.course_id = c.id
+                    ORDER BY lower(c.display_name), lower(c.code), i.identifier_type, lower(i.identifier_value)
                     """
                 )
                 rows = cursor.fetchall()
-        return [
-            {
-                "id": int(row[0]),
-                "code": str(row[1]),
-                "display_name": str(row[2]),
-                "description": row[3],
-            }
-            for row in rows
-        ]
+
+        courses: dict[int, dict] = {}
+        for row in rows:
+            course = courses.setdefault(
+                int(row[0]),
+                {
+                    "id": int(row[0]),
+                    "code": str(row[1]),
+                    "display_name": str(row[2]),
+                    "description": row[3],
+                    "identifiers": [],
+                },
+            )
+            if row[4] is not None:
+                course["identifiers"].append(
+                    {
+                        "id": int(row[4]),
+                        "type": str(row[5]),
+                        "value": str(row[6]),
+                        "source_system": str(row[7]),
+                    }
+                )
+        return list(courses.values())
+
+    def add_logical_course_identifier(
+        self,
+        course_id: int,
+        identifier_type: str,
+        identifier_value: str,
+    ) -> dict | None:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO attendance_catalog_logical_course_identifiers (
+                        course_id, identifier_type, identifier_value, source_system
+                    )
+                    SELECT id, %s, %s, 'manual'
+                    FROM attendance_catalog_courses
+                    WHERE id = %s
+                    ON CONFLICT (course_id, identifier_type, identifier_value)
+                    DO UPDATE SET updated_at = NOW()
+                    RETURNING id, identifier_type, identifier_value, source_system
+                    """,
+                    (identifier_type, identifier_value, course_id),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            return None
+        return {
+            "id": int(row[0]),
+            "type": str(row[1]),
+            "value": str(row[2]),
+            "source_system": str(row[3]),
+        }
+
+    def delete_logical_course_identifier(self, course_id: int, identifier_id: int) -> bool:
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM attendance_catalog_logical_course_identifiers
+                    WHERE id = %s AND course_id = %s AND source_system = 'manual'
+                    """,
+                    (identifier_id, course_id),
+                )
+                deleted = cursor.rowcount > 0
+            connection.commit()
+        return deleted
 
     def list_catalog(self) -> list[dict]:
         with get_db_connection() as connection:

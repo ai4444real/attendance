@@ -75,6 +75,13 @@ Gli identificatori sono una collezione tipizzata, non colonne obbligatorie del
 corso. Questo consente piu' alias dello stesso tipo e l'aggiunta di nuove
 sorgenti senza cambiare ogni volta lo schema principale.
 
+Gli identificatori stabili, come i nomi osservati da Attendance, appartengono
+al corso logico e non vengono ripetuti su tutte le edizioni. Gli identificatori
+operativi specifici, come `target_key`, Classroom e Calendar, appartengono
+invece all'edizione. Uno Zoom meeting ID viene collocato sul corso logico solo
+quando e' realmente comune alle sue edizioni; in caso contrario resta un dato
+dell'edizione o della singola lezione.
+
 ### Lezione pianificata e lezione osservata
 
 Una riga del foglio `Lezioni` e' una sessione pianificata e possiede un
@@ -137,6 +144,12 @@ L'importazione deve essere idempotente e best effort:
 - non blocca l'intero import per una riga incompleta;
 - restituisce un riepilogo di creati, aggiornati, invariati e scartati;
 - conserva la provenienza e la data dell'ultima importazione.
+
+L'importazione aggiorna esclusivamente i campi e gli identificatori provenienti
+da Google. Non modifica `course_id`, corsi logici o identificatori manuali. Una
+nuova edizione nasce con `course_id` nullo e viene mostrata nel gruppo grafico
+`N/A`; dopo l'assegnazione si sposta sotto il relativo corso logico. `N/A` non
+e' un record del catalogo.
 
 Il foglio non esprime in modo affidabile il raggruppamento tra corso logico ed
 edizioni. Per esempio, le tre chiavi FSEA devono essere associate esplicitamente

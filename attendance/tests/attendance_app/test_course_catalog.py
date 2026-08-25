@@ -136,6 +136,58 @@ class CourseCatalogRouteTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 404)
 
+    def test_adds_manual_identifier_to_logical_course(self):
+        import asyncio
+        import json
+
+        from backend.main import attendance_add_logical_course_identifier
+
+        class Repository:
+            def add_logical_course_identifier(self, course_id, identifier_type, identifier_value):
+                self.received = (course_id, identifier_type, identifier_value)
+                return {"id": 21, "type": identifier_type, "value": identifier_value, "source_system": "manual"}
+
+        repository = Repository()
+        with patch("backend.main.PostgresAttendanceCourseCatalogRepository", return_value=repository):
+            response = asyncio.run(
+                attendance_add_logical_course_identifier(
+                    7,
+                    {"identifier_type": "attendance_course_name", "identifier_value": "  DIRETTORE   VENDITE "},
+                )
+            )
+
+        self.assertEqual(repository.received, (7, "attendance_course_name", "DIRETTORE VENDITE"))
+        self.assertEqual(json.loads(response.body)["identifier"]["value"], "DIRETTORE VENDITE")
+
+    def test_rejects_unsupported_logical_identifier_type(self):
+        import asyncio
+
+        from backend.main import attendance_add_logical_course_identifier
+
+        with self.assertRaises(HTTPException) as context:
+            asyncio.run(
+                attendance_add_logical_course_identifier(
+                    7,
+                    {"identifier_type": "classroom_course_id", "identifier_value": "123"},
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+
+    def test_deletes_manual_logical_course_identifier(self):
+        import asyncio
+
+        from backend.main import attendance_delete_logical_course_identifier
+
+        class Repository:
+            def delete_logical_course_identifier(self, course_id, identifier_id):
+                return (course_id, identifier_id) == (7, 21)
+
+        with patch("backend.main.PostgresAttendanceCourseCatalogRepository", return_value=Repository()):
+            response = asyncio.run(attendance_delete_logical_course_identifier(7, 21))
+
+        self.assertEqual(response.status_code, 204)
+
 
 if __name__ == "__main__":
     unittest.main()
