@@ -215,6 +215,11 @@ class LessonPlanManager {
             this.loadLessonPlan();
         });
 
+        // Import only the lesson plans from another course file
+        document.getElementById('importPlansBtn').addEventListener('click', () => {
+            this.importLessonPlans();
+        });
+
         // Preview course button
         document.getElementById('previewBtn').addEventListener('click', () => {
             this.openCoursePreview();
@@ -495,6 +500,50 @@ class LessonPlanManager {
         }
     }
 
+    async importLessonPlans() {
+        try {
+            if (this.currentLessonPlan) {
+                this.autoSaveCurrentPlan();
+            }
+
+            const data = await this.repository.load(null, 'course');
+            if (!data || !data.course || !Array.isArray(data.lesson_plans)) {
+                throw new Error('Il file deve contenere un corso con i relativi piani di lezione');
+            }
+            if (data.lesson_plans.length === 0) {
+                throw new Error('Il corso selezionato non contiene piani di lezione');
+            }
+
+            const usedIds = new Set(this.lessonPlans.map(plan => plan.id));
+            const importedPlans = data.lesson_plans.map(plan => {
+                if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+                    throw new Error('Il file contiene un piano di lezione non valido');
+                }
+
+                const importedPlan = { ...plan, course_id: this.currentCourse.id };
+                if (!importedPlan.id || usedIds.has(importedPlan.id)) {
+                    importedPlan.id = this.generateUniquePlanId(usedIds);
+                }
+                usedIds.add(importedPlan.id);
+                return importedPlan;
+            });
+
+            this.lessonPlans.push(...importedPlans);
+            this.currentLessonPlan = importedPlans[0];
+            this.clearForm();
+            this.populateForm(this.currentLessonPlan);
+            this.updateUI();
+
+            const planLabel = importedPlans.length === 1 ? 'piano importato' : 'piani importati';
+            alert(`✅ ${importedPlans.length} ${planLabel} nel corso "${this.currentCourse.name}"`);
+        } catch (error) {
+            if (error.message !== 'Nessun file selezionato') {
+                console.error('Errore durante l\'importazione dei piani:', error);
+                alert(error.message || 'Errore durante l\'importazione dei piani');
+            }
+        }
+    }
+
     handleFileLoad(event) {
         // This method is no longer used - kept for backward compatibility
         // The repository now handles file loading directly
@@ -676,6 +725,14 @@ class LessonPlanManager {
 
     generateUUID() {
         return 'course_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    generateUniquePlanId(usedIds = new Set()) {
+        let planId;
+        do {
+            planId = `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        } while (usedIds.has(planId));
+        return planId;
     }
 
     initializeNewCourse() {

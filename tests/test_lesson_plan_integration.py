@@ -79,6 +79,17 @@ class LessonPlanIntegrationTests(unittest.TestCase):
         self.assertIn("segment-move-down", segments)
         self.assertIn(".reorder-btn", styles)
 
+    def test_course_page_can_import_plans_without_replacing_current_course(self):
+        html = (MODULE / "index.html").read_text(encoding="utf-8")
+        manager = (MODULE / "js" / "lesson-plan-manager.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('id="importPlansBtn"', html)
+        self.assertIn("async importLessonPlans()", manager)
+        self.assertIn("course_id: this.currentCourse.id", manager)
+        self.assertIn("this.lessonPlans.push(...importedPlans)", manager)
+
 
 if __name__ == "__main__":
     unittest.main()
