@@ -2777,6 +2777,7 @@ async def attendance_school_records():
                     "lesson_id": record.lesson_id,
                     "course_name": record.course_name,
                     "lesson_date": record.lesson_date,
+                    "topic": record.topic,
                     "canonical_full_name": record.canonical_full_name,
                     "email": record.email,
                     "final_presence_status": record.final_presence_status,

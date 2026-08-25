@@ -274,8 +274,9 @@ const AttendanceSchoolApp = {
                         </div>
                         <div class="lesson-timeline">
                             ${course.lessons.map((lesson) => `
-                                <a class="lesson-tile" href="${this._escapeAttr(this._draftLessonUrl(lesson.lesson_id))}" target="_blank" rel="noopener" title="${this._escapeAttr(`${course.courseName} · ${this._formatDate(lesson.lesson_date)} · lesson #${lesson.lesson_id}`)}">
+                                <a class="lesson-tile" href="${this._escapeAttr(this._draftLessonUrl(lesson.lesson_id))}" target="_blank" rel="noopener" title="${this._escapeAttr(`${course.courseName} · ${this._formatDate(lesson.lesson_date)}${lesson.topic ? ` · ${lesson.topic}` : ''} · lesson #${lesson.lesson_id}`)}">
                                     <div class="lesson-tile-date">${this._escapeHtml(this._formatShortDate(lesson.lesson_date))}</div>
+                                    ${lesson.topic ? `<div class="lesson-tile-topic">${this._escapeHtml(lesson.topic)}</div>` : ''}
                                     <div class="lesson-tile-detail"><span class="lesson-tile-count">${lesson.usefulPresences}</span> presenze</div>
                                 </a>
                             `).join('')}
@@ -355,8 +356,9 @@ const AttendanceSchoolApp = {
                                     const record = participantByLesson.get(String(lesson.lesson_id));
                                     const status = record?.final_presence_status || 'missing';
                                     return `
-                                        <a class="lesson-tile ${this._escapeAttr(status)}" href="${this._escapeAttr(this._draftLessonUrl(lesson.lesson_id))}" target="_blank" rel="noopener" title="${this._escapeAttr(`${courseName} · ${this._formatDate(lesson.lesson_date)} · ${record ? this._presenceLabel(record.final_presence_status) : 'nessun record'}`)}">
+                                        <a class="lesson-tile ${this._escapeAttr(status)}" href="${this._escapeAttr(this._draftLessonUrl(lesson.lesson_id))}" target="_blank" rel="noopener" title="${this._escapeAttr(`${courseName} · ${this._formatDate(lesson.lesson_date)}${lesson.topic ? ` · ${lesson.topic}` : ''} · ${record ? this._presenceLabel(record.final_presence_status) : 'nessun record'}`)}">
                                             <div class="lesson-tile-date">${this._escapeHtml(this._formatShortDate(lesson.lesson_date))}</div>
+                                            ${lesson.topic ? `<div class="lesson-tile-topic">${this._escapeHtml(lesson.topic)}</div>` : ''}
                                             <div class="lesson-tile-detail">${this._escapeHtml(record ? this._presenceShortLabel(record.final_presence_status) : 'vuoto')}</div>
                                         </a>
                                     `;
@@ -381,6 +383,7 @@ const AttendanceSchoolApp = {
             const lesson = course.lessonsById.get(String(record.lesson_id)) || {
                 lesson_id: record.lesson_id,
                 lesson_date: record.lesson_date,
+                topic: record.topic || '',
                 usefulPresences: 0,
                 records: 0,
             };
@@ -426,6 +429,7 @@ const AttendanceSchoolApp = {
                     <tr>
                         <th>Corso</th>
                         <th>Data</th>
+                        <th>Argomento</th>
                         <th>Studente</th>
                         <th>Stato di presenza</th>
                         <th>Minuti</th>
@@ -440,6 +444,7 @@ const AttendanceSchoolApp = {
                             <tr>
                                 <td>${this._escapeHtml(record.course_name)}</td>
                                 <td><a class="lesson-link" href="${this._escapeAttr(this._draftLessonUrl(record.lesson_id))}" target="_blank" rel="noopener">${this._escapeHtml(this._formatDate(record.lesson_date))}</a></td>
+                                <td>${this._escapeHtml(record.topic || '')}</td>
                                 <td>${this._escapeHtml(this._formatPersonName(record.canonical_full_name))}</td>
                                 <td><span class="status-tag ${this._escapeAttr(record.final_presence_status)}">${this._escapeHtml(this._presenceLabel(record.final_presence_status))}</span></td>
                                 <td>${this._escapeHtml(this._formatMinutes(this._recordTotalMinutes(record)))}</td>
@@ -752,6 +757,7 @@ const AttendanceSchoolApp = {
         const headers = [
             'corso',
             'data',
+            'argomento',
             'studente',
             'email',
             'stato_presenza',
@@ -767,6 +773,7 @@ const AttendanceSchoolApp = {
             return [
                 record.course_name,
                 record.lesson_date,
+                record.topic || '',
                 this._formatPersonName(record.canonical_full_name),
                 record.email || '',
                 this._presenceLabel(record.final_presence_status),

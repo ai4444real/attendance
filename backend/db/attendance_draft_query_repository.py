@@ -441,7 +441,8 @@ class PostgresAttendanceDraftQueryRepository:
                         SELECT
                             id,
                             course_name,
-                            lesson_date
+                            lesson_date,
+                            topic
                         FROM attendance_lessons
                         WHERE status = 'official'
                           AND is_ignored = FALSE
@@ -458,6 +459,7 @@ class PostgresAttendanceDraftQueryRepository:
                             l.id AS lesson_id,
                             l.course_name,
                             l.lesson_date,
+                            l.topic,
                             p.id AS participant_id,
                             p.canonical_full_name,
                             NULLIF(lower(COALESCE(p.email, '')), '') AS email,
@@ -493,6 +495,7 @@ class PostgresAttendanceDraftQueryRepository:
                             b.lesson_id,
                             b.course_name,
                             b.lesson_date,
+                            b.topic,
                             MIN(b.canonical_full_name) OVER (
                                 PARTITION BY lower(b.canonical_full_name)
                             ) AS canonical_full_name,
@@ -515,6 +518,7 @@ class PostgresAttendanceDraftQueryRepository:
                             lesson_id,
                             course_name,
                             lesson_date,
+                            MIN(topic) AS topic,
                             MIN(canonical_full_name) AS canonical_full_name,
                             MIN(email) AS email,
                             MAX(status_rank) AS status_rank,
@@ -532,6 +536,7 @@ class PostgresAttendanceDraftQueryRepository:
                         p.lesson_id,
                         p.course_name,
                         p.lesson_date,
+                        p.topic,
                         p.canonical_full_name,
                         p.email,
                         CASE p.status_rank
@@ -561,12 +566,13 @@ class PostgresAttendanceDraftQueryRepository:
                 lesson_id=int(row[0]),
                 course_name=str(row[1]),
                 lesson_date=row[2].isoformat(),
-                canonical_full_name=str(row[3]),
-                email=row[4],
-                final_presence_status=str(row[5]),
-                total_minutes=float(row[6] or 0),
-                expected_lessons_count=int(row[7]),
-                expected_lessons_source=str(row[8]),
+                topic=row[3],
+                canonical_full_name=str(row[4]),
+                email=row[5],
+                final_presence_status=str(row[6]),
+                total_minutes=float(row[7] or 0),
+                expected_lessons_count=int(row[8]),
+                expected_lessons_source=str(row[9]),
             )
             for row in rows
         ]

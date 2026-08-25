@@ -247,6 +247,7 @@ class SchoolAttendanceRecordView:
     lesson_id: int
     course_name: str
     lesson_date: str
+    topic: Optional[str]
     canonical_full_name: str
     email: Optional[str]
     final_presence_status: str
