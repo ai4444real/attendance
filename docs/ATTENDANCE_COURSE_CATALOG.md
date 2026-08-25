@@ -192,6 +192,29 @@ deterministiche e prudenti:
 L'AI non e' necessaria. Una somiglianza testuale puo' generare un suggerimento,
 ma non deve modificare autonomamente il collegamento.
 
+## Arricchimento on demand delle lezioni
+
+Il foglio `Lezioni` viene letto soltanto quando l'operatore usa il comando
+"Importa argomenti da Google" nella pagina delle lezioni importate. Per ogni
+riga vengono acquisiti almeno `lesson_id`, titolo evento, argomento, data,
+orari, destinatari e link Drive/Zoom.
+
+Il collegamento e' applicato in modo deterministico:
+
+1. un `lesson_id` esterno gia' collegato prevale;
+2. altrimenti il primo destinatario risolve l'edizione e il corso logico;
+3. il `course_name` osservato da Attendance deve corrispondere a un nome
+   Attendance esplicito o al codice/nome normalizzato del corso logico;
+4. la data deve coincidere;
+5. se restano piu' candidati, l'orario puo' disambiguare solo con un risultato
+   univoco;
+6. zero o piu' candidati non producono aggiornamenti.
+
+L'arricchimento viene scritto direttamente su `attendance_lessons`. Un
+argomento con sorgente manuale non viene sovrascritto da Google. L'import
+restituisce separatamente righe aggiornate, invariate, senza mappatura del
+catalogo, senza lezione Attendance e ambigue.
+
 ## Confine del progetto
 
 Il catalogo non rappresenta la decisione di trasferire in Rebekko tutte le

@@ -24,6 +24,11 @@
         .hero h1 { margin: 0 0 10px; font-size: 36px; }
         .hero p { margin: 0; line-height: 1.6; max-width: 860px; font-size: 16px; }
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .enrichment-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: white; border: 1px solid var(--brand-border); border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; }
+        .enrichment-copy { color: var(--brand-muted); font-size: 14px; }
+        .enrichment-button { border: 1px solid #b9d7e8; background: #f4fbff; color: #075985; border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 800; cursor: pointer; }
+        .enrichment-button:disabled { cursor: wait; opacity: .65; }
+        .enrichment-status { width: 100%; color: var(--brand-muted); font-size: 13px; min-height: 16px; }
         .summary-card { background: white; border: 1px solid var(--brand-border); border-radius: 16px; padding: 16px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); }
         .summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-muted); margin-bottom: 8px; font-weight: 700; }
         .summary-value { font-size: 26px; font-weight: 800; color: var(--brand-ink); }
@@ -46,6 +51,8 @@
         .lesson-track::-webkit-scrollbar-thumb { background: rgba(21, 94, 117, 0.25); border-radius: 999px; }
         .lesson-cell { border: 1px solid var(--brand-border); border-radius: 16px; padding: 14px 14px 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%); min-height: 138px; display: flex; flex-direction: column; gap: 8px; }
         .lesson-date { font-size: 15px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; color: var(--brand-ink); }
+        .lesson-topic { font-size: 13px; font-weight: 700; color: #155e75; line-height: 1.35; }
+        .lesson-external-id { color: var(--brand-muted); font-size: 10px; }
         .lesson-records { font-size: 24px; font-weight: 900; color: var(--brand-ink); line-height: 1; }
         .lesson-records-label { font-size: 13px; color: var(--brand-muted); }
         .lesson-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
@@ -85,6 +92,12 @@
         </section>
 
         <section id="summary" class="summary-grid"></section>
+
+        <section class="enrichment-bar">
+            <div class="enrichment-copy">Arricchisce le lezioni esistenti con ID, argomento e dati pianificati dal foglio Google “Lezioni”. I casi ambigui vengono lasciati invariati.</div>
+            <button id="importLessonTopicsButton" class="enrichment-button" type="button">Importa argomenti da Google</button>
+            <div id="lessonEnrichmentStatus" class="enrichment-status" aria-live="polite"></div>
+        </section>
 
         <section class="panel">
             <h2 class="panel-title">Timeline lezioni</h2>

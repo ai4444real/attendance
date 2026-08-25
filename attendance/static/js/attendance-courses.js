@@ -5,9 +5,12 @@ const AttendanceCoursesApp = {
         this._els = {
             summary: document.getElementById('summary'),
             courseContainer: document.getElementById('courseContainer'),
+            importLessonTopicsButton: document.getElementById('importLessonTopicsButton'),
+            lessonEnrichmentStatus: document.getElementById('lessonEnrichmentStatus'),
         };
         this._courses = [];
         this._summary = {};
+        this._els.importLessonTopicsButton.addEventListener('click', () => this._importLessonEnrichment());
         await this._load();
     },
 
@@ -96,6 +99,8 @@ const AttendanceCoursesApp = {
                         ${lessons.map((lesson) => `
                             <div class="lesson-cell" title="${this._escapeAttr(`${course.course_name} · ${this._formatDate(lesson.lesson_date)} · meeting ${lesson.source_meeting_id}`)}">
                                 <div class="lesson-date">${this._escapeHtml(this._formatDate(lesson.lesson_date))}</div>
+                                ${lesson.topic ? `<div class="lesson-topic">${this._escapeHtml(lesson.topic)}</div>` : ''}
+                                ${lesson.external_lesson_id ? `<div class="lesson-external-id">ID lezione ${this._escapeHtml(lesson.external_lesson_id)}</div>` : ''}
                                 <div class="lesson-records">${lesson.total_records || 0}</div>
                                 <div class="lesson-records-label">presenze</div>
                                 <div class="lesson-status-row">
@@ -109,6 +114,33 @@ const AttendanceCoursesApp = {
                 </article>
             `;
         }).join('');
+    },
+
+    async _importLessonEnrichment() {
+        const button = this._els.importLessonTopicsButton;
+        const status = this._els.lessonEnrichmentStatus;
+        button.disabled = true;
+        status.textContent = 'Lettura e matching in corso...';
+        try {
+            const response = await fetch('/api/attendance/lessons/import-google-enrichment', { method: 'POST' });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'Importazione non riuscita.');
+            status.textContent = [
+                `${payload.rows_read} righe lette`,
+                `${payload.matched} collegate`,
+                `${payload.updated} aggiornate`,
+                `${payload.unchanged} invariate`,
+                `${payload.missing_catalog_mapping} senza mappatura corso`,
+                `${payload.missing_attendance_lesson} senza lezione Attendance`,
+                `${payload.ambiguous} ambigue`,
+            ].join(' · ');
+            await this._load();
+        } catch (error) {
+            console.error(error);
+            status.textContent = error.message;
+        } finally {
+            button.disabled = false;
+        }
     },
 
     _bindCourseTargetForms() {

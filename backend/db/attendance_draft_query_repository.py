@@ -590,7 +590,12 @@ class PostgresAttendanceDraftQueryRepository:
                         COUNT(*) FILTER (WHERE p.final_presence_status = 'presente') AS presente_count,
                         COUNT(*) FILTER (WHERE p.final_presence_status = 'prima_meta') AS prima_meta_count,
                         COUNT(*) FILTER (WHERE p.final_presence_status = 'seconda_meta') AS seconda_meta_count,
-                        COUNT(*) FILTER (WHERE p.final_presence_status = 'assente') AS assente_count
+                        COUNT(*) FILTER (WHERE p.final_presence_status = 'assente') AS assente_count,
+                        l.external_lesson_id,
+                        l.topic,
+                        l.planned_event_title,
+                        l.planned_home_recipient_key,
+                        l.planned_match_method
                     FROM attendance_lessons AS l
                     LEFT JOIN attendance_courses AS c
                         ON c.course_name = l.course_name
@@ -627,6 +632,11 @@ class PostgresAttendanceDraftQueryRepository:
                 prima_meta_count=int(row[7]),
                 seconda_meta_count=int(row[8]),
                 assente_count=int(row[9]),
+                external_lesson_id=row[10],
+                topic=row[11],
+                planned_event_title=row[12],
+                planned_home_recipient_key=row[13],
+                planned_match_method=row[14],
             )
             expected_by_course.setdefault(lesson.course_name, int(row[4]) if row[4] is not None else None)
             grouped_by_course.setdefault(lesson.course_name, []).append(lesson)

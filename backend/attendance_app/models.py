@@ -275,6 +275,11 @@ class SchoolCourseLessonView:
     prima_meta_count: int
     seconda_meta_count: int
     assente_count: int
+    external_lesson_id: Optional[str] = None
+    topic: Optional[str] = None
+    planned_event_title: Optional[str] = None
+    planned_home_recipient_key: Optional[str] = None
+    planned_match_method: Optional[str] = None
 
 
 @dataclass(frozen=True)

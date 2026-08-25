@@ -35,6 +35,7 @@ from backend.attendance_app.course_catalog import (
     AttendanceCourseCatalogImportService,
     GoogleCourseCatalogReader,
 )
+from backend.attendance_app.lesson_enrichment import GoogleLessonSheetReader
 from backend.attendance_app.services import (
     AttendanceCourseConfigService,
     AttendanceDraftRecalculationService,
@@ -56,6 +57,7 @@ from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDr
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
 from backend.db.attendance_course_catalog_repository import PostgresAttendanceCourseCatalogRepository
+from backend.db.attendance_lesson_enrichment_repository import PostgresAttendanceLessonEnrichmentRepository
 from backend.db.accounting_repository import PostgresAccountingRepository
 
 # Resolve workspace paths from the backend package location
@@ -86,6 +88,7 @@ AUTH_SESSION_MAX_AGE_SECONDS = int(os.getenv("AUTH_SESSION_MAX_AGE_SECONDS", "28
 AUTH_COOKIE_SECURE = _env_bool("AUTH_COOKIE_SECURE", True)
 ATTENDANCE_GOOGLE_SPREADSHEET_ID = os.getenv("ATTENDANCE_GOOGLE_SPREADSHEET_ID", "").strip()
 ATTENDANCE_GOOGLE_COURSES_SHEET = os.getenv("ATTENDANCE_GOOGLE_COURSES_SHEET", "Corsi").strip() or "Corsi"
+ATTENDANCE_GOOGLE_LESSONS_SHEET = os.getenv("ATTENDANCE_GOOGLE_LESSONS_SHEET", "Lezioni").strip() or "Lezioni"
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
 GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
 
@@ -2960,6 +2963,47 @@ async def attendance_import_course_catalog_from_google():
     )
 
 
+@app.post("/api/attendance/lessons/import-google-enrichment")
+async def attendance_import_lesson_enrichment_from_google():
+    reader = GoogleLessonSheetReader(
+        spreadsheet_id=ATTENDANCE_GOOGLE_SPREADSHEET_ID,
+        sheet_name=ATTENDANCE_GOOGLE_LESSONS_SHEET,
+        service_account_json=GOOGLE_SERVICE_ACCOUNT_JSON,
+        service_account_file=GOOGLE_SERVICE_ACCOUNT_FILE,
+    )
+    try:
+        rows, parse_warnings = reader.read_rows()
+        result = PostgresAttendanceLessonEnrichmentRepository().import_google_rows(rows, parse_warnings)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code in {401, 403, 404}:
+            detail = "Google non consente di leggere il foglio Lezioni configurato."
+        else:
+            detail = f"Google Sheets ha risposto con errore HTTP {status_code}."
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Google Sheets non e' raggiungibile.") from exc
+
+    return JSONResponse(
+        {
+            "rows_read": result.rows_read,
+            "matched": result.matched,
+            "updated": result.updated,
+            "unchanged": result.unchanged,
+            "missing_catalog_mapping": result.missing_catalog_mapping,
+            "missing_attendance_lesson": result.missing_attendance_lesson,
+            "ambiguous": result.ambiguous,
+            "skipped": result.skipped,
+            "warnings": result.warnings,
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.get("/api/attendance/school-courses")
 async def attendance_school_courses():
     repository = PostgresAttendanceDraftQueryRepository()
@@ -2991,6 +3035,11 @@ async def attendance_school_courses():
                             "prima_meta_count": lesson.prima_meta_count,
                             "seconda_meta_count": lesson.seconda_meta_count,
                             "assente_count": lesson.assente_count,
+                            "external_lesson_id": lesson.external_lesson_id,
+                            "topic": lesson.topic,
+                            "planned_event_title": lesson.planned_event_title,
+                            "planned_home_recipient_key": lesson.planned_home_recipient_key,
+                            "planned_match_method": lesson.planned_match_method,
                         }
                         for lesson in course.lessons
                     ],

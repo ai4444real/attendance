@@ -76,6 +76,16 @@ class GoogleCourseCatalogReader:
         self._sheet_name = sheet_name.strip() or "Corsi"
 
     def read_rows(self) -> tuple[list[CourseCatalogSourceRow], list[str]]:
+        values = self.read_values("A:E", value_render_option="FORMATTED_VALUE")
+        return parse_course_catalog_values(values)
+
+    def read_values(
+        self,
+        cell_range: str,
+        *,
+        value_render_option: str = "FORMATTED_VALUE",
+        date_time_render_option: str | None = None,
+    ) -> list[list[object]]:
         if not self._spreadsheet_id:
             raise ValueError("ATTENDANCE_GOOGLE_SPREADSHEET_ID is not configured.")
 
@@ -83,20 +93,22 @@ class GoogleCourseCatalogReader:
         from google.auth.transport.requests import Request
 
         credentials.refresh(Request())
-        range_name = f"'{self._sheet_name}'!A:E"
+        range_name = f"'{self._sheet_name}'!{cell_range}"
         url = (
             "https://sheets.googleapis.com/v4/spreadsheets/"
             f"{self._spreadsheet_id}/values/{quote(range_name, safe='')}"
         )
+        params = {"majorDimension": "ROWS", "valueRenderOption": value_render_option}
+        if date_time_render_option:
+            params["dateTimeRenderOption"] = date_time_render_option
         response = httpx.get(
             url,
-            params={"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"},
+            params=params,
             headers={"Authorization": f"Bearer {credentials.token}"},
             timeout=30.0,
         )
         response.raise_for_status()
-        values = response.json().get("values") or []
-        return parse_course_catalog_values(values)
+        return response.json().get("values") or []
 
     def _load_credentials(self):
         try:
