@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Corsi importati</title>
+    <title>Lezioni importate</title>
     <link rel="stylesheet" href="/assets/styles/brand.css">
     <style>
         * { box-sizing: border-box; }
@@ -72,21 +72,22 @@
                 <a class="workspace-link" href="/attendance">Attendance</a>
                 <a class="workspace-link" href="/attendance/school">Analisi scuola</a>
                 <a class="workspace-link" href="/attendance/followups">Studenti da richiamare</a>
-                <span class="workspace-module-badge">Corsi importati</span>
+                <a class="workspace-link" href="/attendance/courses">Catalogo corsi</a>
+                <span class="workspace-module-badge">Lezioni importate</span>
             </nav>
         </div>
     </header>
 
     <main class="page">
         <section class="hero">
-            <h1>Corsi importati</h1>
-            <p>Vista cronologica dei corsi già consolidati. Ogni riga mostra le lezioni official del corso e quante presenze reali contengono, così si vede subito se la sequenza è completa o se ci sono buchi da indagare.</p>
+            <h1>Lezioni importate</h1>
+            <p>Vista cronologica delle lezioni già consolidate, raggruppate secondo il nome corso osservato nelle presenze. Ogni cella mostra quante presenze reali contiene.</p>
         </section>
 
         <section id="summary" class="summary-grid"></section>
 
         <section class="panel">
-            <h2 class="panel-title">Timeline corsi</h2>
+            <h2 class="panel-title">Timeline lezioni</h2>
             <p class="hint">I dati arrivano solo da lesson official non ignorate. Ogni cella rappresenta una lezione del corso, ordinata per data crescente.</p>
             <div id="courseContainer" class="course-list"></div>
         </section>

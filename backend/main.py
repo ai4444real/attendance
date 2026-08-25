@@ -31,6 +31,10 @@ from dotenv import load_dotenv
 from backend.attendance_normalization.service import normalize_zoom_csv_file
 from backend.accounting_app.services import AccountingPredictionService, parse_accounting_amount
 from backend.attendance_app.models import ImportBatchCreate
+from backend.attendance_app.course_catalog import (
+    AttendanceCourseCatalogImportService,
+    GoogleCourseCatalogReader,
+)
 from backend.attendance_app.services import (
     AttendanceCourseConfigService,
     AttendanceDraftRecalculationService,
@@ -51,6 +55,7 @@ from backend.db.attendance_instructor_repository import PostgresAttendanceInstru
 from backend.db.attendance_draft_mutation_repository import PostgresAttendanceDraftMutationRepository
 from backend.db.attendance_draft_query_repository import PostgresAttendanceDraftQueryRepository
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
+from backend.db.attendance_course_catalog_repository import PostgresAttendanceCourseCatalogRepository
 from backend.db.accounting_repository import PostgresAccountingRepository
 
 # Resolve workspace paths from the backend package location
@@ -79,6 +84,10 @@ AUTH_SESSION_SECRET = os.getenv("AUTH_SESSION_SECRET", "").strip()
 AUTH_SESSION_COOKIE = os.getenv("AUTH_SESSION_COOKIE", "rebekko_session").strip() or "rebekko_session"
 AUTH_SESSION_MAX_AGE_SECONDS = int(os.getenv("AUTH_SESSION_MAX_AGE_SECONDS", "28800"))
 AUTH_COOKIE_SECURE = _env_bool("AUTH_COOKIE_SECURE", True)
+ATTENDANCE_GOOGLE_SPREADSHEET_ID = os.getenv("ATTENDANCE_GOOGLE_SPREADSHEET_ID", "").strip()
+ATTENDANCE_GOOGLE_COURSES_SHEET = os.getenv("ATTENDANCE_GOOGLE_COURSES_SHEET", "Corsi").strip() or "Corsi"
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
 
 PUBLIC_AUTH_PREFIXES = (
     "/login",
@@ -204,7 +213,8 @@ ATTENDANCE_DRAFTS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "draft-imports.html
 ATTENDANCE_ALIASES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-aliases.html")
 ATTENDANCE_IDENTITIES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-identities.html")
 ATTENDANCE_SCHOOL_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-school.html")
-ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
+ATTENDANCE_COURSES_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-course-catalog.html")
+ATTENDANCE_LESSONS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-courses.html")
 ATTENDANCE_FOLLOWUPS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-followups.html")
 ATTENDANCE_MANUAL_PRESENCE_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "manual-presence.html")
 ATTENDANCE_INSTRUCTORS_FILE = os.path.join(ATTENDANCE_STATIC_DIR, "attendance-instructors.html")
@@ -1886,8 +1896,13 @@ async def attendance_home():
                 </a>
                 <a class="card" href="/attendance/courses">
                     <span class="card-label">Nuovo</span>
-                    <h2>Corsi importati</h2>
-                    <p>Colpo d'occhio sui corsi official e sulle relative lezioni già importate, in sequenza cronologica.</p>
+                    <h2>Catalogo corsi</h2>
+                    <p>Consulta corsi, edizioni e identificatori operativi; importa il catalogo da Google su richiesta.</p>
+                </a>
+                <a class="card" href="/attendance/lessons">
+                    <span class="card-label">Dati osservati</span>
+                    <h2>Lezioni importate</h2>
+                    <p>Colpo d'occhio sulle lezioni official già ricevute e sul nome corso osservato nelle presenze.</p>
                 </a>
                 <a class="card" href="/attendance/aliases">
                     <span class="card-label">Supporto</span>
@@ -1985,6 +2000,15 @@ async def attendance_school():
 async def attendance_courses():
     return FileResponse(
         ATTENDANCE_COURSES_FILE,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
+    )
+
+
+@app.get("/attendance/lessons")
+@app.get("/attendance/lessons/")
+async def attendance_lessons():
+    return FileResponse(
+        ATTENDANCE_LESSONS_FILE,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
     )
 
@@ -2808,6 +2832,74 @@ async def attendance_school_record_source(lesson_id: int, canonical_full_name: s
                 }
                 for source in sources
             ],
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/api/attendance/course-catalog")
+async def attendance_course_catalog():
+    repository = PostgresAttendanceCourseCatalogRepository()
+    editions = repository.list_catalog()
+    logical_course_ids = {
+        edition["logical_course"]["id"]
+        for edition in editions
+        if edition["logical_course"] is not None
+    }
+    return JSONResponse(
+        {
+            "summary": {
+                "logical_courses": len(logical_course_ids),
+                "editions": len(editions),
+                "unassigned_editions": sum(edition["logical_course"] is None for edition in editions),
+                "identifiers": sum(
+                    len(values)
+                    for edition in editions
+                    for values in edition["identifiers"].values()
+                ),
+            },
+            "editions": editions,
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.post("/api/attendance/course-catalog/import-google")
+async def attendance_import_course_catalog_from_google():
+    reader = GoogleCourseCatalogReader(
+        spreadsheet_id=ATTENDANCE_GOOGLE_SPREADSHEET_ID,
+        sheet_name=ATTENDANCE_GOOGLE_COURSES_SHEET,
+        service_account_json=GOOGLE_SERVICE_ACCOUNT_JSON,
+        service_account_file=GOOGLE_SERVICE_ACCOUNT_FILE,
+    )
+    service = AttendanceCourseCatalogImportService(
+        PostgresAttendanceCourseCatalogRepository(),
+        reader,
+    )
+    try:
+        result = service.import_from_google()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code in {401, 403, 404}:
+            detail = "Google non consente di leggere lo spreadsheet configurato. Verificare ID e condivisione."
+        else:
+            detail = f"Google Sheets ha risposto con errore HTTP {status_code}."
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Google Sheets non e' raggiungibile.") from exc
+
+    return JSONResponse(
+        {
+            "rows_read": result.rows_read,
+            "created": result.created,
+            "updated": result.updated,
+            "unchanged": result.unchanged,
+            "skipped": result.skipped,
+            "warnings": result.warnings,
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
