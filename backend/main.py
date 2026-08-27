@@ -358,6 +358,17 @@ def render_module_shell(title: str, subtitle: str, body_html: str) -> str:
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
         }}
+        .home-section + .home-section {{
+            margin-top: 34px;
+        }}
+        .section-heading {{
+            margin: 0 0 14px;
+            color: var(--brand-ink);
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }}
         .card {{
             background: white;
             border-radius: 16px;
@@ -396,6 +407,42 @@ def render_module_shell(title: str, subtitle: str, body_html: str) -> str:
             line-height: 1.6;
             color: var(--brand-muted);
         }}
+        .entity-card {{
+            position: relative;
+            overflow: hidden;
+            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }}
+        .entity-card::after {{
+            content: "";
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            right: -52px;
+            top: -58px;
+            border-radius: 50%;
+            background: var(--entity-soft, var(--brand-pnl-blue-soft));
+            z-index: 0;
+        }}
+        .entity-card > * {{ position: relative; z-index: 1; }}
+        .entity-icon {{
+            width: 52px;
+            height: 52px;
+            margin-bottom: 22px;
+            border-radius: 15px;
+            display: grid;
+            place-items: center;
+            background: var(--entity-soft, var(--brand-pnl-blue-soft));
+            color: var(--entity-color, var(--brand-pnl-blue));
+        }}
+        .entity-icon svg {{ width: 29px; height: 29px; stroke: currentColor; }}
+        .entity-card.courses {{ --entity-color: #075985; --entity-soft: #e0f2fe; }}
+        .entity-card.lessons {{ --entity-color: #166534; --entity-soft: #dcfce7; }}
+        .entity-card.students {{ --entity-color: #7c3aed; --entity-soft: #ede9fe; }}
+        .module-cards .card {{ padding: 20px 24px; }}
+        .module-cards .card h2 {{ font-size: 24px; }}
         .placeholder-note {{
             margin-top: 14px;
             padding: 12px 14px;
@@ -644,8 +691,41 @@ async def logout():
 @app.get("/")
 async def workspace_home():
     body_html = """
-        <section>
+        <section class="home-section" aria-labelledby="entities-heading">
+            <h2 id="entities-heading" class="section-heading">Entità</h2>
             <div class="cards">
+                <a class="card entity-card courses" href="/attendance/courses">
+                    <span class="entity-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/><path d="M8 7h8"/><path d="M8 11h6"/>
+                        </svg>
+                    </span>
+                    <h2>Corsi</h2>
+                    <p>Consulta corsi, edizioni e identificatori operativi; importa il catalogo da Google su richiesta.</p>
+                </a>
+                <a class="card entity-card lessons" href="/attendance/lessons">
+                    <span class="entity-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="m9.5 15 1.7 1.7 3.7-3.7"/>
+                        </svg>
+                    </span>
+                    <h2>Lezioni</h2>
+                    <p>Colpo d'occhio sulle lezioni official già ricevute e sul nome corso osservato nelle presenze.</p>
+                </a>
+                <a class="card entity-card students" href="/attendance/identities">
+                    <span class="entity-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </span>
+                    <h2>Studenti</h2>
+                    <p>Registro tecnico degli studenti già incontrati nei dati attendance, utile per alias e futuri insiemi didattici.</p>
+                </a>
+            </div>
+        </section>
+        <section class="home-section" aria-labelledby="modules-heading">
+            <h2 id="modules-heading" class="section-heading">Aree operative</h2>
+            <div class="cards module-cards">
                 <a class="card" href="/attendance">
                     <span class="card-label">Disponibile</span>
                     <h2>Attendance</h2>
@@ -662,7 +742,7 @@ async def workspace_home():
     return HTMLResponse(
         render_module_shell(
             "Rebekko Webapps",
-            "Workspace applicativo per i servizi interni Rebekko. Da qui si accede ai moduli attivi, a partire da Attendance.",
+            "Workspace applicativo per i servizi interni Rebekko: entità centrali e aree operative in un unico punto.",
             body_html
         ),
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"}
