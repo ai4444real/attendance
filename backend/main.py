@@ -1962,40 +1962,20 @@ async def attendance_home():
                     <h2>Draft importati</h2>
                     <p>Apri i batch già salvati nel database e scorri lezioni e partecipanti direttamente dal modello dati persistito.</p>
                 </a>
-                <a class="card" href="/attendance/school">
-                    <span class="card-label">MVP</span>
-                    <h2>Analisi scuola</h2>
-                    <p>Consulta i dati ufficiali già consolidati: tabella presenze, filtri per corso e studente, riepilogo dei totali.</p>
-                </a>
-                <a class="card" href="/attendance/followups">
-                    <span class="card-label">Nuovo</span>
-                    <h2>Studenti da richiamare</h2>
-                    <p>Segnala gli studenti che risultano assenti implicitamente nelle ultime lezioni official di un corso.</p>
-                </a>
                 <a class="card" href="/attendance/manual">
                     <span class="card-label">Nuovo</span>
                     <h2>Presenze manuali</h2>
                     <p>Inserisci presenze gia' aggregate per lezioni in presenza, QR form o import manuali.</p>
                 </a>
-                <a class="card" href="/attendance/courses">
-                    <span class="card-label">Nuovo</span>
-                    <h2>Catalogo corsi</h2>
-                    <p>Consulta corsi, edizioni e identificatori operativi; importa il catalogo da Google su richiesta.</p>
-                </a>
-                <a class="card" href="/attendance/lessons">
-                    <span class="card-label">Dati osservati</span>
-                    <h2>Lezioni importate</h2>
-                    <p>Colpo d'occhio sulle lezioni official già ricevute e sul nome corso osservato nelle presenze.</p>
+                <a class="card" href="/attendance/school">
+                    <span class="card-label">MVP</span>
+                    <h2>Analisi scuola</h2>
+                    <p>Consulta i dati ufficiali già consolidati: tabella presenze, filtri per corso e studente, riepilogo dei totali.</p>
                 </a>
                 <a class="card" href="/attendance/aliases">
                     <span class="card-label">Supporto</span>
                     <h2>Alias identità</h2>
                     <p>Controlla gli alias nome registrati nel database e verifica rapidamente se un'unione è stata salvata.</p>
-                </a>
-                <a class="card" href="/attendance/identities">
-                    <span class="card-label">Supporto</span>
-                    <h2>Identità osservate</h2>
-                    <p>Registro tecnico degli studenti già incontrati nei dati attendance, utile per alias e futuri insiemi didattici.</p>
                 </a>
                 <a class="card" href="/attendance/instructors">
                     <span class="card-label">Supporto</span>
