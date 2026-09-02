@@ -36,6 +36,7 @@ from backend.attendance_app.course_catalog import (
     GoogleCourseCatalogReader,
 )
 from backend.attendance_app.lesson_enrichment import GoogleLessonSheetReader
+from backend.attendance_app.legacy_lesson_topics import parse_legacy_lesson_topics_csv
 from backend.attendance_app.services import (
     AttendanceCourseConfigService,
     AttendanceDraftRecalculationService,
@@ -58,6 +59,7 @@ from backend.db.attendance_draft_query_repository import PostgresAttendanceDraft
 from backend.db.attendance_review_action_repository import PostgresAttendanceReviewActionRepository
 from backend.db.attendance_course_catalog_repository import PostgresAttendanceCourseCatalogRepository
 from backend.db.attendance_lesson_enrichment_repository import PostgresAttendanceLessonEnrichmentRepository
+from backend.db.attendance_legacy_topic_repository import PostgresAttendanceLegacyTopicRepository
 from backend.db.accounting_repository import PostgresAccountingRepository
 
 # Resolve workspace paths from the backend package location
@@ -3022,6 +3024,24 @@ async def attendance_import_course_catalog_from_google():
         },
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
+
+
+@app.post("/api/attendance/lessons/import-legacy-topics")
+async def attendance_import_legacy_lesson_topics(file: UploadFile = File(...), apply: bool = Form(False)):
+    content = await file.read()
+    if len(content) > 1_000_000:
+        raise HTTPException(status_code=413, detail="Il CSV supera il limite di 1 MB.")
+    try:
+        rows, parse_issues = parse_legacy_lesson_topics_csv(content)
+        result = PostgresAttendanceLegacyTopicRepository().import_rows(rows, apply=apply)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for issue in parse_issues:
+        reason = issue["reason"]
+        result["counts"][reason] = result["counts"].get(reason, 0) + 1
+    result["rows_read"] += len(parse_issues)
+    result["details"] = sorted(result["details"] + parse_issues, key=lambda item: item["row"])
+    return JSONResponse(result, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.post("/api/attendance/lessons/import-google-enrichment")

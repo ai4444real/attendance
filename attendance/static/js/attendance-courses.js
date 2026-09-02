@@ -7,10 +7,21 @@ const AttendanceCoursesApp = {
             courseContainer: document.getElementById('courseContainer'),
             importLessonTopicsButton: document.getElementById('importLessonTopicsButton'),
             lessonEnrichmentStatus: document.getElementById('lessonEnrichmentStatus'),
+            legacyTopicsFile: document.getElementById('legacyTopicsFile'),
+            previewLegacyTopicsButton: document.getElementById('previewLegacyTopicsButton'),
+            applyLegacyTopicsButton: document.getElementById('applyLegacyTopicsButton'),
+            legacyTopicsStatus: document.getElementById('legacyTopicsStatus'),
+            legacyTopicsReport: document.getElementById('legacyTopicsReport'),
         };
         this._courses = [];
         this._summary = {};
         this._els.importLessonTopicsButton.addEventListener('click', () => this._importLessonEnrichment());
+        this._els.previewLegacyTopicsButton.addEventListener('click', () => this._importLegacyTopics(false));
+        this._els.applyLegacyTopicsButton.addEventListener('click', () => this._importLegacyTopics(true));
+        this._els.legacyTopicsFile.addEventListener('change', () => {
+            this._els.applyLegacyTopicsButton.disabled = true;
+            this._els.legacyTopicsReport.innerHTML = '';
+        });
         await this._load();
     },
 
@@ -141,6 +152,44 @@ const AttendanceCoursesApp = {
         } finally {
             button.disabled = false;
         }
+    },
+
+    async _importLegacyTopics(apply) {
+        const file = this._els.legacyTopicsFile.files[0];
+        if (!file) {
+            this._els.legacyTopicsStatus.textContent = 'Seleziona prima il CSV 2025.';
+            return;
+        }
+        const button = apply ? this._els.applyLegacyTopicsButton : this._els.previewLegacyTopicsButton;
+        button.disabled = true;
+        this._els.legacyTopicsStatus.textContent = apply ? 'Importazione in corso...' : 'Controllo in corso...';
+        const form = new FormData();
+        form.append('file', file);
+        form.append('apply', apply ? 'true' : 'false');
+        try {
+            const response = await fetch('/api/attendance/lessons/import-legacy-topics', { method: 'POST', body: form });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'Importazione non riuscita.');
+            const counts = payload.counts || {};
+            this._els.legacyTopicsStatus.textContent = `${payload.rows_read} righe · ${counts.aggiornata || counts.da_aggiornare || 0} ${apply ? 'aggiornate' : 'da aggiornare'} · ${counts.invariata || 0} invariate · ${(payload.details || []).filter((item) => !['aggiornata', 'da_aggiornare', 'invariata'].includes(item.reason)).length} non importabili`;
+            this._renderLegacyReport(payload.details || []);
+            this._els.applyLegacyTopicsButton.disabled = apply || !(counts.da_aggiornare > 0);
+            if (apply) await this._load();
+        } catch (error) {
+            console.error(error);
+            this._els.legacyTopicsStatus.textContent = error.message;
+        } finally {
+            if (!apply) button.disabled = false;
+        }
+    },
+
+    _renderLegacyReport(details) {
+        const skipped = details.filter((item) => !['aggiornata', 'da_aggiornare', 'invariata'].includes(item.reason));
+        if (!skipped.length) {
+            this._els.legacyTopicsReport.innerHTML = '<div>Nessuna riga problematica.</div>';
+            return;
+        }
+        this._els.legacyTopicsReport.innerHTML = `<table><thead><tr><th>Riga</th><th>Corso</th><th>Data</th><th>Argomento ripulito</th><th>Motivo</th></tr></thead><tbody>${skipped.map((item) => `<tr><td>${item.row}</td><td>${this._escapeHtml(item.course || '')}</td><td>${this._escapeHtml(item.date || '')}</td><td>${this._escapeHtml(item.topic || '')}</td><td>${this._escapeHtml(item.reason || '')}</td></tr>`).join('')}</tbody></table>`;
     },
 
     _bindCourseTargetForms() {

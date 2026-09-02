@@ -29,6 +29,10 @@
         .enrichment-button { border: 1px solid #b9d7e8; background: #f4fbff; color: #075985; border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 800; cursor: pointer; }
         .enrichment-button:disabled { cursor: wait; opacity: .65; }
         .enrichment-status { width: 100%; color: var(--brand-muted); font-size: 13px; min-height: 16px; }
+        .legacy-import { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%; padding-top: 12px; border-top: 1px solid var(--brand-border); }
+        .legacy-report { width: 100%; max-height: 260px; overflow: auto; font-size: 12px; }
+        .legacy-report table { width: 100%; border-collapse: collapse; }
+        .legacy-report th, .legacy-report td { padding: 7px; border-bottom: 1px solid var(--brand-border); text-align: left; vertical-align: top; }
         .summary-card { background: white; border: 1px solid var(--brand-border); border-radius: 16px; padding: 16px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); }
         .summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-muted); margin-bottom: 8px; font-weight: 700; }
         .summary-value { font-size: 26px; font-weight: 800; color: var(--brand-ink); }
@@ -97,6 +101,13 @@
             <div class="enrichment-copy">Arricchisce le lezioni esistenti con ID, argomento e dati pianificati dal foglio Google “Lezioni”. I casi ambigui vengono lasciati invariati.</div>
             <button id="importLessonTopicsButton" class="enrichment-button" type="button">Importa argomenti da Google</button>
             <div id="lessonEnrichmentStatus" class="enrichment-status" aria-live="polite"></div>
+            <div class="legacy-import">
+                <input id="legacyTopicsFile" type="file" accept=".csv,text/csv">
+                <button id="previewLegacyTopicsButton" class="enrichment-button" type="button">Controlla CSV 2025</button>
+                <button id="applyLegacyTopicsButton" class="enrichment-button" type="button" disabled>Importa corrispondenze</button>
+                <div id="legacyTopicsStatus" class="enrichment-status" aria-live="polite"></div>
+                <div id="legacyTopicsReport" class="legacy-report"></div>
+            </div>
         </section>
 
         <section class="panel">
@@ -106,6 +117,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-courses.js?v=20260601-course-targets"></script>
+    <script src="/attendance/static/js/attendance-courses.js?v=20260902-legacy-topics"></script>
 </body>
 </html>
