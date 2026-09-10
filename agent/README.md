@@ -46,6 +46,10 @@ Per impostazione predefinita il servizio ascolta solo su `127.0.0.1:8090`.
 Non esporre la porta tramite Caddy pubblico senza un livello di autenticazione
 e controllo accessi dedicato.
 
+L'installazione Rebekko attuale usa invece direttamente l'indirizzo privato
+Tailscale. L'indirizzo verificato e i comandi di controllo sono documentati in
+[docs/ACCESS.md](docs/ACCESS.md).
+
 ## Sviluppo locale
 
 ```bash
