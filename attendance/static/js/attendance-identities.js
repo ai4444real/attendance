@@ -121,7 +121,7 @@ const AttendanceIdentitiesApp = {
                 <tbody>
                     ${identities.map((identity, index) => `
                         <tr class="${this._rowClass(identity)}">
-                            <td><span class="identity-name">${this._escapeHtml(identity.display_name)}</span></td>
+                            <td><a class="identity-name" href="${this._escapeAttr(this._schoolUrl(identity))}">${this._escapeHtml(identity.display_name)}</a></td>
                             <td>${this._escapeHtml(identity.email || 'senza email')}</td>
                             <td><span class="identity-key">#${this._escapeHtml(identity.id || '—')}</span></td>
                             <td><span class="identity-key">${this._escapeHtml(identity.identity_key)}</span></td>
@@ -153,6 +153,14 @@ const AttendanceIdentitiesApp = {
             && this._selectedAlias
             && this._identityKey(this._selectedCanonical) !== this._identityKey(this._selectedAlias);
         this._els.createAliasButton.disabled = !canCreate;
+    },
+
+    _schoolUrl(identity) {
+        const query = new URLSearchParams({
+            student: String(identity?.display_name || ''),
+            all_courses: '1',
+        });
+        return `/attendance/school?${query.toString()}`;
     },
 
     _renderPreviewCard(identity) {

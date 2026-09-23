@@ -8,6 +8,7 @@ const DraftImportsApp = {
             batchList: document.getElementById('batchList'),
             batchSummary: document.getElementById('batchSummary'),
             batchFilters: document.getElementById('batchFilters'),
+            batchSearch: document.getElementById('batchSearch'),
             lessonFilters: document.getElementById('lessonFilters'),
             lessonList: document.getElementById('lessonList'),
             lessonsContainer: document.getElementById('lessonsContainer'),
@@ -15,6 +16,11 @@ const DraftImportsApp = {
         this._batchScope = 'open';
         this._lessonFilter = 'draft';
         this._initialLessonId = Number(new URLSearchParams(window.location.search).get('lesson_id') || 0) || null;
+        this._batchSearch = '';
+        this._els.batchSearch.addEventListener('input', () => {
+            this._batchSearch = this._els.batchSearch.value.trim().toLocaleLowerCase('it');
+            this._renderBatchList();
+        });
 
         if (this._initialLessonId) {
             this._batchScope = 'all';
@@ -104,7 +110,20 @@ const DraftImportsApp = {
             return;
         }
 
-        this._els.batchList.innerHTML = this._batches.map((batch) => `
+        const visibleBatches = this._batches.filter((batch) => {
+            if (!this._batchSearch) return true;
+            return [
+                String(batch.id || ''),
+                batch.source_file_name || '',
+                this._formatDateTime(batch.created_at),
+            ].some((value) => String(value).toLocaleLowerCase('it').includes(this._batchSearch));
+        });
+        if (!visibleBatches.length) {
+            this._els.batchList.innerHTML = '<div class="empty">Nessun batch corrisponde alla ricerca.</div>';
+            return;
+        }
+
+        this._els.batchList.innerHTML = visibleBatches.map((batch) => `
             <div class="batch-card">
                 <button class="batch-delete" type="button" data-batch-action="delete-batch" data-batch-id="${batch.id}" title="Elimina batch" aria-label="Elimina batch ${batch.id}">×</button>
                 <button class="batch-item${this._selectedBatchId === batch.id ? ' active' : ''}" data-batch-id="${batch.id}" type="button">

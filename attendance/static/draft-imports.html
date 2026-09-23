@@ -76,6 +76,10 @@
         .batch-strip-meta strong { color: var(--brand-ink); font-size: 13px; }
         .lesson-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
         .batch-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 14px; }
+        .batch-search { width: min(520px, 100%); border: 1px solid var(--brand-border); border-radius: 12px; padding: 10px 12px; font-size: 14px; color: var(--brand-ink); }
+        .batch-list-wrap { max-height: 360px; overflow-y: auto; padding: 2px 6px 2px 2px; }
+        .batch-list-wrap::-webkit-scrollbar { width: 10px; }
+        .batch-list-wrap::-webkit-scrollbar-thumb { background: rgba(21, 94, 117, 0.22); border-radius: 999px; }
         .filter-chip { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
         .filter-chip.active { border-color: var(--brand-pnl-blue); background: var(--brand-pnl-blue-soft); color: var(--brand-pnl-blue); }
         .filter-chip-count { color: var(--brand-muted); font-weight: 700; }
@@ -240,7 +244,10 @@
             <h2 class="panel-title">Import batch</h2>
             <p class="hint">Scegli il batch corrente e lavora sulle sue lezioni. La vista operativa resta centrata sulla singola lezione.</p>
             <div id="batchFilters" class="batch-filter-bar"></div>
-            <div id="batchList" class="batch-list" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));"></div>
+            <input id="batchSearch" class="batch-search" type="search" placeholder="Cerca per ID, nome file o data..." autocomplete="off">
+            <div class="batch-list-wrap" style="margin-top: 12px;">
+                <div id="batchList" class="batch-list" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));"></div>
+            </div>
         </section>
 
         <section class="panel">
@@ -261,6 +268,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/draft-imports.js?v=20260618-school-timezone"></script>
+    <script src="/attendance/static/js/draft-imports.js?v=20260923-batch-search"></script>
 </body>
 </html>

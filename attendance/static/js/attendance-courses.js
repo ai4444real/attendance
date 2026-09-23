@@ -108,7 +108,7 @@ const AttendanceCoursesApp = {
                     </div>
                     <div class="lesson-track">
                         ${lessons.map((lesson) => `
-                            <div class="lesson-cell" title="${this._escapeAttr(`${course.course_name} · ${this._formatDate(lesson.lesson_date)} · meeting ${lesson.source_meeting_id}`)}">
+                            <a class="lesson-cell" href="/attendance/drafts?lesson_id=${encodeURIComponent(String(lesson.lesson_id))}" title="Apri presenze: ${this._escapeAttr(`${course.course_name} · ${this._formatDate(lesson.lesson_date)} · meeting ${lesson.source_meeting_id}`)}">
                                 <div class="lesson-date">${this._escapeHtml(this._formatDate(lesson.lesson_date))}</div>
                                 ${lesson.topic ? `<div class="lesson-topic">${this._escapeHtml(lesson.topic)}</div>` : ''}
                                 ${lesson.external_lesson_id ? `<div class="lesson-external-id">ID lezione ${this._escapeHtml(lesson.external_lesson_id)}</div>` : ''}
@@ -119,7 +119,7 @@ const AttendanceCoursesApp = {
                                     <span class="lesson-pill prima_meta">1ª ${lesson.prima_meta_count || 0}</span>
                                     <span class="lesson-pill seconda_meta">2ª ${lesson.seconda_meta_count || 0}</span>
                                 </div>
-                            </div>
+                            </a>
                         `).join('')}
                     </div>
                 </article>

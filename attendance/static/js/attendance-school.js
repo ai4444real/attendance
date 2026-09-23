@@ -24,6 +24,9 @@ const AttendanceSchoolApp = {
         this._filters = { courses: new Set(), dateStart: '', dateEnd: '', student: '', studentText: '' };
         this._allCourses = [];
         this._studentLabelsByFilterKey = new Map();
+        const initialQuery = new URLSearchParams(window.location.search);
+        this._initialStudent = String(initialQuery.get('student') || '').trim();
+        this._initialAllCourses = initialQuery.get('all_courses') === '1';
 
         this._els.selectAllCourses.addEventListener('click', () => {
             this._filters.courses = new Set(this._allCourses);
@@ -79,8 +82,17 @@ const AttendanceSchoolApp = {
             this._allCourses = [...new Set(this._records.map((record) => record.course_name))]
                 .sort((a, b) => a.localeCompare(b, 'it'));
             this._applyDefaultScopeFilters();
+            if (this._initialAllCourses) {
+                this._filters.courses = new Set(this._allCourses);
+            }
             this._populateCourseCheckboxes();
             this._populateStudentFilter();
+            if (this._initialStudent) {
+                this._filters.studentText = this._initialStudent;
+                this._filters.student = this._studentKeyFromInput(this._initialStudent);
+                this._els.studentFilter.value = this._initialStudent;
+                this._updateStudentAliasLink();
+            }
             this._render();
         } catch (error) {
             console.error(error);
