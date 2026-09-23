@@ -40,17 +40,18 @@
         .panel-title { font-size: 18px; font-weight: 800; color: var(--brand-ink); margin: 0 0 12px; }
         .hint { color: var(--brand-muted); font-size: 14px; line-height: 1.6; }
         .course-list { display: grid; gap: 16px; }
-        .course-card { border: 1px solid var(--brand-border); border-radius: 18px; padding: 18px; background: #fff; }
-        .course-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+        .course-card { min-width: 0; border: 1px solid var(--brand-border); border-radius: 18px; padding: 18px; background: #fff; }
+        .course-header { margin-bottom: 14px; }
+        .course-heading { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 3px; }
         .course-title { margin: 0; font-size: 26px; font-weight: 800; color: var(--brand-ink); }
         .course-meta { color: var(--brand-muted); font-size: 14px; }
-        .course-target-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .course-target-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .course-target-label { font-size: 12px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--brand-muted); }
         .course-target-input { width: 88px; border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 10px; font-size: 14px; color: var(--brand-ink); text-align: center; }
         .course-target-button { border: 1px solid #b9d7e8; background: #f4fbff; color: #075985; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
         .course-target-button:hover { border-color: var(--brand-pnl-blue); }
-        .course-target-status { width: 100%; text-align: right; color: var(--brand-muted); font-size: 12px; min-height: 16px; }
-        .lesson-track { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 170px); gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+        .course-target-status { color: var(--brand-muted); font-size: 12px; min-width: 64px; min-height: 16px; }
+        .lesson-track { min-width: 0; max-width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 170px); gap: 12px; overflow-x: auto; padding-bottom: 6px; }
         .lesson-track::-webkit-scrollbar { height: 10px; }
         .lesson-track::-webkit-scrollbar-thumb { background: rgba(21, 94, 117, 0.25); border-radius: 999px; }
         .lesson-cell { border: 1px solid var(--brand-border); border-radius: 16px; padding: 14px 14px 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%); min-height: 138px; display: flex; flex-direction: column; gap: 8px; }
@@ -117,6 +118,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/attendance-courses.js?v=20260902-legacy-topics"></script>
+    <script src="/attendance/static/js/attendance-courses.js?v=20260923-course-target-position"></script>
 </body>
 </html>

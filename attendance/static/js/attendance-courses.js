@@ -86,25 +86,25 @@ const AttendanceCoursesApp = {
             return `
                 <article class="course-card">
                     <div class="course-header">
-                        <div>
+                        <div class="course-heading">
                             <h3 class="course-title">${this._escapeHtml(course.course_name)}</h3>
-                            <div class="course-meta">${lessons.length}/${course.expected_lessons_count || lessons.length} lezioni · ${this._escapeHtml(expectedSource)} · ${records} record presenza</div>
+                            <form class="course-target-form" data-course-name="${this._escapeAttr(course.course_name)}">
+                                <label class="course-target-label" for="expected-${this._escapeAttr(this._courseInputId(course.course_name))}">Lezioni totali</label>
+                                <input
+                                    id="expected-${this._escapeAttr(this._courseInputId(course.course_name))}"
+                                    class="course-target-input"
+                                    name="expected_lessons_count"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value="${course.expected_lessons_source === 'configured' ? this._escapeAttr(course.expected_lessons_count) : ''}"
+                                    placeholder="${this._escapeAttr(course.expected_lessons_count || lessons.length)}"
+                                >
+                                <button class="course-target-button" type="submit">Salva</button>
+                                <div class="course-target-status" aria-live="polite"></div>
+                            </form>
                         </div>
-                        <form class="course-target-form" data-course-name="${this._escapeAttr(course.course_name)}">
-                            <label class="course-target-label" for="expected-${this._escapeAttr(this._courseInputId(course.course_name))}">Lezioni totali</label>
-                            <input
-                                id="expected-${this._escapeAttr(this._courseInputId(course.course_name))}"
-                                class="course-target-input"
-                                name="expected_lessons_count"
-                                type="number"
-                                min="1"
-                                step="1"
-                                value="${course.expected_lessons_source === 'configured' ? this._escapeAttr(course.expected_lessons_count) : ''}"
-                                placeholder="${this._escapeAttr(course.expected_lessons_count || lessons.length)}"
-                            >
-                            <button class="course-target-button" type="submit">Salva</button>
-                            <div class="course-target-status" aria-live="polite"></div>
-                        </form>
+                        <div class="course-meta">${lessons.length}/${course.expected_lessons_count || lessons.length} lezioni · ${this._escapeHtml(expectedSource)} · ${records} record presenza</div>
                     </div>
                     <div class="lesson-track">
                         ${lessons.map((lesson) => `
