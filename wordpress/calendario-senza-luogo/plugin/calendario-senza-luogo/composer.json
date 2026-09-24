@@ -1,0 +1,11 @@
+{
+  "name": "pnlevolution/calendario-senza-luogo",
+  "type": "wordpress-plugin",
+  "require": {
+    "sabre/vobject": "4.6.1"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

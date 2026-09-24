@@ -1,0 +1,7 @@
+This plugin bundles the following BSD-3-Clause licensed libraries:
+
+- sabre/vobject 4.6.1
+- sabre/xml 4.0.6
+- sabre/uri 3.0.2
+
+The complete license text for each library is included in its vendor directory.
