@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Anteprima calendario | PNL Evolution</title>
+    <style>
+        :root {
+            --blue: #005090;
+            --blue-dark: #003c6c;
+            --blue-soft: #e6f0f9;
+            --green: #00a038;
+            --green-dark: #007a2b;
+            --green-soft: #e7f6ec;
+            --ink: #102a43;
+            --muted: #52606d;
+            --surface: #f4f7f8;
+            --border: #d9e2ec;
+            --white: #fff;
+            --shadow: 0 20px 50px rgba(16, 42, 67, .11);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 8% 0%, rgba(0, 160, 56, .09), transparent 28rem),
+                radial-gradient(circle at 96% 4%, rgba(0, 80, 144, .11), transparent 30rem),
+                var(--surface);
+            color: var(--ink);
+            font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        button { font: inherit; }
+        .preview-shell { width: min(1240px, calc(100% - 32px)); margin: 32px auto 56px; }
+        .preview-note {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 12px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .preview-note::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+        .calendar {
+            overflow: hidden;
+            border: 1px solid rgba(217, 226, 236, .95);
+            border-radius: 26px;
+            background: rgba(255, 255, 255, .96);
+            box-shadow: var(--shadow);
+        }
+        .calendar-hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 24px;
+            padding: 26px 30px;
+            background: linear-gradient(125deg, var(--blue-dark), var(--blue) 58%, #0878a9);
+            color: var(--white);
+        }
+        .brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
+        .brand-logo {
+            width: 72px;
+            height: 72px;
+            object-fit: contain;
+            padding: 7px;
+            border-radius: 17px;
+            background: var(--white);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+        }
+        .eyebrow { margin: 0 0 5px; font-size: 12px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; opacity: .78; }
+        h1 { margin: 0; font-size: clamp(25px, 4vw, 38px); line-height: 1.07; }
+        .hero-copy { margin: 7px 0 0; max-width: 640px; line-height: 1.45; opacity: .87; }
+        .hero-mark { width: 112px; height: 112px; flex: 0 0 auto; opacity: .17; }
+
+        .calendar-toolbar {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 20px;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+        .month-title { margin: 0; text-align: center; font-size: clamp(21px, 3vw, 28px); text-transform: capitalize; }
+        .nav-group { display: flex; align-items: center; gap: 8px; }
+        .nav-group:last-child { justify-content: flex-end; }
+        .nav-button, .today-button {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--white);
+            color: var(--ink);
+            cursor: pointer;
+            font-weight: 800;
+            transition: .16s ease;
+        }
+        .nav-button { width: 42px; height: 42px; font-size: 21px; }
+        .today-button { padding: 10px 15px; color: var(--blue); }
+        .nav-button:hover, .today-button:hover { border-color: var(--blue); background: var(--blue-soft); }
+        .legend { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 750; }
+        .legend::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--green); }
+
+        .weekday-row, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        .weekday {
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 850;
+            letter-spacing: .08em;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        .day {
+            position: relative;
+            min-height: 142px;
+            padding: 10px;
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            background: var(--white);
+        }
+        .day:nth-child(7n) { border-right: 0; }
+        .day.outside { background: #f9fbfc; }
+        .day.outside .day-number { color: #9aa9b5; }
+        .day.is-today { background: linear-gradient(180deg, var(--green-soft), var(--white) 55%); }
+        .day-number {
+            display: grid;
+            place-items: center;
+            width: 29px;
+            height: 29px;
+            margin: 0 0 7px auto;
+            border-radius: 50%;
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 850;
+        }
+        .is-today .day-number { background: var(--green); color: var(--white); }
+        .event {
+            width: 100%;
+            margin: 0 0 6px;
+            padding: 7px 8px;
+            border: 0;
+            border-left: 4px solid var(--event-color, var(--blue));
+            border-radius: 8px;
+            background: var(--event-bg, var(--blue-soft));
+            color: var(--ink);
+            cursor: pointer;
+            text-align: left;
+        }
+        .event:hover { filter: saturate(1.15); box-shadow: 0 5px 12px rgba(16, 42, 67, .09); }
+        .event-time { display: block; margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 800; }
+        .event-title { display: block; font-size: 11px; font-weight: 850; line-height: 1.25; }
+        .event.green { --event-color: var(--green); --event-bg: var(--green-soft); }
+        .event.blue { --event-color: var(--blue); --event-bg: var(--blue-soft); }
+        .event.gold { --event-color: #d79000; --event-bg: #fff5d9; }
+        .more-events { color: var(--blue); font-size: 11px; font-weight: 850; }
+
+        .mobile-agenda { display: none; padding: 4px 18px 22px; }
+        .agenda-day { padding: 17px 0; border-bottom: 1px solid var(--border); }
+        .agenda-date { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+        .agenda-date strong { font-size: 28px; line-height: 1; color: var(--blue); }
+        .agenda-date span { color: var(--muted); font-size: 13px; font-weight: 800; text-transform: capitalize; }
+        .agenda-event { display: grid; grid-template-columns: 70px 1fr 24px; gap: 10px; width: 100%; padding: 13px 12px; border: 0; border-radius: 13px; background: var(--blue-soft); color: var(--ink); cursor: pointer; text-align: left; }
+        .agenda-event + .agenda-event { margin-top: 8px; }
+        .agenda-event.green { background: var(--green-soft); }
+        .agenda-event.gold { background: #fff5d9; }
+        .agenda-time { color: var(--muted); font-size: 12px; font-weight: 800; }
+        .agenda-title { font-size: 14px; font-weight: 850; }
+        .agenda-arrow { color: var(--blue); font-size: 20px; }
+        .empty-month { padding: 42px 20px; color: var(--muted); text-align: center; }
+
+        dialog {
+            width: min(520px, calc(100% - 32px));
+            padding: 0;
+            border: 0;
+            border-radius: 22px;
+            color: var(--ink);
+            box-shadow: 0 30px 80px rgba(16, 42, 67, .28);
+        }
+        dialog::backdrop { background: rgba(16, 42, 67, .58); backdrop-filter: blur(3px); }
+        .dialog-head { padding: 24px 26px 20px; background: linear-gradient(135deg, var(--blue-dark), var(--blue)); color: var(--white); }
+        .dialog-kicker { margin-bottom: 7px; font-size: 12px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; opacity: .78; }
+        .dialog-title { margin: 0; font-size: 25px; line-height: 1.18; }
+        .dialog-body { padding: 22px 26px 26px; }
+        .dialog-when { display: flex; gap: 9px; align-items: center; margin-bottom: 16px; color: var(--blue); font-weight: 850; }
+        .dialog-description { margin: 0; color: var(--muted); line-height: 1.65; }
+        .dialog-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
+        .close-button { padding: 9px 16px; border: 0; border-radius: 999px; background: var(--blue); color: var(--white); cursor: pointer; font-weight: 850; }
+
+        @media (max-width: 760px) {
+            .preview-shell { width: min(100% - 20px, 620px); margin-top: 10px; }
+            .calendar { border-radius: 20px; }
+            .calendar-hero { padding: 20px; }
+            .brand-logo { width: 56px; height: 56px; border-radius: 13px; }
+            .hero-copy, .hero-mark { display: none; }
+            .calendar-toolbar { grid-template-columns: auto 1fr auto; gap: 8px; padding: 15px 14px; }
+            .month-title { font-size: 20px; }
+            .today-button, .legend { display: none; }
+            .weekday-row, .month-grid { display: none; }
+            .mobile-agenda { display: block; }
+            .nav-button { width: 38px; height: 38px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="preview-shell">
+        <div class="preview-note">Anteprima grafica · eventi dimostrativi · nessun luogo visualizzato</div>
+        <section class="calendar" aria-label="Calendario corsi PNL Evolution">
+            <header class="calendar-hero">
+                <div class="brand">
+                    <img class="brand-logo" src="../../assets/brand/logo_pnl_evolution.png" alt="PNL Evolution">
+                    <div>
+                        <p class="eyebrow">PNL Evolution</p>
+                        <h1>Calendario corsi</h1>
+                        <p class="hero-copy">Consulta date e orari delle prossime lezioni. Seleziona un evento per maggiori informazioni.</p>
+                    </div>
+                </div>
+                <svg class="hero-mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+                    <circle cx="60" cy="60" r="49" stroke="currentColor" stroke-width="2"/>
+                    <path d="M34 45h52M34 62h52M34 79h32M45 30v18M75 30v18" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+                </svg>
+            </header>
+
+            <div class="calendar-toolbar">
+                <div class="nav-group">
+                    <button class="nav-button" id="previousMonth" type="button" aria-label="Mese precedente">‹</button>
+                    <button class="today-button" id="demoMonth" type="button">Mese demo</button>
+                </div>
+                <h2 class="month-title" id="monthTitle"></h2>
+                <div class="nav-group">
+                    <span class="legend">Evento formativo</span>
+                    <button class="nav-button" id="nextMonth" type="button" aria-label="Mese successivo">›</button>
+                </div>
+            </div>
+
+            <div class="weekday-row" aria-hidden="true">
+                <div class="weekday">Lun</div><div class="weekday">Mar</div><div class="weekday">Mer</div>
+                <div class="weekday">Gio</div><div class="weekday">Ven</div><div class="weekday">Sab</div><div class="weekday">Dom</div>
+            </div>
+            <div class="month-grid" id="monthGrid"></div>
+            <div class="mobile-agenda" id="mobileAgenda"></div>
+        </section>
+    </main>
+
+    <dialog id="eventDialog" aria-labelledby="dialogTitle">
+        <div class="dialog-head">
+            <div class="dialog-kicker">Dettaglio evento</div>
+            <h2 class="dialog-title" id="dialogTitle"></h2>
+        </div>
+        <div class="dialog-body">
+            <div class="dialog-when" id="dialogWhen"></div>
+            <p class="dialog-description" id="dialogDescription"></p>
+            <div class="dialog-actions"><button class="close-button" id="closeDialog" type="button">Chiudi</button></div>
+        </div>
+    </dialog>
+
+    <script>
+        (() => {
+            'use strict';
+
+            const DEMO_YEAR = 2026;
+            const DEMO_MONTH = 9;
+            const events = [
+                { id: 1, start: '2026-09-29T19:00:00', end: '2026-09-29T22:30:00', title: 'Coaching: sessione di base', description: 'Serata dedicata alla struttura della sessione e agli strumenti di ascolto.', tone: 'blue' },
+                { id: 2, start: '2026-10-03T09:00:00', end: '2026-10-03T17:30:00', title: 'Practitioner · Sistemi rappresentazionali', description: 'Giornata di formazione con dimostrazioni ed esercitazioni pratiche.', tone: 'green' },
+                { id: 3, start: '2026-10-06T19:00:00', end: '2026-10-06T22:30:00', title: 'Coaching: ascolto attivo', description: 'Approfondimento sulle domande, il feedback e la qualità della relazione.', tone: 'blue' },
+                { id: 4, start: '2026-10-10', end: '2026-10-12', title: 'Master PNL · Modulo intensivo', description: 'Modulo formativo su due giornate. Il calendario mostra correttamente gli eventi di più giorni.', tone: 'gold', allDay: true },
+                { id: 5, start: '2026-10-13T19:00:00', end: '2026-10-13T22:30:00', title: 'Coaching: feedback', description: 'Laboratorio applicativo sul feedback efficace.', tone: 'blue' },
+                { id: 6, start: '2026-10-17T09:00:00', end: '2026-10-17T17:30:00', title: 'Practitioner · Obiettivi ben formati', description: 'Dalla formulazione dell’obiettivo alla verifica ecologica.', tone: 'green' },
+                { id: 7, start: '2026-10-20T19:00:00', end: '2026-10-20T22:30:00', title: 'Coaching: supervisione', description: 'Confronto guidato su casi e sessioni svolte.', tone: 'blue' },
+                { id: 8, start: '2026-10-24', end: '2026-10-25', title: 'Open Day PNL Evolution', description: 'Presentazione dei percorsi e incontro con il team didattico.', tone: 'gold', allDay: true },
+                { id: 9, start: '2026-10-27T19:00:00', end: '2026-10-27T22:30:00', title: 'Coaching: pratica osservata', description: 'Esercitazioni in piccoli gruppi e restituzione finale.', tone: 'blue' },
+                { id: 10, start: '2026-10-31T09:00:00', end: '2026-10-31T17:30:00', title: 'Practitioner · Metamodello', description: 'Uso delle domande di precisione nella comunicazione.', tone: 'green' },
+                { id: 11, start: '2026-11-07T09:00:00', end: '2026-11-07T17:30:00', title: 'Practitioner · Ancoraggio', description: 'Dimostrazione, pratica e integrazione della tecnica.', tone: 'green' }
+            ];
+
+            let viewDate = new Date(DEMO_YEAR, DEMO_MONTH, 1);
+            const monthTitle = document.getElementById('monthTitle');
+            const monthGrid = document.getElementById('monthGrid');
+            const mobileAgenda = document.getElementById('mobileAgenda');
+            const dialog = document.getElementById('eventDialog');
+            const dateFormatter = new Intl.DateTimeFormat('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            const monthFormatter = new Intl.DateTimeFormat('it-CH', { month: 'long', year: 'numeric' });
+            const timeFormatter = new Intl.DateTimeFormat('it-CH', { hour: '2-digit', minute: '2-digit' });
+
+            const parseLocal = (value) => {
+                const [datePart, timePart] = value.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                if (!timePart) return new Date(year, month - 1, day);
+                const [hour, minute, second = 0] = timePart.split(':').map(Number);
+                return new Date(year, month - 1, day, hour, minute, second);
+            };
+            const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const eventsOn = (date) => events.filter((event) => {
+                const start = parseLocal(event.start);
+                const end = parseLocal(event.end);
+                const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                const eventLastDay = event.allDay ? new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1) : new Date(end.getFullYear(), end.getMonth(), end.getDate());
+                return dayStart >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) && dayStart <= eventLastDay;
+            });
+            const eventTime = (event, day) => {
+                if (event.allDay) return 'Giornata intera';
+                const start = parseLocal(event.start);
+                const end = parseLocal(event.end);
+                if (dateKey(start) !== dateKey(day)) return 'Continua';
+                return `${timeFormatter.format(start)}–${timeFormatter.format(end)}`;
+            };
+            const eventButton = (event, day, mobile = false) => mobile
+                ? `<button class="agenda-event ${event.tone}" type="button" data-event-id="${event.id}"><span class="agenda-time">${eventTime(event, day)}</span><span class="agenda-title">${event.title}</span><span class="agenda-arrow">›</span></button>`
+                : `<button class="event ${event.tone}" type="button" data-event-id="${event.id}"><span class="event-time">${eventTime(event, day)}</span><span class="event-title">${event.title}</span></button>`;
+
+            function render() {
+                monthTitle.textContent = monthFormatter.format(viewDate);
+                const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                const mondayOffset = (first.getDay() + 6) % 7;
+                const gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - mondayOffset);
+                const days = Array.from({ length: 42 }, (_, index) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index));
+                monthGrid.innerHTML = days.map((day) => {
+                    const outside = day.getMonth() !== viewDate.getMonth();
+                    const dayEvents = eventsOn(day);
+                    return `<article class="day${outside ? ' outside' : ''}${dateKey(day) === '2026-10-03' ? ' is-today' : ''}">
+                        <div class="day-number">${day.getDate()}</div>
+                        ${dayEvents.slice(0, 3).map((event) => eventButton(event, day)).join('')}
+                        ${dayEvents.length > 3 ? `<div class="more-events">+${dayEvents.length - 3} altri</div>` : ''}
+                    </article>`;
+                }).join('');
+
+                const monthEvents = events.filter((event) => {
+                    const start = parseLocal(event.start);
+                    const end = parseLocal(event.end);
+                    const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                    const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0, 23, 59, 59);
+                    return start <= monthEnd && end >= monthStart;
+                });
+                const agendaDays = [...new Set(monthEvents.flatMap((event) => {
+                    const start = parseLocal(event.start);
+                    const end = parseLocal(event.end);
+                    const last = event.allDay ? new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1) : end;
+                    const keys = [];
+                    for (let day = new Date(start.getFullYear(), start.getMonth(), start.getDate()); day <= last; day.setDate(day.getDate() + 1)) {
+                        if (day.getMonth() === viewDate.getMonth()) keys.push(dateKey(day));
+                    }
+                    return keys;
+                }))].sort();
+                mobileAgenda.innerHTML = agendaDays.length ? agendaDays.map((key) => {
+                    const day = parseLocal(key);
+                    return `<section class="agenda-day"><div class="agenda-date"><strong>${day.getDate()}</strong><span>${new Intl.DateTimeFormat('it-CH', { weekday: 'long', month: 'long' }).format(day)}</span></div>${eventsOn(day).map((event) => eventButton(event, day, true)).join('')}</section>`;
+                }).join('') : '<div class="empty-month">Nessun evento in questo mese.</div>';
+                bindEvents();
+            }
+
+            function bindEvents() {
+                document.querySelectorAll('[data-event-id]').forEach((button) => button.addEventListener('click', () => openEvent(Number(button.dataset.eventId))));
+            }
+
+            function openEvent(id) {
+                const event = events.find((item) => item.id === id);
+                if (!event) return;
+                const start = parseLocal(event.start);
+                const end = parseLocal(event.end);
+                document.getElementById('dialogTitle').textContent = event.title;
+                document.getElementById('dialogWhen').textContent = event.allDay
+                    ? `${dateFormatter.format(start)}${dateKey(start) !== dateKey(new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1)) ? ` – ${dateFormatter.format(new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1))}` : ''}`
+                    : `${dateFormatter.format(start)} · ${timeFormatter.format(start)}–${timeFormatter.format(end)}`;
+                document.getElementById('dialogDescription').textContent = event.description;
+                dialog.showModal();
+            }
+
+            document.getElementById('previousMonth').addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); render(); });
+            document.getElementById('nextMonth').addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); render(); });
+            document.getElementById('demoMonth').addEventListener('click', () => { viewDate = new Date(DEMO_YEAR, DEMO_MONTH, 1); render(); });
+            document.getElementById('closeDialog').addEventListener('click', () => dialog.close());
+            dialog.addEventListener('click', (event) => {
+                const box = dialog.getBoundingClientRect();
+                if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+            });
+            render();
+        })();
+    </script>
+</body>
+</html>
