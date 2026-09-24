@@ -87,7 +87,7 @@
         .month-title { margin: 0; text-align: center; font-size: clamp(19px, 2.5vw, 24px); text-transform: capitalize; }
         .nav-group { display: flex; align-items: center; gap: 8px; }
         .nav-group:last-child { justify-content: flex-end; }
-        .nav-button, .today-button {
+        .nav-button, .today-button, .export-button {
             border: 1px solid var(--border);
             border-radius: 999px;
             background: var(--white);
@@ -97,8 +97,10 @@
             transition: .16s ease;
         }
         .nav-button { width: 36px; height: 36px; font-size: 19px; }
-        .today-button { padding: 8px 13px; color: var(--blue); font-size: 12px; }
+        .today-button, .export-button { padding: 8px 13px; color: var(--blue); font-size: 12px; }
+        .export-button { border-color: var(--blue); background: var(--blue); color: var(--white); }
         .nav-button:hover, .today-button:hover { border-color: var(--blue); background: var(--blue-soft); }
+        .export-button:hover { background: var(--blue-dark); }
         .legend { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 750; }
         .legend::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--green); }
 
@@ -198,6 +200,7 @@
             .calendar-toolbar { grid-template-columns: auto 1fr auto; gap: 7px; padding: 10px 12px; }
             .month-title { font-size: 18px; }
             .today-button, .legend { display: none; }
+            .export-button { padding: 8px 10px; font-size: 11px; }
             .weekday-row, .month-grid { display: none; }
             .mobile-agenda { display: block; }
             .nav-button { width: 34px; height: 34px; }
@@ -231,6 +234,7 @@
                 <h2 class="month-title" id="monthTitle"></h2>
                 <div class="nav-group">
                     <span class="legend">Evento formativo</span>
+                    <button class="export-button" id="exportCsv" type="button">Esporta CSV</button>
                     <button class="nav-button" id="nextMonth" type="button" aria-label="Mese successivo">›</button>
                 </div>
             </div>
@@ -311,6 +315,14 @@
                 ? `<button class="agenda-event ${event.tone}" type="button" data-event-id="${event.id}"><span class="agenda-time">${eventTime(event, day)}</span><span class="agenda-title">${event.title}</span><span class="agenda-arrow">›</span></button>`
                 : `<button class="event ${event.tone}" type="button" data-event-id="${event.id}"><span class="event-time">${eventTime(event, day)}</span><span class="event-title">${event.title}</span></button>`;
 
+            const eventsInViewMonth = () => events.filter((event) => {
+                const start = parseLocal(event.start);
+                const end = parseLocal(event.end);
+                const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0, 23, 59, 59);
+                return start <= monthEnd && end >= monthStart;
+            });
+
             function render() {
                 monthTitle.textContent = monthFormatter.format(viewDate);
                 const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -327,13 +339,7 @@
                     </article>`;
                 }).join('');
 
-                const monthEvents = events.filter((event) => {
-                    const start = parseLocal(event.start);
-                    const end = parseLocal(event.end);
-                    const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-                    const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0, 23, 59, 59);
-                    return start <= monthEnd && end >= monthStart;
-                });
+                const monthEvents = eventsInViewMonth();
                 const agendaDays = [...new Set(monthEvents.flatMap((event) => {
                     const start = parseLocal(event.start);
                     const end = parseLocal(event.end);
@@ -368,9 +374,48 @@
                 dialog.showModal();
             }
 
+            function exportCsv() {
+                const formatDate = (date) => new Intl.DateTimeFormat('it-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+                const csvEscape = (value) => {
+                    const text = String(value ?? '');
+                    return /[";\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+                };
+                const rows = eventsInViewMonth()
+                    .slice()
+                    .sort((left, right) => parseLocal(left.start) - parseLocal(right.start))
+                    .map((event) => {
+                        const start = parseLocal(event.start);
+                        const rawEnd = parseLocal(event.end);
+                        const end = event.allDay ? new Date(rawEnd.getFullYear(), rawEnd.getMonth(), rawEnd.getDate() - 1) : rawEnd;
+                        return [
+                            event.title,
+                            formatDate(start),
+                            formatDate(end),
+                            event.allDay ? 'Giornata intera' : timeFormatter.format(start),
+                            event.allDay ? '' : timeFormatter.format(end),
+                            event.description,
+                        ];
+                    });
+                const csv = [
+                    ['Titolo', 'Data inizio', 'Data fine', 'Ora inizio', 'Ora fine', 'Descrizione'],
+                    ...rows,
+                ].map((row) => row.map(csvEscape).join(';')).join('\r\n');
+                const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                const month = String(viewDate.getMonth() + 1).padStart(2, '0');
+                link.href = url;
+                link.download = `calendario-pnl-evolution-${viewDate.getFullYear()}-${month}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+            }
+
             document.getElementById('previousMonth').addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); render(); });
             document.getElementById('nextMonth').addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); render(); });
             document.getElementById('demoMonth').addEventListener('click', () => { viewDate = new Date(DEMO_YEAR, DEMO_MONTH, 1); render(); });
+            document.getElementById('exportCsv').addEventListener('click', exportCsv);
             document.getElementById('closeDialog').addEventListener('click', () => dialog.close());
             dialog.addEventListener('click', (event) => {
                 const box = dialog.getBoundingClientRect();
