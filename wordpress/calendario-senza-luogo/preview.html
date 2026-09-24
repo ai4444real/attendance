@@ -285,6 +285,9 @@
             const monthGrid = document.getElementById('monthGrid');
             const mobileAgenda = document.getElementById('mobileAgenda');
             const dialog = document.getElementById('eventDialog');
+            const exportButton = document.getElementById('exportCsv');
+            const exportParameter = new URLSearchParams(window.location.search).get('export');
+            const exportEnabled = exportParameter === null || !['false', '0', 'no'].includes(exportParameter.toLocaleLowerCase('it'));
             const dateFormatter = new Intl.DateTimeFormat('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
             const monthFormatter = new Intl.DateTimeFormat('it-CH', { month: 'long', year: 'numeric' });
             const timeFormatter = new Intl.DateTimeFormat('it-CH', { hour: '2-digit', minute: '2-digit' });
@@ -415,7 +418,8 @@
             document.getElementById('previousMonth').addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); render(); });
             document.getElementById('nextMonth').addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); render(); });
             document.getElementById('demoMonth').addEventListener('click', () => { viewDate = new Date(DEMO_YEAR, DEMO_MONTH, 1); render(); });
-            document.getElementById('exportCsv').addEventListener('click', exportCsv);
+            exportButton.hidden = !exportEnabled;
+            exportButton.addEventListener('click', exportCsv);
             document.getElementById('closeDialog').addEventListener('click', () => dialog.close());
             dialog.addEventListener('click', (event) => {
                 const box = dialog.getBoundingClientRect();
