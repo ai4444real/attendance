@@ -2,7 +2,7 @@
 Contributors: pnlevolution
 Requires at least: 5.8
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 
 Mostra gli eventi di un calendario Google pubblico senza esporre il luogo.
@@ -16,6 +16,10 @@ Inserire in un blocco Shortcode:
 L'export CSV è attivo per impostazione predefinita. Per nasconderlo:
 
 [calendario_senza_luogo id="c_classroom10484a8b@group.calendar.google.com" export="false"]
+
+Il banner usa il blu predefinito. Si può indicare un altro colore esadecimale:
+
+[calendario_senza_luogo id="c_classroom10484a8b@group.calendar.google.com" colore="#d98b19"]
 
 Il feed viene mantenuto in cache per 15 minuti. Se Google non risponde, il plugin usa l'ultima copia valida disponibile.
 

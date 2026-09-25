@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Calendario senza luogo
  * Description: Mostra un calendario Google pubblico senza trasmettere il luogo al browser.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: PNL Evolution
  * License: GPL-2.0-or-later
  * Text Domain: calendario-senza-luogo
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('CSL_VERSION', '1.0.0');
+define('CSL_VERSION', '1.0.1');
 define('CSL_DIR', plugin_dir_path(__FILE__));
 define('CSL_URL', plugin_dir_url(__FILE__));
 
@@ -53,26 +53,34 @@ final class CSL_Plugin
 
     public static function render_shortcode($attributes)
     {
-        $attributes = shortcode_atts(array('id' => '', 'export' => 'true'), $attributes, 'calendario_senza_luogo');
+        $attributes = shortcode_atts(array(
+            'id' => '',
+            'export' => 'true',
+            'colore' => '',
+            'color' => '',
+        ), $attributes, 'calendario_senza_luogo');
         $calendar_id = trim((string) $attributes['id']);
         if (!CSL_Calendar_Service::valid_calendar_id($calendar_id)) {
             return '<p class="csl-message csl-error">ID del calendario mancante o non valido.</p>';
         }
 
         $export = !in_array(strtolower(trim((string) $attributes['export'])), array('false', '0', 'no'), true);
+        $banner_color = sanitize_hex_color($attributes['colore'] ?: $attributes['color']);
+        if (!$banner_color) {
+            $banner_color = '#005090';
+        }
         wp_enqueue_style('csl-calendar', CSL_URL . 'assets/calendar.css', array(), CSL_VERSION);
         wp_enqueue_script('csl-calendar', CSL_URL . 'assets/calendar.js', array(), CSL_VERSION, true);
 
         $instance = wp_unique_id('csl-calendar-');
         ob_start();
         ?>
-        <section id="<?php echo esc_attr($instance); ?>" class="csl-calendar"
+        <section id="<?php echo esc_attr($instance); ?>" class="csl-calendar" style="--csl-banner:<?php echo esc_attr($banner_color); ?>"
             data-calendar-id="<?php echo esc_attr($calendar_id); ?>"
             data-endpoint="<?php echo esc_url(rest_url('calendario-senza-luogo/v1/events')); ?>"
             data-export="<?php echo $export ? 'true' : 'false'; ?>">
             <header class="csl-hero">
                 <div class="csl-brand">
-                    <img src="<?php echo esc_url(CSL_URL . 'assets/logo-pnl-evolution.png'); ?>" alt="PNL Evolution" class="csl-logo">
                     <div><p class="csl-eyebrow">Calendario della scuola</p><h2>Prossimi appuntamenti</h2></div>
                 </div>
             </header>

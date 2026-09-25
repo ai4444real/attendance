@@ -30,3 +30,12 @@ preview.html?export=false
 
 Il CSV contiene soltanto titolo, date, orari e descrizione degli eventi del
 mese visualizzato. Non contiene il luogo o link all'evento Google.
+
+## Colore del banner
+
+Il parametro opzionale `colore` accetta un colore esadecimale. Se viene omesso,
+resta il blu predefinito `#005090`:
+
+```text
+[calendario_senza_luogo id="c_classroom10484a8b@group.calendar.google.com" colore="#d98b19"]
+```
