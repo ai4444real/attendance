@@ -136,6 +136,7 @@ const AttendanceSchoolApp = {
             checkbox.addEventListener('change', () => {
                 if (checkbox.checked) {
                     this._filters.courses.add(checkbox.value);
+                    this._expandDateRangeForCourse(checkbox.value);
                 } else {
                     this._filters.courses.delete(checkbox.value);
                 }
@@ -143,6 +144,25 @@ const AttendanceSchoolApp = {
                 this._render();
             });
         });
+    },
+
+    _expandDateRangeForCourse(courseName) {
+        const lessonDates = this._records
+            .filter((record) => record.course_name === courseName && record.lesson_date)
+            .map((record) => record.lesson_date)
+            .sort();
+        if (!lessonDates.length) return;
+
+        const earliestDate = lessonDates[0];
+        const latestDate = lessonDates[lessonDates.length - 1];
+        if (!this._filters.dateStart || earliestDate < this._filters.dateStart) {
+            this._filters.dateStart = earliestDate;
+            this._els.dateStartFilter.value = earliestDate;
+        }
+        if (!this._filters.dateEnd || latestDate > this._filters.dateEnd) {
+            this._filters.dateEnd = latestDate;
+            this._els.dateEndFilter.value = latestDate;
+        }
     },
 
     _populateStudentFilter() {
