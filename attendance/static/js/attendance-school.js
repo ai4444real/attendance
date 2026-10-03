@@ -14,6 +14,7 @@ const AttendanceSchoolApp = {
             dateEndFilter: document.getElementById('dateEndFilter'),
             selectAllCourses: document.getElementById('selectAllCourses'),
             clearCourses: document.getElementById('clearCourses'),
+            refreshDataButton: document.getElementById('refreshDataButton'),
             exportCsvButton: document.getElementById('exportCsvButton'),
             orientationContainer: document.getElementById('orientationContainer'),
             tableContainer: document.getElementById('tableContainer'),
@@ -61,6 +62,7 @@ const AttendanceSchoolApp = {
             this._updateStudentAliasLink();
             this._render();
         });
+        this._els.refreshDataButton.addEventListener('click', () => this._refreshRecords(true));
         this._els.exportCsvButton.addEventListener('click', () => this._downloadCurrentRecordsCsv());
 
         await this._load();
@@ -151,9 +153,14 @@ const AttendanceSchoolApp = {
         });
     },
 
-    async _refreshRecords() {
+    async _refreshRecords(showFeedback = false) {
         if (this._refreshPromise) return this._refreshPromise;
         this._refreshPromise = (async () => {
+            const button = this._els.refreshDataButton;
+            if (button) {
+                button.disabled = true;
+                if (showFeedback) button.textContent = 'Aggiornamento...';
+            }
             try {
                 const response = await fetch('/api/attendance/school-records', { cache: 'no-store' });
                 const payload = await response.json();
@@ -175,9 +182,19 @@ const AttendanceSchoolApp = {
                 this._populateCourseCheckboxes();
                 this._populateStudentFilter();
                 this._render();
+                if (showFeedback && button) button.textContent = 'Dati aggiornati';
             } catch (error) {
                 console.error(error);
+                if (showFeedback && button) button.textContent = 'Aggiornamento fallito';
             } finally {
+                if (button) {
+                    button.disabled = false;
+                    if (showFeedback) {
+                        window.setTimeout(() => {
+                            button.textContent = 'Aggiorna dati';
+                        }, 1800);
+                    }
+                }
                 this._refreshPromise = null;
             }
         })();
