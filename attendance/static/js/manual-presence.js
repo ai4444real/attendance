@@ -7,7 +7,10 @@ class ManualPresencePage {
         this.manualFields = document.getElementById('manualTargetFields');
         this.existingCourse = document.getElementById('existingCourse');
         this.existingLesson = document.getElementById('existingLesson');
+        this.existingPeople = document.getElementById('existingPeople');
+        this.peopleGrid = document.getElementById('peopleGrid');
         this.targets = [];
+        this.peopleRequestId = 0;
     }
 
     init() {
@@ -22,6 +25,7 @@ class ManualPresencePage {
             input.addEventListener('change', () => this.updateTargetMode());
         });
         this.existingCourse.addEventListener('change', () => this.renderLessonsForSelectedCourse());
+        this.existingLesson.addEventListener('change', () => this.loadExistingPeople());
         this.updateTargetMode();
         this.loadTargets();
     }
@@ -67,6 +71,9 @@ class ManualPresencePage {
                 `Import manuale salvato: lesson #${data.lesson_id}, ${data.participants_upserted}/${data.records_processed} presenze.`,
                 'ok',
             );
+            if (mode === 'existing') {
+                await this.loadExistingPeople(data.lesson_id);
+            }
         } catch (error) {
             this.setStatus(error.message, 'error');
         }
@@ -105,6 +112,7 @@ class ManualPresencePage {
         const course = this.targets.find((item) => item.course_name === selectedCourse);
         if (!course) {
             this.existingLesson.innerHTML = '<option value="">Scegli prima un corso</option>';
+            this.renderExistingPeople([], 'Scegli una lezione esistente per vedere la lista.');
             return;
         }
         this.existingLesson.innerHTML = [
@@ -114,6 +122,50 @@ class ManualPresencePage {
                 return `<option value="${Number(lesson.lesson_id)}">${this.escapeHtml(label)}</option>`;
             }),
         ].join('');
+        this.renderExistingPeople([], 'Scegli una lezione esistente per vedere la lista.');
+    }
+
+    async loadExistingPeople(lessonId = null) {
+        const selectedLessonId = Number(lessonId || this.existingLesson.value || 0);
+        const requestId = ++this.peopleRequestId;
+        if (!selectedLessonId) {
+            this.renderExistingPeople([], 'Scegli una lezione esistente per vedere la lista.');
+            return;
+        }
+        this.renderExistingPeople([], 'Caricamento persone...');
+        try {
+            const response = await fetch(`/api/attendance/lessons/${selectedLessonId}`, { cache: 'no-store' });
+            const data = await this.readJson(response);
+            if (!response.ok) {
+                throw new Error(data.detail || 'Impossibile caricare le persone già presenti.');
+            }
+            if (requestId !== this.peopleRequestId) return;
+            const people = (data.lesson?.participants || [])
+                .filter((participant) => {
+                    const flags = Array.isArray(participant.flags) ? participant.flags : [];
+                    return !flags.includes('ignored_participant') && !flags.includes('local_merged_participant');
+                })
+                .map((participant) => String(participant.canonical_full_name || '').trim())
+                .filter(Boolean)
+                .sort((left, right) => left.localeCompare(right, 'it', { sensitivity: 'base' }));
+            this.renderExistingPeople(people);
+        } catch (error) {
+            if (requestId !== this.peopleRequestId) return;
+            this.renderExistingPeople([], error.message);
+        }
+    }
+
+    renderExistingPeople(people, emptyMessage = 'Nessuna persona già presente.') {
+        if (!people.length) {
+            this.existingPeople.innerHTML = `<div class="existing-people-empty">${this.escapeHtml(emptyMessage)}</div>`;
+            return;
+        }
+        this.existingPeople.innerHTML = `
+            <p class="existing-people-meta">${people.length} ${people.length === 1 ? 'persona presente' : 'persone presenti'}</p>
+            <ol class="existing-people-list">
+                ${people.map((person) => `<li>${this.escapeHtml(person)}</li>`).join('')}
+            </ol>
+        `;
     }
 
     updateTargetMode() {
@@ -121,6 +173,11 @@ class ManualPresencePage {
         const useExisting = mode === 'existing';
         this.existingFields.classList.toggle('hidden', !useExisting);
         this.manualFields.classList.toggle('hidden', useExisting);
+        this.existingPeople.parentElement.classList.toggle('hidden', !useExisting);
+        this.peopleGrid.classList.toggle('single-column', !useExisting);
+        if (useExisting) {
+            this.loadExistingPeople();
+        }
     }
 
     parseRecords(text, defaultStatus) {

@@ -29,6 +29,13 @@
         .field label { font-size: 13px; font-weight: 800; color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.05em; }
         .field input, .field select, .field textarea { border: 1px solid var(--brand-border); background: #fff; color: var(--brand-ink); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
         .field textarea { min-height: 220px; resize: vertical; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+        .people-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+        .people-grid.single-column { grid-template-columns: 1fr; }
+        .existing-people { min-height: 220px; max-height: 320px; overflow-y: auto; border: 1px solid var(--brand-border); border-radius: 12px; background: #fafcfd; padding: 10px 12px; }
+        .existing-people-meta { margin: 0 0 8px; color: var(--brand-muted); font-size: 13px; }
+        .existing-people-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+        .existing-people-list li { color: var(--brand-ink); font-size: 14px; line-height: 1.35; }
+        .existing-people-empty { color: var(--brand-muted); font-size: 14px; line-height: 1.5; }
         .mode-switch { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 18px; }
         .mode-switch label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--brand-border); border-radius: 999px; padding: 8px 12px; font-weight: 800; color: var(--brand-ink); cursor: pointer; }
         .mode-switch input { margin: 0; }
@@ -39,6 +46,9 @@
         .status { color: var(--brand-muted); font-size: 14px; }
         .status.ok { color: #157347; font-weight: 800; }
         .status.error { color: #b42318; font-weight: 800; }
+        @media (max-width: 760px) {
+            .people-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -120,9 +130,17 @@
                         </select>
                     </div>
                 </div>
-                <div class="field">
-                    <label for="recordsText">Persone</label>
-                    <textarea id="recordsText" name="records" required placeholder="Mario Rossi&#10;Anna Bianchi, anna@example.com&#10;Luca Verdi; luca@example.com; prima_meta"></textarea>
+                <div id="peopleGrid" class="people-grid">
+                    <div class="field">
+                        <label for="recordsText">Persone da inserire</label>
+                        <textarea id="recordsText" name="records" required placeholder="Mario Rossi&#10;Anna Bianchi, anna@example.com&#10;Luca Verdi; luca@example.com; prima_meta"></textarea>
+                    </div>
+                    <div class="field">
+                        <label>Persone già presenti</label>
+                        <div id="existingPeople" class="existing-people" aria-live="polite">
+                            <div class="existing-people-empty">Scegli una lezione esistente per vedere la lista.</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="actions">
                     <button class="primary-button" type="submit">Importa presenze</button>
@@ -132,6 +150,6 @@
         </section>
     </main>
 
-    <script src="/attendance/static/js/manual-presence.js"></script>
+    <script src="/attendance/static/js/manual-presence.js?v=20261003-existing-people"></script>
 </body>
 </html>
