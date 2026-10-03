@@ -24,6 +24,7 @@ const AttendanceSchoolApp = {
         this._filters = { courses: new Set(), dateStart: '', dateEnd: '', student: '', studentText: '' };
         this._allCourses = [];
         this._studentLabelsByFilterKey = new Map();
+        this._refreshPromise = null;
         const initialQuery = new URLSearchParams(window.location.search);
         this._initialStudent = String(initialQuery.get('student') || '').trim();
         this._initialAllCourses = initialQuery.get('all_courses') === '1';
@@ -63,6 +64,11 @@ const AttendanceSchoolApp = {
         this._els.exportCsvButton.addEventListener('click', () => this._downloadCurrentRecordsCsv());
 
         await this._load();
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                this._refreshRecords();
+            }
+        });
     },
 
     async _load() {
@@ -136,7 +142,6 @@ const AttendanceSchoolApp = {
             checkbox.addEventListener('change', () => {
                 if (checkbox.checked) {
                     this._filters.courses.add(checkbox.value);
-                    this._expandDateRangeForCourse(checkbox.value);
                 } else {
                     this._filters.courses.delete(checkbox.value);
                 }
@@ -146,23 +151,37 @@ const AttendanceSchoolApp = {
         });
     },
 
-    _expandDateRangeForCourse(courseName) {
-        const lessonDates = this._records
-            .filter((record) => record.course_name === courseName && record.lesson_date)
-            .map((record) => record.lesson_date)
-            .sort();
-        if (!lessonDates.length) return;
-
-        const earliestDate = lessonDates[0];
-        const latestDate = lessonDates[lessonDates.length - 1];
-        if (!this._filters.dateStart || earliestDate < this._filters.dateStart) {
-            this._filters.dateStart = earliestDate;
-            this._els.dateStartFilter.value = earliestDate;
-        }
-        if (!this._filters.dateEnd || latestDate > this._filters.dateEnd) {
-            this._filters.dateEnd = latestDate;
-            this._els.dateEndFilter.value = latestDate;
-        }
+    async _refreshRecords() {
+        if (this._refreshPromise) return this._refreshPromise;
+        this._refreshPromise = (async () => {
+            try {
+                const response = await fetch('/api/attendance/school-records', { cache: 'no-store' });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.detail || 'Impossibile aggiornare i dati official.');
+                }
+                this._records = (payload.records || []).slice().sort((a, b) => {
+                    const courseCompare = a.course_name.localeCompare(b.course_name, 'it');
+                    if (courseCompare !== 0) return courseCompare;
+                    const dateCompare = a.lesson_date.localeCompare(b.lesson_date);
+                    if (dateCompare !== 0) return dateCompare;
+                    return a.canonical_full_name.localeCompare(b.canonical_full_name, 'it');
+                });
+                this._allCourses = [...new Set(this._records.map((record) => record.course_name))]
+                    .sort((a, b) => a.localeCompare(b, 'it'));
+                this._filters.courses = new Set(
+                    [...this._filters.courses].filter((course) => this._allCourses.includes(course))
+                );
+                this._populateCourseCheckboxes();
+                this._populateStudentFilter();
+                this._render();
+            } catch (error) {
+                console.error(error);
+            } finally {
+                this._refreshPromise = null;
+            }
+        })();
+        return this._refreshPromise;
     },
 
     _populateStudentFilter() {
