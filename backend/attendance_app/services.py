@@ -1897,13 +1897,18 @@ class AttendanceLessonIdentityRebuildService:
             old_to_target_key,
             target_identities=target_identities,
         )
+        matched_aggregated = self._match_aggregated_records(
+            grouped_participants,
+            target_identities,
+            aggregated,
+        )
         remapped_overrides = self._build_manual_override_map(action_sequence, lesson.participants, old_to_target_key)
 
         rebuilt_participants: list[dict] = []
         missing_target_keys: list[str] = []
         missing_target_groups: list[dict] = []
         for target_key, participants in grouped_participants.items():
-            record = aggregated.get(target_key)
+            record = matched_aggregated.get(target_key)
             if record is None:
                 if self._can_preserve_aggregated_participant_group(participants):
                     rebuilt_participants.append(
@@ -1997,6 +2002,53 @@ class AttendanceLessonIdentityRebuildService:
             participants=rebuilt_participants,
         )
         return self._query_repository.get_lesson_detail(lesson_id)
+
+    def _match_aggregated_records(
+        self,
+        grouped_participants: dict[str, list],
+        target_identities: dict[str, dict[str, str | None]],
+        aggregated: dict[str, dict],
+    ) -> dict[str, dict]:
+        """Match rebuilt identities to source aggregates without guessing across ambiguous names."""
+        matched: dict[str, dict] = {}
+        used_aggregated_keys: set[str] = set()
+
+        for target_key in grouped_participants:
+            if target_key in aggregated:
+                matched[target_key] = aggregated[target_key]
+                used_aggregated_keys.add(target_key)
+
+        for target_key, participants in grouped_participants.items():
+            if target_key in matched or not participants:
+                continue
+            target_identity = target_identities.get(target_key, {})
+            target_name = str(
+                target_identity.get("canonical_full_name")
+                or participants[0].canonical_full_name
+                or ""
+            ).strip()
+            target_email = str(
+                target_identity.get("canonical_email")
+                or (target_key if "@" in target_key else "")
+            ).strip().casefold()
+            target_name_key = _normalize_identity_key(target_name)
+            candidates: list[tuple[str, dict]] = []
+            for aggregated_key, record in aggregated.items():
+                if aggregated_key in used_aggregated_keys:
+                    continue
+                record_name_key = _normalize_identity_key(str(record.get("canonical_full_name") or ""))
+                if not target_name_key or record_name_key != target_name_key:
+                    continue
+                record_email = str(record.get("canonical_email") or "").strip().casefold()
+                if target_email and record_email and target_email != record_email:
+                    continue
+                candidates.append((aggregated_key, record))
+            if len(candidates) == 1:
+                aggregated_key, record = candidates[0]
+                matched[target_key] = record
+                used_aggregated_keys.add(aggregated_key)
+
+        return matched
 
     def _can_preserve_aggregated_participant_group(self, participants: list) -> bool:
         return bool(participants) and all(

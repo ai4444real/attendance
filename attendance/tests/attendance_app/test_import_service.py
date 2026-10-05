@@ -1886,6 +1886,105 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
 
 
 class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
+    def test_rebuild_lesson_matches_unique_name_when_source_email_availability_changed(self) -> None:
+        cases = [
+            {
+                "label": "source segment without email after participant enrichment",
+                "identity_sources": [
+                    {
+                        "raw_full_name": "Alessandro Martinelli",
+                        "email": "a.martinelli@betacom.ch",
+                        "segments": [["2025-06-17T17:04:53+00:00", "2025-06-17T17:30:05+00:00"]],
+                    }
+                ],
+                "source_email": None,
+                "name": "Alessandro Martinelli",
+                "email": "a.martinelli@betacom.ch",
+            },
+            {
+                "label": "empty identity source listed before complete source",
+                "identity_sources": [
+                    {"raw_full_name": "Isabella Rauzino", "email": "", "segments": []},
+                    {
+                        "raw_full_name": "Isabella Rauzino",
+                        "email": "isabella.traduttrice@gmail.com",
+                        "segments": [["2026-05-26T17:00:15+00:00", "2026-05-26T20:06:23+00:00"]],
+                    },
+                ],
+                "source_email": "isabella.traduttrice@gmail.com",
+                "name": "Isabella Rauzino",
+                "email": "isabella.traduttrice@gmail.com",
+            },
+        ]
+        for index, case in enumerate(cases, start=1):
+            with self.subTest(case["label"]):
+                lesson = DraftLessonView(
+                    id=680 + index,
+                    course_name="FSEA",
+                    lesson_date="2026-05-26",
+                    source_meeting_id="891 9285 7355",
+                    status="official",
+                    is_ignored=False,
+                    threshold_ratio=0.8,
+                    meeting_start_at="2026-05-26T17:00:00+00:00",
+                    meeting_end_at="2026-05-26T20:30:00+00:00",
+                    effective_start_at="2026-05-26T17:00:00+00:00",
+                    break_point_at="2026-05-26T18:45:00+00:00",
+                    effective_end_at="2026-05-26T20:30:00+00:00",
+                    break_source="manual",
+                    effective_start_source="manual",
+                    effective_end_source="manual",
+                    warnings=[],
+                    diagnostics={},
+                    summary={"presente": 1, "prima_meta": 0, "seconda_meta": 0, "assente": 0},
+                    participants=[
+                        DraftLessonParticipantView(
+                            id=7500 + index,
+                            participant_key=case["email"],
+                            canonical_full_name=case["name"],
+                            raw_full_name=case["name"],
+                            email=case["email"],
+                            segment_count=1,
+                            minutes_first_half=100.0,
+                            minutes_second_half=80.0,
+                            duration_first_half=105.0,
+                            duration_second_half=105.0,
+                            total_minutes=180.0,
+                            calculated_presence_status="presente",
+                            manual_override_presence_status=None,
+                            final_presence_status="presente",
+                            presence_source="zoom",
+                            flags=[],
+                            metadata={"identity_sources": case["identity_sources"]},
+                        )
+                    ],
+                    review_actions=[],
+                )
+                query = FakeAttendanceDraftQueryRepository(lesson)
+                query.source_segments = [
+                    DraftLessonSourceSegment(
+                        observed_full_name=case["name"],
+                        observed_email=case["source_email"],
+                        join_time="2026-05-26T17:00:15+00:00",
+                        leave_time="2026-05-26T20:06:23+00:00",
+                        metadata={},
+                    )
+                ]
+                mutation = FakeAttendanceDraftMutationRepository()
+                service = AttendanceLessonIdentityRebuildService(
+                    query,
+                    mutation,
+                    FakeAttendanceIdentityAliasRepository(),
+                )
+
+                service.rebuild_lesson_with_current_aliases(lesson.id)
+
+                self.assertIsNotNone(mutation.last_identity_rebuild)
+                rebuilt = mutation.last_identity_rebuild["participants"]
+                self.assertEqual(1, len(rebuilt))
+                self.assertEqual(case["email"], rebuilt[0]["participant_key"])
+                self.assertEqual(case["email"], rebuilt[0]["email"])
+
     def test_rebuild_lesson_merges_same_name_with_missing_email(self) -> None:
         lesson = DraftLessonView(
             id=777,
