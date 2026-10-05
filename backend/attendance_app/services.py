@@ -1714,10 +1714,8 @@ class AttendanceIdentityAliasService:
         created_by: str | None = None,
         notes: str | None = None,
     ) -> AttendanceIdentityAlias:
-        same_name = canonical_full_name.strip().casefold() == alias_full_name.strip().casefold()
-        canonical_email_norm = (canonical_email or "").strip().casefold()
         alias_email_norm = (alias_email or "").strip().casefold()
-        if same_name and canonical_email_norm and alias_email_norm and canonical_email_norm != alias_email_norm:
+        if alias_email_norm:
             return self.create_alias(
                 canonical_full_name=canonical_full_name,
                 canonical_email=canonical_email,

@@ -3149,6 +3149,37 @@ class AttendanceIdentityAliasServiceTest(unittest.TestCase):
         self.assertEqual("Mario R. Rossi", alias.alias_value)
         self.assertEqual("Mario Rossi", repository.last_created["canonical_full_name"])
 
+    def test_merge_participants_prefers_alias_email_when_names_differ(self) -> None:
+        repository = FakeAttendanceIdentityAliasRepository()
+        service = AttendanceIdentityAliasService(repository)
+
+        alias = service.merge_participants(
+            canonical_full_name="Claudio Capodaglio",
+            canonical_email="capodaglio1993@gmail.com",
+            alias_full_name="Utente Zoom",
+            alias_email="capodaglio1993@gmail.com",
+            created_by="aliases-ui",
+        )
+
+        self.assertEqual("email", alias.alias_type)
+        self.assertEqual("capodaglio1993@gmail.com", alias.alias_value)
+        self.assertEqual("email", repository.last_created["alias_type"])
+
+    def test_merge_participants_uses_name_only_when_alias_has_no_email(self) -> None:
+        repository = FakeAttendanceIdentityAliasRepository()
+        service = AttendanceIdentityAliasService(repository)
+
+        alias = service.merge_participants(
+            canonical_full_name="Claudio Capodaglio",
+            canonical_email="capodaglio1993@gmail.com",
+            alias_full_name="Claudio C.",
+            alias_email=None,
+            created_by="aliases-ui",
+        )
+
+        self.assertEqual("full_name", alias.alias_type)
+        self.assertEqual("Claudio C.", alias.alias_value)
+
     def test_create_alias_rejects_same_identity(self) -> None:
         repository = FakeAttendanceIdentityAliasRepository()
         service = AttendanceIdentityAliasService(repository)
