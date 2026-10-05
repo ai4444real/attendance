@@ -1952,7 +1952,7 @@ class AttendanceLessonIdentityRebuildService:
                     if self._is_aggregated_manual_participant(participant)
                 ],
             ])
-            identity_sources = self._merge_identity_sources_from_participants(participants)
+            identity_sources = list(record.get("identity_sources") or self._merge_identity_sources_from_participants(participants))
             first_name, last_name = _split_full_name(canonical_full_name)
             metadata = dict(survivor.metadata or {})
             metadata["segments"] = record["segments"]
@@ -2260,6 +2260,8 @@ class AttendanceLessonIdentityRebuildService:
         primary_source = _get_identity_sources(participant)[0]
         source_name = str(primary_source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
         source_email_value = primary_source.get("email") if "email" in primary_source else participant.email
+        if not participant.email and "@" not in str(participant.participant_key or ""):
+            source_email_value = None
         source_email = str(source_email_value or "").strip()
         canonical_full_name, canonical_email = _apply_identity_alias_maps(
             source_name,
@@ -2371,7 +2373,8 @@ class AttendanceLessonIdentityRebuildService:
         for participant in participants:
             for source in _get_identity_sources(participant):
                 raw_full_name = str(source.get("raw_full_name") or participant.raw_full_name or participant.canonical_full_name).strip()
-                email = str(source.get("email") or participant.email or "").strip()
+                source_email_value = source.get("email") if "email" in source else participant.email
+                email = str(source_email_value or "").strip()
                 segments = list(source.get("segments") or [])
                 merged_sources.append(
                     {
@@ -2658,6 +2661,8 @@ def _aggregate_source_segments_by_final_identity(
             {
                 "canonical_full_name": canonical_full_name,
                 "canonical_email": canonical_email,
+                "raw_full_name": source_name,
+                "raw_email": source_email,
                 "join_time": source_segment.join_time,
                 "leave_time": source_segment.leave_time,
             }
@@ -2688,14 +2693,21 @@ def _aggregate_source_segments_by_final_identity(
                 "canonical_full_name": canonical_full_name,
                 "canonical_email": canonical_email,
                 "intervals": [],
+                "identity_sources": [],
             },
         )
         for item in group_segments:
-            bucket["intervals"].append(
-                (
-                    _coerce_segment_datetime(item["join_time"], target_tz),
-                    _coerce_segment_datetime(item["leave_time"], target_tz),
-                )
+            interval = (
+                _coerce_segment_datetime(item["join_time"], target_tz),
+                _coerce_segment_datetime(item["leave_time"], target_tz),
+            )
+            bucket["intervals"].append(interval)
+            bucket["identity_sources"].append(
+                {
+                    "raw_full_name": item["raw_full_name"],
+                    "email": item["raw_email"],
+                    "segments": [(interval[0].isoformat(), interval[1].isoformat())],
+                }
             )
 
     results: dict[str, dict] = {}
@@ -2723,6 +2735,7 @@ def _aggregate_source_segments_by_final_identity(
             "total_minutes": _round1(minutes_first_half + minutes_second_half),
             "calculated_presence_status": calculated_presence_status,
             "segments": [(start.isoformat(), end.isoformat()) for start, end in merged_intervals],
+            "identity_sources": _dedupe_identity_sources(bucket["identity_sources"]),
         }
     return results
 

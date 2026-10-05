@@ -1886,6 +1886,93 @@ class AttendanceDraftRecalculationServiceTest(unittest.TestCase):
 
 
 class AttendanceLessonIdentityRebuildServiceTest(unittest.TestCase):
+    def test_rebuild_lesson_ignores_stale_identity_source_email_for_name_only_participant(self) -> None:
+        lesson = DraftLessonView(
+            id=755,
+            course_name="COACHING",
+            lesson_date="2025-04-29",
+            source_meeting_id="891 9285 7355",
+            status="official",
+            is_ignored=False,
+            threshold_ratio=0.8,
+            meeting_start_at="2025-04-29T17:00:00+00:00",
+            meeting_end_at="2025-04-29T21:00:00+00:00",
+            effective_start_at="2025-04-29T17:00:00+00:00",
+            break_point_at="2025-04-29T19:00:00+00:00",
+            effective_end_at="2025-04-29T21:00:00+00:00",
+            break_source="manual",
+            effective_start_source="manual",
+            effective_end_source="manual",
+            warnings=[],
+            diagnostics={},
+            summary={"presente": 1, "prima_meta": 0, "seconda_meta": 0, "assente": 0},
+            participants=[
+                DraftLessonParticipantView(
+                    id=8315,
+                    participant_key="utente zoom",
+                    canonical_full_name="Utente Zoom",
+                    raw_full_name="Utente Zoom",
+                    email=None,
+                    segment_count=1,
+                    minutes_first_half=120.0,
+                    minutes_second_half=94.0,
+                    duration_first_half=120.0,
+                    duration_second_half=120.0,
+                    total_minutes=214.0,
+                    calculated_presence_status="presente",
+                    manual_override_presence_status=None,
+                    final_presence_status="presente",
+                    presence_source="zoom",
+                    flags=[],
+                    metadata={
+                        "identity_sources": [
+                            {
+                                "raw_full_name": "Utente Zoom",
+                                "email": "capodaglio1993@gmail.com",
+                                "segments": [["2025-04-29T17:00:00+00:00", "2025-04-29T20:34:00+00:00"]],
+                            }
+                        ]
+                    },
+                )
+            ],
+            review_actions=[],
+        )
+        query = FakeAttendanceDraftQueryRepository(lesson)
+        query.source_segments = [
+            DraftLessonSourceSegment(
+                observed_full_name="Utente Zoom",
+                observed_email=None,
+                join_time="2025-04-29T17:00:00+00:00",
+                leave_time="2025-04-29T20:34:00+00:00",
+                metadata={},
+            )
+        ]
+        mutation = FakeAttendanceDraftMutationRepository()
+        aliases = FakeAttendanceIdentityAliasRepository()
+        aliases.aliases = [
+            AttendanceIdentityAlias(
+                id=1766,
+                canonical_full_name="Claudio Capodaglio",
+                canonical_email="capodaglio1993@gmail.com",
+                alias_value="capodaglio1993@gmail.com",
+                alias_type="email",
+                created_by="aliases-ui",
+                created_at=datetime(2026, 10, 5, 8, 4, tzinfo=timezone.utc),
+                is_active=True,
+                notes=None,
+            )
+        ]
+        service = AttendanceLessonIdentityRebuildService(query, mutation, aliases)
+
+        service.rebuild_lesson_with_current_aliases(755)
+
+        rebuilt = mutation.last_identity_rebuild["participants"]
+        self.assertEqual(1, len(rebuilt))
+        self.assertEqual("utente zoom", rebuilt[0]["participant_key"])
+        self.assertEqual("Utente Zoom", rebuilt[0]["canonical_full_name"])
+        self.assertIsNone(rebuilt[0]["email"])
+        self.assertEqual("", rebuilt[0]["metadata"]["identity_sources"][0]["email"])
+
     def test_rebuild_lesson_matches_unique_name_when_source_email_availability_changed(self) -> None:
         cases = [
             {
