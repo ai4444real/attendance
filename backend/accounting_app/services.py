@@ -177,11 +177,18 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
         raise ValueError(f"Unsupported bank preset: {bank}")
 
     rows = list(csv.reader(io.StringIO(text), delimiter=preset["delimiter"], quotechar='"'))
-    source_key = ""
+    source_keys: set[str] = set()
     for row in rows[:8]:
-        if len(row) >= 2 and row[0].strip().casefold() == "account:":
-            source_key = row[1].strip().strip('"').strip("=").strip('"')
-            break
+        if len(row) >= 2 and row[0].strip().rstrip(":").casefold() in {
+            "account", "conto", "konto", "compte", "iban",
+        }:
+            source_key = re.sub(r"\s+", "", row[1].strip().lstrip("=").strip('"')).upper()
+            if not re.fullmatch(r"[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}", source_key):
+                raise ValueError("Conto PostFinance non valido: atteso un IBAN nell'intestazione.")
+            source_keys.add(source_key)
+    if len(source_keys) != 1:
+        raise ValueError("Conto PostFinance mancante o ambiguo nell'intestazione: importazione fermata.")
+    source_key = source_keys.pop()
     skip_start = int(preset["skip_start"])
     skip_end = int(preset["skip_end"])
     data_rows = rows[skip_start : len(rows) - skip_end if skip_end else None]
@@ -216,7 +223,7 @@ def parse_bank_csv(text: str, bank: str) -> list[ParsedBankTransaction]:
                 date=date,
                 description=description,
                 amount=amount.quantize(Decimal("0.01")),
-                source_key=source_key or bank,
+                source_key=source_key,
                 balance=balance,
             )
         )
