@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>Rebekko - Esposizione</title>
+    <link rel="stylesheet" href="/assets/styles/brand.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--brand-surface); color: var(--brand-ink); font: 16px/1.55 "Segoe UI", Arial, sans-serif; }
+        header { background: white; border-bottom: 1px solid var(--brand-border); padding: 16px 28px; display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+        header img { width: 126px; vertical-align: middle; }
+        a { color: var(--brand-pnl-blue); }
+        main { width: min(1500px, calc(100% - 40px)); margin: 28px auto; }
+        h1 { margin: 0; font-size: 36px; }
+        h2 { margin-top: 0; font-size: 22px; }
+        .panel { background: white; border: 1px solid var(--brand-border); border-radius: 14px; padding: 24px; margin: 20px 0; }
+        .muted { color: var(--brand-muted); }
+        button, .bookmark { padding: 10px 16px; border: 1px solid var(--brand-pnl-green-dark); border-radius: 8px; background: var(--brand-pnl-green-soft); color: var(--brand-pnl-green-dark); font: inherit; cursor: pointer; display: inline-block; text-decoration: none; }
+        textarea { width: 100%; min-height: 90px; font: 12px/1.4 monospace; }
+        .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+        .stat { background: var(--brand-pnl-blue-soft); border-radius: 10px; padding: 12px 20px; }
+        .stat strong { display: block; font-size: 28px; }
+        .scroll { overflow-x: auto; max-height: 65vh; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 12px; border-bottom: 1px solid var(--brand-border); text-align: left; vertical-align: top; }
+        th { background: var(--brand-pnl-blue-soft); position: sticky; top: 0; }
+        td { white-space: pre-wrap; overflow-wrap: anywhere; }
+        td:nth-child(6) { white-space: nowrap; }
+        #message { white-space: pre-wrap; }
+        .error { color: #a12516; background: #fff0ed; padding: 16px; border-radius: 8px; }
+        #diagnostics pre { white-space: pre-wrap; overflow-wrap: anywhere; border-bottom: 1px solid var(--brand-border); padding-bottom: 12px; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="/"><img src="/assets/brand/logo_pnl_evolution.png" alt="PNL Evolution"></a>
+        <a href="/utilities/internal-tools">← Strumenti interni</a>
+    </header>
+    <main>
+        <h1>Esposizione</h1>
+        <p class="muted">Fatture ricorrenti Smallinvoice con una prossima emissione prevista.</p>
+        <section class="panel" id="setup">
+            <h2>Leggi da Smallinvoice</h2>
+            <ol>
+                <li>Trascina <a class="bookmark" id="bookmark" href="#">Esposizione Rebekko</a> nella barra dei preferiti.</li>
+                <li>Apri le fatture ricorrenti in Smallinvoice e ordina le righe che ti interessano nella pagina corrente.</li>
+                <li>Clicca il preferito e conferma: questa scheda aprirà Rebekko con i dati letti.</li>
+            </ol>
+            <p>Si leggono soltanto le righe della pagina corrente. Le righe senza <strong>Next</strong> vengono escluse.</p>
+            <details>
+                <summary>Modifica il preferito di prova già creato</summary>
+                <p>Sostituisci il suo URL con questo codice. Non serve installare un’estensione.</p>
+                <textarea id="bookmarkCode" readonly aria-label="URL del bookmarklet"></textarea>
+                <button id="copy" type="button">Copia codice</button>
+                <span id="copyStatus" role="status"></span>
+            </details>
+        </section>
+        <p id="message" role="status">Nessun dato ricevuto. Usa il preferito dalla pagina Smallinvoice.</p>
+        <section class="panel" id="results" hidden>
+            <h2>Dati ricevuti</h2>
+            <p id="capture" class="muted"></p>
+            <div class="stats">
+                <div class="stat"><strong id="included">0</strong>Con Next</div>
+                <div class="stat"><strong id="excluded">0</strong>Escluse senza Next</div>
+                <div class="stat"><strong id="unknown">0</strong>Righe da verificare</div>
+            </div>
+            <p>Questa prima versione mostra le righe importate. Il calcolo delle previsioni mensili verrà aggiunto nel prossimo passaggio.</p>
+            <div class="scroll">
+                <table>
+                    <thead><tr><th>Cliente</th><th>Frequenza</th><th>Prima fattura</th><th>Next · prossima fattura</th><th>Data finale</th><th>Importo</th><th>Stato</th></tr></thead>
+                    <tbody id="rows"></tbody>
+                </table>
+            </div>
+            <details id="diagnostics" hidden>
+                <summary>Contenuto delle righe da verificare</summary>
+                <p>Queste righe hanno una struttura diversa dalle fatture e non sono incluse nella tabella. Controlla qui il loro contenuto.</p>
+                <div id="unknownRows"></div>
+            </details>
+            <p class="muted">I dati restano in questa scheda durante la sessione e non vengono salvati nel database. Il trasferimento non modifica Smallinvoice.</p>
+            <button id="clear" type="button">Rimuovi dati da questa scheda</button>
+        </section>
+    </main>
+    <script src="/utilities/static/esposizione-core.js"></script>
+    <script src="/utilities/static/esposizione-page.js"></script>
+</body>
+</html>

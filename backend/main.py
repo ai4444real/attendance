@@ -594,7 +594,9 @@ def render_login_page(error: str = "", next_url: str = "/") -> str:
                 if (!apiResponse.ok) {{
                     throw new Error(payload.detail || 'Accesso non riuscito.');
                 }}
-                window.location.href = NEXT_URL || '/';
+                const importFragment = NEXT_URL.split('?')[0] === '/utilities/esposizione'
+                    && window.location.hash.startsWith('#esposizione=') ? window.location.hash : '';
+                window.location.href = (NEXT_URL || '/') + importFragment;
             }} catch (error) {{
                 result.innerHTML = '<span style="color:#b42318;font-weight:800;">' + error.message + '</span>';
             }}
@@ -801,6 +803,11 @@ async def utilities_internal_tools():
                     <h2>Controllo richiami</h2>
                     <p>Verifica pagamenti e richiami incrociando i dati bancari con Smallinvoice.</p>
                 </a>
+                <a class="card" href="/utilities/esposizione">
+                    <span class="card-label">Previsioni</span>
+                    <h2>Esposizione</h2>
+                    <p>Leggi le fatture ricorrenti dalla pagina Smallinvoice e controlla le prossime emissioni.</p>
+                </a>
             </div>
         </section>
     """
@@ -810,6 +817,15 @@ async def utilities_internal_tools():
             "Accesso rapido agli strumenti amministrativi interni.",
             body_html,
         ),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/utilities/esposizione", include_in_schema=False)
+@app.get("/utilities/esposizione/", include_in_schema=False)
+async def utilities_esposizione():
+    return FileResponse(
+        os.path.join(UTILITIES_STATIC_DIR, "esposizione.html"),
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
