@@ -25,6 +25,7 @@
         byId("rows").replaceChildren();
         byId("unknownRows").replaceChildren();
         byId("results").hidden = true;
+        window.EsposizioneForecastView.clear();
         byId("message").textContent = "Dati rimossi. Usa il preferito per una nuova lettura.";
     });
 
@@ -53,6 +54,7 @@
         }
         byId("diagnostics").hidden = data.unrecognized.length === 0;
         byId("results").hidden = false;
+        window.EsposizioneForecastView.render(data.rows);
         byId("message").textContent = (restored ? "Ultima lettura di questa scheda ripristinata; non è un aggiornamento da Smallinvoice."
             : "Dati ricevuti da Smallinvoice.")
             + (stored ? "" : " La memoria della scheda non è disponibile: ricaricando perderai questi dati.");
