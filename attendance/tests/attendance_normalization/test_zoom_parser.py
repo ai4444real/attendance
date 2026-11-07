@@ -15,6 +15,38 @@ sessione,Riunione,839 1158 0485,Irene Bazzani,bazzani@pnlevolution.com,01/30/202
 
 
 class ZoomParserTests(unittest.TestCase):
+    def test_invalid_dates_report_original_line_field_and_value(self):
+        for line_number, column, field in (
+            (2, 5, "Ora di inizio"),
+            (2, 6, "Ora di fine"),
+            (3, 18, "Ora di ingresso"),
+            (3, 19, "Ora di uscita"),
+            (7, 19, "Ora di uscita"),
+        ):
+            with self.subTest(line_number=line_number, field=field):
+                lines = CSV_SAMPLE.splitlines()
+                values = lines[line_number - 1].split(",")
+                values[column] = "30/01/2025 06:54:02 PM"
+                lines[line_number - 1] = "  " + ",".join(values) + "  "
+                with self.assertRaises(ValueError) as raised:
+                    parse_zoom_csv_text("\ufeff" + "\r\n".join(lines))
+                message = str(raised.exception)
+                self.assertIn(f"Riga {line_number},", message)
+                self.assertIn(f'campo "{field}"', message)
+                self.assertIn('valore "30/01/2025 06:54:02 PM"', message)
+                self.assertIn("Mese non valido: 30", message)
+                self.assertIn("tra 1 e 12", message)
+                self.assertIn("Riga completa: " + lines[line_number - 1], message)
+
+    def test_other_invalid_date_errors_also_report_source_line(self):
+        lines = CSV_SAMPLE.splitlines()
+        lines[1] = lines[1].replace("01/30/2025", "02/30/2025")
+        with self.assertRaises(ValueError) as raised:
+            parse_zoom_csv_text("\n".join(lines))
+        self.assertIn("Riga 2,", str(raised.exception))
+        self.assertIn("day is out of range", str(raised.exception))
+        self.assertIn(lines[1], str(raised.exception))
+
     def test_parses_multiple_meetings_separated_by_blank_rows(self):
         parsed = parse_zoom_csv_text(CSV_SAMPLE)
 

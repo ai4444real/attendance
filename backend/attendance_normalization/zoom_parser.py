@@ -16,6 +16,26 @@ class ZoomParseResult:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class _SourceRow:
+    values: dict[str, str]
+    line_number: int
+    raw_line: str
+
+    def get(self, key: str, default: str = "") -> str:
+        return self.values.get(key, default)
+
+    def parse_datetime(self, field: str) -> datetime | None:
+        value = self.get(field)
+        try:
+            return _parse_zoom_datetime(value)
+        except ValueError as exc:
+            raise ValueError(
+                f'Riga {self.line_number}, campo "{field}", valore "{value}": '
+                f"{exc}. Riga completa: {self.raw_line}"
+            ) from exc
+
+
 ZOOM_DATETIME_PATTERN = re.compile(
     r"(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)",
     re.IGNORECASE,
@@ -35,7 +55,7 @@ def parse_zoom_csv_text(csv_text: str) -> ZoomParseResult:
     headers = _deduplicate_headers(raw_headers)
 
     meetings: list[ZoomMeeting] = []
-    current_rows: list[dict[str, str]] = []
+    current_rows: list[_SourceRow] = []
 
     for index, line in enumerate(lines[1:], start=2):
         trimmed = line.strip()
@@ -54,7 +74,7 @@ def parse_zoom_csv_text(csv_text: str) -> ZoomParseResult:
                 header: (values[position] or "").strip()
                 for position, header in enumerate(headers)
             }
-            current_rows.append(row)
+            current_rows.append(_SourceRow(row, index, line))
         else:
             warnings.append(
                 f"Riga {index}: colonne non corrispondenti ({len(values)}/{len(headers)}), saltata"
@@ -73,13 +93,13 @@ def parse_zoom_csv_file(path: str) -> ZoomParseResult:
         return parse_zoom_csv_text(handle.read())
 
 
-def _build_meeting(rows: list[dict[str, str]], warnings: list[str]) -> ZoomMeeting | None:
+def _build_meeting(rows: list[_SourceRow], warnings: list[str]) -> ZoomMeeting | None:
     if not rows:
         return None
 
     first = rows[0]
-    start_time = _parse_zoom_datetime(first.get("Ora di inizio", ""))
-    end_time = _parse_zoom_datetime(first.get("Ora di fine", ""))
+    start_time = first.parse_datetime("Ora di inizio")
+    end_time = first.parse_datetime("Ora di fine")
 
     if start_time is None or end_time is None:
         warnings.append(
@@ -96,8 +116,8 @@ def _build_meeting(rows: list[dict[str, str]], warnings: list[str]) -> ZoomMeeti
         if guest_field not in {"sì", "si"}:
             continue
 
-        join_time = _parse_zoom_datetime(row.get("Ora di ingresso", ""))
-        leave_time = _parse_zoom_datetime(row.get("Ora di uscita", ""))
+        join_time = row.parse_datetime("Ora di ingresso")
+        leave_time = row.parse_datetime("Ora di uscita")
 
         if join_time is None or leave_time is None:
             warnings.append(
@@ -179,6 +199,11 @@ def _parse_zoom_datetime(value: str) -> datetime | None:
         return None
 
     month, day, year, hours, minutes, seconds, period = match.groups()
+    if not 1 <= int(month) <= 12:
+        raise ValueError(
+            f"Mese non valido: {int(month)} (deve essere tra 1 e 12; "
+            "formato atteso MM/GG/AAAA hh:mm:ss AM/PM)"
+        )
     parsed_hours = int(hours)
     if period.upper() == "PM" and parsed_hours != 12:
         parsed_hours += 12
