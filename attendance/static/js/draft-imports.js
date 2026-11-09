@@ -501,10 +501,14 @@ const DraftImportsApp = {
                     ${presentParticipants.length > 0 ? `
                             <div class="present-list">
                             <div class="present-list-title">Presenti</div>
+                            <p class="hint">Anche una presenza completa può essere associata alla persona sbagliata: consulta l'origine e assegna nome ed email corretti per questa lezione.</p>
                             <div class="present-list-items">
                                 ${presentParticipants.map((participant) => `
                                     <div class="present-chip">
                                         <span class="present-chip-name">${this._escapeHtml(participant.canonical_full_name)}</span>
+                                        <span class="hint">${this._escapeHtml(participant.email || 'senza email')}</span>
+                                        <button type="button" class="source-button" data-source-detail="${participant.id}" aria-label="${this._escapeHtml(`Origine di ${participant.canonical_full_name}`)}">Origine</button>
+                                        <button type="button" class="source-button" data-assign-participant="${participant.id}" aria-label="${this._escapeHtml(`Assegna ${participant.canonical_full_name}`)}">Assegna</button>
                                         ${participant.manual_override_presence_status ? this._renderPresenceOverrideControl(lesson.id, participant) : ''}
                                     </div>
                                 `).join('')}
